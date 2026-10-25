@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=64"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,15 +8,35 @@ dynamic = ["version"]
 description = "Rotational order tracking and analysis for noise and vibration signals"
 readme = "README.md"
 requires-python = ">=3.10"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
 authors = [{ name = "Zhenxian Li" }]
-keywords = ["order tracking", "order analysis", "NVH", "acoustics", "vibration", "rotating machinery"]
+keywords = [
+    "order tracking", "order analysis", "computed order tracking", "Vold-Kalman",
+    "NVH", "noise and vibration", "acoustics", "vibration", "rotating machinery",
+    "Campbell diagram", "tachometer", "sound synthesis", "psychoacoustics",
+]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
     "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Multimedia :: Sound/Audio :: Analysis",
 ]
 dependencies = ["numpy>=1.23", "scipy>=1.9"]
+
+[project.urls]
+Homepage = "https://github.com/ZhenxianLi/ROTA"
+Source = "https://github.com/ZhenxianLi/ROTA"
+Issues = "https://github.com/ZhenxianLi/ROTA/issues"
+Changelog = "https://github.com/ZhenxianLi/ROTA/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 test = ["pytest>=7"]

@@ -1,5 +1,10 @@
 # ROTA
 
+[![Tests](https://github.com/ZhenxianLi/ROTA/actions/workflows/tests.yml/badge.svg)](https://github.com/ZhenxianLi/ROTA/actions/workflows/tests.yml)
+[![License: GPL v3+](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
+[![Python 3.10–3.13](https://img.shields.io/badge/python-3.10%E2%80%933.13-blue.svg)](pyproject.toml)
+[![Dependencies: NumPy + SciPy](https://img.shields.io/badge/dependencies-NumPy%20%2B%20SciPy-informational.svg)](pyproject.toml)
+
 **R**otational **O**rder **T**racking & **A**nalysis. *Rota* is Latin for "wheel".
 
 ROTA is a lightweight, open-source Python library for order analysis of noise and vibration signals from rotating machinery (engines, electric motors, gearboxes), with tools for order-based sound resynthesis. It depends only on NumPy and SciPy. The project rule is that each function is implemented independently from the published literature and tested on synthetic signals with known analytic ground truth.
@@ -32,8 +37,8 @@ Out of scope: real-time audio I/O, GUI, rotor-dynamics analysis (orbits, Bode pl
 Python 3.10 or later, NumPy 1.23 or later, SciPy 1.9 or later. Install from source:
 
 ```
-git clone https://github.com/zhenxianli/rota.git
-cd rota
+git clone https://github.com/ZhenxianLi/ROTA.git
+cd ROTA
 pip install -e .
 ```
 
@@ -122,11 +127,11 @@ All algorithms are implemented from the published literature cited in each docst
 
 ## License
 
-To be decided before the v0.1 release.
+ROTA is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. See [LICENSE](LICENSE).
 
 ## Citation
 
-A citation file will be added with the first release.
+See [CITATION.cff](CITATION.cff) (GitHub shows it as "Cite this repository"). A Zenodo DOI is planned for v1.0.
 
 ## Acknowledgements
 

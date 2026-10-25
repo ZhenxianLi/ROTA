@@ -21,7 +21,7 @@ Allowed:
 1. Implementing algorithms from the published literature, with the source given in the References section of the docstring.
 2. Using a commercial numerical environment as a black box: call public functions only, record inputs and outputs, and compare numbers.
 3. Providing a factual correspondence table between ROTA functions and functions elsewhere.
-4. Reusing open-source code under a compatible licence (BSD, MIT), acknowledged in a NOTICE file. GPL code can be reused only if ROTA itself adopts GPL-3.0. Confirm the licence before reusing anything.
+4. Reusing open-source code under a licence compatible with GPL-3.0-or-later (e.g. BSD, MIT, Apache-2.0, GPL-3.0), acknowledged in a NOTICE file. Confirm the licence before reusing anything. Contributions are accepted under GPL-3.0-or-later.
 
 ## Code
 

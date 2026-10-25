@@ -18,5 +18,6 @@ Version 0.1 (core chain for a run-up with a tachometer) is in development.
 - `rota.metrics`: `track_error`.
 - Package metadata (`pyproject.toml`) and the design document `ROADMAP.md`.
 - `README.md`, `CONTRIBUTING.md`, a pull request template, and a GitHub Actions workflow that runs the tests on Python 3.10 to 3.13.
+- Licence: GPL-3.0-or-later (`LICENSE`).
 
-[Unreleased]: https://github.com/zhenxianli/rota/commits/main
+[Unreleased]: https://github.com/ZhenxianLi/ROTA/commits/main

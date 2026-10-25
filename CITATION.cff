@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "If you use ROTA in your work, please cite it as below."
+title: "ROTA: Rotational Order Tracking and Analysis"
+type: software
+authors:
+  - family-names: Li
+    given-names: Zhenxian
+repository-code: "https://github.com/ZhenxianLi/ROTA"
+license: GPL-3.0-or-later
+abstract: >-
+  ROTA is a lightweight Python library for order analysis of noise and
+  vibration signals from rotating machinery, with tools for order-based sound
+  resynthesis. It depends only on NumPy and SciPy, implements each function
+  from the published literature, and validates it against synthetic signals
+  with analytic ground truth.
+keywords:
+  - order tracking
+  - order analysis
+  - computed order tracking
+  - NVH
+  - acoustics
+  - vibration
+  - rotating machinery
