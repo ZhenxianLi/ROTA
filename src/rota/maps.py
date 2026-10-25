@@ -98,12 +98,12 @@ def _stft(X, nperseg, hop, window, amplitude, sample_rate):
     k = np.arange(F.shape[-1])
     F *= np.exp(-2j * np.pi * np.outer(starts, k) / nperseg)[:, None, :]
     scale = np.full(k.size, 2.0 / w.sum())
+    if amplitude == "rms":
+        scale /= np.sqrt(2.0)
+    # DC and Nyquist bins are one-sided: peak and RMS coincide there.
     scale[0] = 1.0 / w.sum()
     if nperseg % 2 == 0:
         scale[-1] = 1.0 / w.sum()
-    if amplitude == "rms":
-        scale /= np.sqrt(2.0)
-        scale[0] = 1.0 / w.sum()
     F *= scale
     values = np.transpose(F, (2, 0, 1))  # (bins, frames, ch)
     axis = k * sample_rate / nperseg
