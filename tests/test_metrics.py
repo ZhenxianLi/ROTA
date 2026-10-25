@@ -2,13 +2,23 @@
 
 track_error: hand-computed cases. waveform_similarity and order_residual_energy:
 analytic values from components rendered by rota.synth (orthogonal order stems
-at constant speed, scaled copies of a run-up).
+at constant speed, scaled copies of a run-up). window_checks: closed-form
+sums of the Hann window; modulation_peak and envelope_stats: tones, two-tone
+beats and white Gaussian noise from rota.synth with analytic envelope laws.
 """
 
 import numpy as np
 import pytest
+from scipy import signal
 
-from rota.metrics import order_residual_energy, track_error, waveform_similarity
+from rota.metrics import (
+    envelope_stats,
+    modulation_peak,
+    order_residual_energy,
+    track_error,
+    waveform_similarity,
+    window_checks,
+)
 from rota.synth import synth_runup
 
 
@@ -466,3 +476,348 @@ def test_order_residual_energy_errors(runup):
     bad[10] = np.nan
     with pytest.raises(ValueError, match="finite"):
         order_residual_energy(bad, x, FS_R, RPM_R, 2.0)
+
+
+# ==========================================================================
+# window_checks
+# ==========================================================================
+
+L_WIN = 800
+
+
+def _hann(length=L_WIN):
+    return signal.get_window("hann", length)  # periodic, as used for overlap-add
+
+
+def test_hann_at_50_percent_is_cola_but_not_power_complementary():
+    r = window_checks(_hann(), L_WIN // 2)
+    assert r["cola"] is True and r["power_complementary"] is False
+    assert r["cola_ripple_db"] == pytest.approx(0.0, abs=1e-9)
+    # sin^4 + cos^4 = 1 - sin^2(2 theta) / 2 swings between 1 and 1/2: 10 log10(2) dB
+    assert r["power_ripple_db"] == pytest.approx(10 * np.log10(2.0), abs=1e-9)
+    assert r["cola_constant"] == pytest.approx(1.0, abs=1e-12)
+    assert r["power_constant"] == pytest.approx(0.75, abs=1e-12)  # mean of sin^4 + cos^4
+
+
+def test_sqrt_hann_at_50_percent_is_power_complementary_but_not_cola():
+    r = window_checks(np.sqrt(_hann()), L_WIN // 2)
+    assert r["cola"] is False and r["power_complementary"] is True
+    assert r["power_ripple_db"] == pytest.approx(0.0, abs=1e-9)
+    assert r["power_constant"] == pytest.approx(1.0, abs=1e-12)  # sin^2 + cos^2
+    # sin + cos swings between 1 and sqrt(2): 20 log10(sqrt(2)) dB, mean 4 / pi
+    assert r["cola_ripple_db"] == pytest.approx(20 * np.log10(np.sqrt(2.0)), abs=1e-9)
+    assert r["cola_constant"] == pytest.approx(4.0 / np.pi, abs=1e-4)
+
+
+def test_hann_at_75_and_66_percent_overlap_is_both():
+    r75 = window_checks(_hann(), L_WIN // 4)
+    assert r75["cola"] and r75["power_complementary"]
+    assert r75["cola_constant"] == pytest.approx(2.0, abs=1e-12)
+    assert r75["power_constant"] == pytest.approx(1.5, abs=1e-12)
+    r67 = window_checks(_hann(900), 300)  # hop = L / 3
+    assert r67["cola"] and r67["power_complementary"]
+    assert r67["cola_constant"] == pytest.approx(1.5, abs=1e-12)
+    assert r67["power_constant"] == pytest.approx(1.125, abs=1e-12)  # 3 * 3/8
+
+
+def test_sqrt_hann_at_75_percent_overlap_is_not_cola():
+    r = window_checks(np.sqrt(_hann()), L_WIN // 4)
+    assert r["power_complementary"] and r["power_constant"] == pytest.approx(2.0, abs=1e-12)
+    assert not r["cola"] and 0.5 < r["cola_ripple_db"] < 1.0
+
+
+def test_rectangular_window_and_a_poor_hop():
+    r = window_checks(np.ones(L_WIN), L_WIN // 2)
+    assert r["cola"] and r["power_complementary"]
+    assert r["cola_constant"] == pytest.approx(2.0) and r["power_constant"] == pytest.approx(2.0)
+    bad = window_checks(_hann(), 480)  # 40 % overlap: neither
+    assert not bad["cola"] and not bad["power_complementary"]
+    assert bad["cola_ripple_db"] > 1.0 and bad["power_ripple_db"] > 1.0
+    gap = window_checks(_hann(), L_WIN + 100)  # frames do not touch: the sum reaches zero
+    assert gap["cola_ripple_db"] == np.inf and gap["power_ripple_db"] == np.inf
+    assert not gap["cola"] and not gap["power_complementary"]
+
+
+def test_symmetric_hann_is_not_exactly_cola():
+    # numpy.hanning repeats the zero at both ends: a 0.017 dB ripple, above the 0.01 dB tolerance
+    r = window_checks(np.hanning(L_WIN), L_WIN // 2)
+    assert r["cola"] is False
+    assert 0.01 < r["cola_ripple_db"] < 0.03
+
+
+def test_window_checks_equals_the_closed_form_phase_sums():
+    # In the steady region the sum at phase p of the hop is sum_j w[p + j hop].
+    rng = np.random.default_rng(3)
+    w = rng.uniform(0.2, 1.0, 37)
+    hop = 5
+    s1 = np.array([w[p::hop].sum() for p in range(hop)])
+    s2 = np.array([(w[p::hop] ** 2).sum() for p in range(hop)])
+    r = window_checks(w, hop)
+    assert r["cola_ripple_db"] == pytest.approx(20 * np.log10(s1.max() / s1.min()), abs=1e-12)
+    assert r["power_ripple_db"] == pytest.approx(10 * np.log10(s2.max() / s2.min()), abs=1e-12)
+    assert r["cola_constant"] == pytest.approx(s1.mean(), rel=1e-12)
+    assert r["power_constant"] == pytest.approx(s2.mean(), rel=1e-12)
+
+
+def test_window_checks_is_independent_of_scale_and_of_n_frames():
+    a = window_checks(_hann(), 400)
+    b = window_checks(3.0 * _hann(), 400, n_frames=7)
+    assert b["cola_ripple_db"] == pytest.approx(a["cola_ripple_db"], abs=1e-12)
+    assert b["power_ripple_db"] == pytest.approx(a["power_ripple_db"], abs=1e-12)
+    assert b["cola_constant"] == pytest.approx(3.0 * a["cola_constant"])
+    assert b["power_constant"] == pytest.approx(9.0 * a["power_constant"])
+    # a small n_frames is raised until a steady region exists (L / hop = 80)
+    fine = window_checks(_hann(), 10, n_frames=2)
+    assert fine["cola"] and fine["power_complementary"]
+    assert fine["cola_constant"] == pytest.approx(L_WIN / 2 / 10)
+    assert isinstance(a["cola"], bool) and isinstance(a["cola_ripple_db"], float)
+
+
+def test_window_checks_errors():
+    w = _hann(64)
+    with pytest.raises(ValueError, match="1-D"):
+        window_checks(np.ones((4, 4)), 2)
+    with pytest.raises(ValueError, match="at least 2"):
+        window_checks([1.0], 1)
+    with pytest.raises(ValueError, match="finite"):
+        window_checks([1.0, np.nan, 1.0], 1)
+    with pytest.raises(ValueError, match="all zero"):
+        window_checks(np.zeros(8), 2)
+    with pytest.raises(ValueError, match="hop"):
+        window_checks(w, 0)
+    with pytest.raises(ValueError, match="hop"):
+        window_checks(w, 2.5)
+    with pytest.raises(ValueError, match="n_frames"):
+        window_checks(w, 32, n_frames=1)
+
+
+# ==========================================================================
+# modulation_peak
+# ==========================================================================
+
+FS_M = 16000.0
+N_M = 160000
+T_M = np.arange(N_M) / FS_M
+
+
+def _white(rms, seed, n=N_M, fs=FS_M):
+    return synth_runup(fs, np.full(n, 1000.0), [], noise_rms=rms, seed=seed).x
+
+
+def _am_tone_plus_noise(depth, rms, rate=40.0, seed=3):
+    """cos(2 pi 2000 t) (1 + depth cos(2 pi rate t)) + white noise of the given RMS."""
+    tone = synth_runup(FS_M, np.full(N_M, 1000.0), [], tones=[{"freq": 2000.0, "amplitude": 1.0}], seed=0).x
+    return tone * (1.0 + depth * np.cos(2 * np.pi * rate * T_M)) + _white(rms, seed)
+
+
+@pytest.mark.parametrize("half_width", [1.0, 2.0])
+@pytest.mark.parametrize("depth", [0.1, 0.2, 0.3, 0.5])
+def test_modulation_peak_of_an_am_tone_in_noise_matches_the_analytic_level(depth, half_width):
+    # Carrier A = 1 (peak), white noise of one-sided PSD N0 = rms^2 / (fs / 2). The power
+    # envelope is (1 + a cos)^2 A^2 + 2 A (1 + a cos) n_I + ..., n_I the in-phase noise:
+    #   line at the rate: 2 a A^2 peak, PSD peak (2 a A^2)^2 / 2 / (1.5 df)  (Hann, df = bin spacing)
+    #   floor: 8 A^2 N0 (1 + a^2 / 2)   (flat, one-sided, noise-noise terms neglected)
+    # reading = 10 log10(1 + peak / floor) = 10 log10(1 + a^2 A^2 / (6 df N0 (1 + a^2 / 2))).
+    rms = 0.3
+    n0 = rms**2 / (FS_M / 2)
+    expected = 10 * np.log10(1 + depth**2 / (6 * half_width * n0 * (1 + depth**2 / 2)))
+    got = modulation_peak(_am_tone_plus_noise(depth, rms), FS_M, 40.0, half_width=half_width)
+    assert got == pytest.approx(expected, abs=0.5)
+    assert got > 15.0
+
+
+def test_modulation_peak_is_localised_at_the_rate_and_independent_of_scale():
+    x = _am_tone_plus_noise(0.3, 0.3)
+    at = modulation_peak(x, FS_M, 40.0)
+    assert at > 20.0
+    for other in (25.0, 55.0, 70.0):  # no modulation there: a noise-level reading
+        assert abs(modulation_peak(x, FS_M, other)) < 4.0
+    assert modulation_peak(1e3 * x, FS_M, 40.0) == pytest.approx(at, abs=1e-9)
+    # a rate that falls between bins of the 1 Hz spectrum is read as well
+    y = _am_tone_plus_noise(0.3, 0.3, rate=37.3)
+    assert modulation_peak(y, FS_M, 37.3) > 20.0
+
+
+def test_modulation_peak_reads_zero_decibels_for_stationary_noise():
+    # statistic with a spread of about 1 dB (10 s, half_width 1 Hz): zero mean, 4 sigma bound
+    values = [modulation_peak(_white(1.0, s), FS_M, 40.0) for s in range(8)]
+    assert abs(np.mean(values)) < 1.0
+    assert max(abs(v) for v in values) < 4.0
+
+
+def test_modulation_peak_other_rates_bands_and_sampling_rates():
+    x = _am_tone_plus_noise(0.5, 0.3)
+    assert modulation_peak(x, FS_M, 40.0, band=(1500.0, 2500.0)) > 15.0
+    assert modulation_peak(x, FS_M, 40.0, env_fs=400.0, half_width=2.0) > 15.0
+    # a sampling rate that is not an integer multiple of env_fs (44100 / 200 = 220.5)
+    fs = 44100.0
+    n = 441000
+    t = np.arange(n) / fs
+    tone = synth_runup(fs, np.full(n, 1000.0), [], tones=[{"freq": 2000.0, "amplitude": 1.0}], seed=0).x
+    y = tone * (1 + 0.5 * np.cos(2 * np.pi * 40.0 * t)) + _white(0.3, 4, n=n, fs=fs)
+    assert modulation_peak(y, fs, 40.0) > 15.0
+    assert abs(modulation_peak(y, fs, 61.0)) < 4.0
+
+
+def test_modulation_peak_without_envelope_fluctuation():
+    assert np.isnan(modulation_peak(np.zeros(N_M), FS_M, 40.0))  # nothing to compare: NaN, no warning
+    # a pure tone has a constant envelope: the spectrum holds numerical noise only, no line
+    tone = synth_runup(FS_M, np.full(N_M, 1000.0), [], tones=[{"freq": 2000.0, "amplitude": 1.0}], seed=0).x
+    assert abs(modulation_peak(tone, FS_M, 40.0)) < 4.0
+
+
+def test_modulation_peak_errors():
+    x = _white(1.0, 0)
+    with pytest.raises(ValueError, match="1-D"):
+        modulation_peak(np.ones((100, 2)), FS_M, 40.0)
+    with pytest.raises(ValueError, match="finite"):
+        modulation_peak(np.r_[x[:-1], np.nan], FS_M, 40.0)
+    with pytest.raises(ValueError, match="rate must be positive"):
+        modulation_peak(x, FS_M, 0.0)
+    with pytest.raises(ValueError, match="rate must be below"):
+        modulation_peak(x, FS_M, 90.0)  # env_fs 200 Hz: limit 80 Hz
+    with pytest.raises(ValueError, match="above 0 Hz"):
+        modulation_peak(x, FS_M, 2.5)  # within 3 bins of DC
+    with pytest.raises(ValueError, match="band"):
+        modulation_peak(x, FS_M, 40.0, band=(4000.0, 1000.0))
+    with pytest.raises(ValueError, match="band"):
+        modulation_peak(x, FS_M, 40.0, band=(1000.0, 9000.0))
+    with pytest.raises(ValueError, match="env_fs must be below fs"):
+        modulation_peak(x, 150.0, 40.0, band=(10.0, 60.0), env_fs=200.0)
+    with pytest.raises(ValueError, match="too short"):
+        modulation_peak(x[:8000], FS_M, 40.0, half_width=0.2)  # needs 2 / 0.2 = 10 s
+    with pytest.raises(ValueError, match="half_width"):
+        modulation_peak(x, FS_M, 40.0, half_width=-1.0)
+
+
+# ==========================================================================
+# envelope_stats
+# ==========================================================================
+
+FS_E = 8000.0
+
+
+def _rayleigh_db(p):
+    """Envelope percentile of unit-RMS Gaussian noise (Rayleigh, sigma = 1) in dB re RMS."""
+    return 20 * np.log10(np.sqrt(-2 * np.log(1 - p / 100.0)))
+
+
+def test_pure_sine_has_no_swing_and_a_crest_factor_of_3_db():
+    n = int(2 * FS_E)
+    x = synth_runup(FS_E, np.full(n, 1000.0), [], tones=[{"freq": 1000.0, "amplitude": 2.0, "phase": 0.0}]).x
+    r = envelope_stats(x, FS_E)
+    assert r["swing_db"] == pytest.approx(0.0, abs=1e-6)
+    assert r["crest_factor_db"] == pytest.approx(20 * np.log10(np.sqrt(2.0)), abs=1e-3)  # 3.01 dB
+    # the envelope is the constant peak amplitude A: A / (A / sqrt(2)) = +3.01 dB re RMS
+    assert list(r["percentiles_db"]) == [5.0, 95.0]
+    assert r["percentiles_db"][5.0] == pytest.approx(3.0103, abs=1e-3)
+    assert r["percentiles_db"][95.0] == pytest.approx(3.0103, abs=1e-3)
+    assert "spectral_error_db" not in r
+    assert envelope_stats(1e4 * x, FS_E)["crest_factor_db"] == pytest.approx(r["crest_factor_db"], abs=1e-9)
+
+
+def test_two_equal_tones_beat_with_an_analytic_swing():
+    # envelope 2 A |cos(pi df t)|: 20 log10 of the 95th over the 5th percentile of |cos|
+    # is 20 log10(sin(0.95 pi / 2) / sin(0.05 pi / 2)) = 22.07 dB; peak 2A, RMS A: 6.02 dB crest
+    n = int(2 * FS_E)  # 20 whole beats of 10 Hz, whole cycles of both tones
+    x = synth_runup(FS_E, np.full(n, 1000.0), [],
+                    tones=[{"freq": 1000.0, "amplitude": 1.0, "phase": 0.0},
+                           {"freq": 1010.0, "amplitude": 1.0, "phase": 0.0}]).x  # in phase at t = 0
+    r = envelope_stats(x, FS_E)
+    expected = 20 * np.log10(np.sin(0.95 * np.pi / 2) / np.sin(0.05 * np.pi / 2))
+    assert r["swing_db"] == pytest.approx(expected, abs=0.1)
+    assert r["crest_factor_db"] == pytest.approx(20 * np.log10(2.0), abs=1e-6)  # peak 2 A sampled at t = 0
+    assert r["percentiles_db"][95.0] == pytest.approx(20 * np.log10(2 * np.sin(0.95 * np.pi / 2)), abs=0.05)
+    # a tone plus a weak second tone: small swing, growing with the second tone
+    weak = synth_runup(FS_E, np.full(n, 1000.0), [],
+                       tones=[{"freq": 1000.0, "amplitude": 1.0}, {"freq": 1010.0, "amplitude": 0.1}], seed=2).x
+    assert 0.0 < envelope_stats(weak, FS_E)["swing_db"] < r["swing_db"] / 2
+
+
+def test_gaussian_noise_has_a_rayleigh_envelope():
+    x = synth_runup(FS_E, np.full(400000, 1000.0), [], noise_rms=3.0, seed=4).x
+    r = envelope_stats(x, FS_E)
+    assert r["percentiles_db"][5.0] == pytest.approx(_rayleigh_db(5), abs=0.3)  # -9.89 dB
+    assert r["percentiles_db"][95.0] == pytest.approx(_rayleigh_db(95), abs=0.3)  # +7.77 dB
+    assert r["swing_db"] == pytest.approx(_rayleigh_db(95) - _rayleigh_db(5), abs=0.3)  # 17.66 dB
+    assert 12.0 < r["crest_factor_db"] < 15.5  # peak of 400k Gaussian samples: 4.4 - 5.3 sigma
+    # band-limited Gaussian noise is Gaussian: same envelope law inside the band
+    rb = envelope_stats(x, FS_E, band=(500.0, 2500.0))
+    assert rb["swing_db"] == pytest.approx(_rayleigh_db(95) - _rayleigh_db(5), abs=0.4)
+    assert rb["percentiles_db"][5.0] == pytest.approx(_rayleigh_db(5), abs=0.4)
+
+
+def test_custom_percentiles_and_band_applied_to_a_tone_in_noise():
+    x = synth_runup(FS_E, np.full(400000, 1000.0), [], noise_rms=1.0, seed=5).x
+    r = envelope_stats(x, FS_E, percentiles=(10, 50, 90))
+    assert list(r["percentiles_db"]) == [10.0, 50.0, 90.0]
+    for p in (10, 50, 90):
+        assert r["percentiles_db"][float(p)] == pytest.approx(_rayleigh_db(p), abs=0.3)
+    assert r["swing_db"] == pytest.approx(_rayleigh_db(90) - _rayleigh_db(10), abs=0.3)
+    # percentiles given in any order: the swing spans the extremes
+    assert envelope_stats(x, FS_E, percentiles=(95, 5))["swing_db"] == pytest.approx(
+        envelope_stats(x, FS_E)["swing_db"], abs=1e-12
+    )
+    # a strong tone in the band, noise outside it: the band-passed signal is the tone
+    n = x.size
+    tone = synth_runup(FS_E, np.full(n, 1000.0), [], tones=[{"freq": 1000.0, "amplitude": 1.0}], seed=1).x
+    r_band = envelope_stats(tone + 0.3 * x, FS_E, band=(900.0, 1100.0))
+    assert r_band["swing_db"] < 2.0 < envelope_stats(tone + 0.3 * x, FS_E)["swing_db"]
+
+
+def test_spectral_error_against_a_reference():
+    x = synth_runup(FS_E, np.full(80000, 1000.0), [], noise_rms=1.0, seed=6).x
+    other = synth_runup(FS_E, np.full(80000, 1000.0), [], noise_rms=1.0, seed=7).x
+    assert envelope_stats(x, FS_E, reference=x)["spectral_error_db"] == pytest.approx(0.0, abs=1e-12)
+    # a gain of 2 is a PSD ratio of 4: 6.02 dB at every frequency
+    assert envelope_stats(2.0 * x, FS_E, reference=x)["spectral_error_db"] == pytest.approx(
+        20 * np.log10(2.0), abs=1e-9
+    )
+    assert envelope_stats(x, FS_E, reference=0.5 * x)["spectral_error_db"] == pytest.approx(
+        20 * np.log10(2.0), abs=1e-9
+    )
+    # two independent realisations of the same noise: only the estimator scatter, about
+    # 6.1 dB / sqrt(K) with K = 99 segments of the default 0.2 s
+    e = envelope_stats(x, FS_E, reference=other)["spectral_error_db"]
+    assert 0.3 < e < 1.0
+    # shorter reference, explicit nperseg
+    e2 = envelope_stats(x, FS_E, reference=other[:40000], nperseg=800)["spectral_error_db"]
+    assert 0.3 < e2 < 1.3
+    # the error is restricted to the band: a tone outside it does not count
+    tone = synth_runup(FS_E, np.full(80000, 1000.0), [], tones=[{"freq": 3000.0, "amplitude": 10.0}], seed=1).x
+    assert envelope_stats(x + tone, FS_E, reference=x)["spectral_error_db"] > 1.5
+    assert envelope_stats(x + tone, FS_E, reference=x, band=(500.0, 1500.0))["spectral_error_db"] < 0.05
+
+
+def test_spectral_error_with_nothing_to_compare_is_nan():
+    x = synth_runup(FS_E, np.full(16000, 1000.0), [], noise_rms=1.0, seed=8).x
+    zeros = np.zeros(16000)
+    assert np.isnan(envelope_stats(x, FS_E, reference=zeros)["spectral_error_db"])
+
+
+def test_envelope_stats_errors():
+    x = synth_runup(FS_E, np.full(16000, 1000.0), [], noise_rms=1.0, seed=9).x
+    with pytest.raises(ValueError, match="1-D"):
+        envelope_stats(np.ones((100, 2)), FS_E)
+    with pytest.raises(ValueError, match="finite"):
+        envelope_stats(np.r_[x[:-1], np.inf], FS_E)
+    with pytest.raises(ValueError, match="fs must be positive"):
+        envelope_stats(x, 0.0)
+    with pytest.raises(ValueError, match="no energy"):
+        envelope_stats(np.zeros(100), FS_E)
+    with pytest.raises(ValueError, match="no energy"):
+        envelope_stats(np.full(100, 3.0), FS_E)  # a constant has no AC part
+    with pytest.raises(ValueError, match="percentiles"):
+        envelope_stats(x, FS_E, percentiles=(50,))
+    with pytest.raises(ValueError, match="percentiles"):
+        envelope_stats(x, FS_E, percentiles=(5, 105))
+    with pytest.raises(ValueError, match="distinct"):
+        envelope_stats(x, FS_E, percentiles=(5, 5))
+    with pytest.raises(ValueError, match="band"):
+        envelope_stats(x, FS_E, band=(1000.0, 5000.0))
+    with pytest.raises(ValueError, match="band"):
+        envelope_stats(x, FS_E, band=1000.0)
+    with pytest.raises(ValueError, match="reference"):
+        envelope_stats(x, FS_E, reference=np.ones((10, 2)))
+    with pytest.raises(ValueError, match="nperseg"):
+        envelope_stats(x, FS_E, reference=x, nperseg=4)
