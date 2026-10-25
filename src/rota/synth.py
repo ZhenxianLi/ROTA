@@ -17,6 +17,10 @@ Units: time in s, frequency in Hz, rotational speed in rpm (or km/h for the
 generic profiles), shaft angle in revolutions, phase in rad. All amplitudes
 are peak amplitudes unless stated otherwise (noise is specified as RMS).
 Output is mono (one channel) in v0.1.
+
+:func:`synth_tone_noise` is separate: static listening-test stimuli (tone plus
+noise at a stated broadband tone-to-noise power ratio and RMS level), with the
+tone and noise stems returned on their own.
 """
 
 import json
@@ -29,7 +33,7 @@ from scipy import signal
 
 from .speed import rpm_to_phase
 
-__all__ = ["rpm_profiles", "synth_runup", "SynthSignal"]
+__all__ = ["rpm_profiles", "synth_runup", "SynthSignal", "synth_tone_noise", "ToneNoiseSignal"]
 
 _KINDS = ("constant", "linear", "exponential", "power", "s_curve", "piecewise")
 _TWO_PI = 2.0 * np.pi
@@ -789,3 +793,303 @@ def synth_runup(
         pulse_revs=pulse_revs,
         config=_py(config),
     )
+
+
+@dataclass
+class ToneNoiseSignal:
+    """A tone-plus-noise stimulus with its stems and configuration.
+
+    Units: time in s, amplitudes in the unit of ``level_rms`` (e.g. Pa).
+    ``n`` is the number of samples.
+
+    Attributes
+    ----------
+    fs : float
+        Sampling rate in Hz.
+    t : ndarray, shape (n,)
+        Sample times in s (``arange(n) / fs``).
+    x : ndarray, shape (n,)
+        The stimulus, ``tone + noise`` (bit for bit). Its RMS is ``level_rms``
+        to rounding error.
+    tone, noise : ndarray, shape (n,)
+        The stems. Their mean-square values are exactly
+        ``level_rms**2 * r / (1 + r)`` and ``level_rms**2 / (1 + r)`` with
+        ``r = 10**(tnr_db / 10)``, to rounding error, and they are exactly
+        orthogonal over the record (``sum(tone * noise) = 0`` to rounding
+        error).
+    config : dict
+        JSON-serialisable record of the inputs, the resolved random phases,
+        the seed (if an int), the stem powers and the ROTA version. Infinite
+        ``tnr_db`` is stored as the string ``"inf"`` or ``"-inf"``.
+    """
+
+    fs: float
+    t: np.ndarray
+    x: np.ndarray
+    tone: np.ndarray
+    noise: np.ndarray
+    config: dict
+
+
+def _unit_rms(v):
+    r = np.sqrt(np.mean(v**2))
+    if not r > 0:
+        raise ValueError("the requested component has no energy; check frequencies and bands")
+    return v / r
+
+
+def _json_float(v):
+    return float(v) if np.isfinite(v) else ("inf" if v > 0 else "-inf")
+
+
+def _random_phase_signal(rng, n, mag):
+    """Real signal of length ``n`` with rfft magnitudes ``mag`` and random phases.
+
+    The phases are uniform on [0, 2 pi) for every bin (drawn for all bins so
+    that the stream does not depend on ``mag``); DC and, for even ``n``, the
+    Nyquist bin are set to zero.
+    """
+    mag = np.array(mag, dtype=float)
+    mag[0] = 0.0
+    if n % 2 == 0:
+        mag[-1] = 0.0
+    phase = rng.uniform(0.0, _TWO_PI, size=mag.size)
+    return np.fft.irfft(mag * np.exp(1j * phase), n)
+
+
+def synth_tone_noise(
+    fs,
+    duration,
+    level_rms,
+    tnr_db,
+    *,
+    tone_freq=None,
+    harmonics=(1.0,),
+    tone_bandwidth_oct=0.0,
+    noise="white",
+    hump_fc=None,
+    hump_sigma_oct=0.7,
+    seed=None,
+):
+    """Synthesise a tone-plus-noise listening-test stimulus.
+
+    The stimulus is ``x = tone + noise`` with the tone-to-noise ratio set on the
+    *broadband* power. With total mean-square ``P = level_rms**2`` (RMS
+    convention) and ``r = 10**(tnr_db / 10)``::
+
+        tone power  = P * r / (1 + r)
+        noise power = P / (1 + r)
+
+    so ``tnr_db`` is ``10 log10`` of the ratio of the tone power to the power of
+    the whole noise stem over 0 to ``fs/2``. This is **not** the ECMA-74
+    Annex D tone-to-noise ratio, which relates the tone to the noise power in
+    the critical band centred on the tone. For white noise the two differ by
+    the constant ``10 log10((fs/2) / delta_f)`` with ``delta_f`` the critical
+    bandwidth in Hz at the tone frequency: ``TNR_cb = tnr_db + 10 log10((fs/2)
+    / delta_f)``. For the hump noise the in-band noise power must be computed
+    from the spectrum, see the config.
+
+    Exact level and ratio. Each stem is normalised to unit sample RMS and then
+    scaled to the powers above; before scaling, the noise is made exactly
+    orthogonal to the tone over the record (its projection onto the tone
+    waveform is removed, a power change of about ``1/n``). The cross term of
+    ``x`` therefore vanishes, so the RMS of ``x`` equals ``level_rms`` and
+    the stem power ratio equals ``r`` to rounding error, rather than only on
+    average. The random phases and the noise are drawn from independent
+    streams of ``seed``, so for a given seed changing ``tnr_db`` or
+    ``level_rms`` only rescales the stems (the same stimulus at another level
+    or ratio).
+
+    Tone. ``tone_freq`` is the fundamental in Hz. With
+    ``tone_bandwidth_oct = 0`` the tone is a harmonic complex
+    ``sum_k harmonics[k] cos(2 pi (k+1) tone_freq t + phi_k)`` with random
+    phases ``phi_k`` (``harmonics=(1.0,)`` is a pure tone); ``harmonics`` are
+    linear relative peak amplitudes of partial ``k+1``, so the partial peak
+    amplitude is ``sqrt(2 * tone_power) * harmonics[k] / sqrt(sum(harmonics**2))``
+    (exact for a record holding whole periods, otherwise within the
+    normalisation to sample RMS). With ``tone_bandwidth_oct > 0`` each partial
+    is replaced by narrow-band noise of that width in octaves, geometrically
+    centred on the partial (edges ``f * 2**(+-width/2)``): a flat spectrum with
+    random phases inside the band, zero outside, and band powers in proportion
+    to ``harmonics**2``. The record needs at least 2 spectral bins in each band.
+
+    Noise. ``"white"`` has a flat spectrum; ``"hump"`` has the power spectral
+    density per Hz ``S(f) ~ exp(-0.5 * (log2(f / hump_fc) / hump_sigma_oct)**2)``,
+    a Gaussian in log frequency whose PSD peak is at ``hump_fc`` and whose
+    half-power (-3 dB) full width is ``2 sqrt(2 ln 2) * hump_sigma_oct``
+    octaves (about 2.355 sigma). Both are made by an inverse FFT of the whole
+    record with the stated magnitudes and random phases: the discrete spectrum
+    follows the specification exactly (there is no chi-squared scatter in the
+    periodogram), the amplitude distribution is close to Gaussian, DC and the
+    Nyquist bin are empty, and the noise is periodic with the record length.
+
+    Example anchor stimuli (60 dB SPL re 20 uPa is ``level_rms = 0.02`` Pa):
+    ``synth_tone_noise(48000, 5, 0.02, np.inf, tone_freq=1000)`` is a pure tone;
+    ``synth_tone_noise(48000, 5, 0.02, -np.inf)`` is white noise.
+
+    Parameters
+    ----------
+    fs : float
+        Sampling rate in Hz.
+    duration : float
+        Duration in s; the record has ``round(duration * fs)`` samples.
+    level_rms : float
+        RMS of the stimulus ``x``, in the unit of the result (e.g. Pa). No
+        calibration constant is applied anywhere.
+    tnr_db : float
+        Broadband tone-to-noise power ratio in dB. ``inf`` gives the tone
+        alone, ``-inf`` the noise alone (then ``tone_freq`` may be None).
+    tone_freq : float, optional
+        Fundamental in Hz, ``0 < tone_freq < fs/2``. Required unless
+        ``tnr_db`` is ``-inf``. Every partial with non-zero weight (and its
+        band edge, if ``tone_bandwidth_oct > 0``) must lie below ``fs/2``;
+        none is muted or clipped silently.
+    harmonics : sequence of float, default (1.0,)
+        Linear relative amplitudes of partials 1, 2, ... (non-negative, not all
+        zero).
+    tone_bandwidth_oct : float, default 0
+        Width in octaves of the narrow-band noise replacing each partial; 0
+        gives sinusoids.
+    noise : {"white", "hump"}
+        Noise spectrum.
+    hump_fc : float, optional
+        Peak frequency in Hz of the hump noise, ``0 < hump_fc < fs/2``;
+        required for ``noise="hump"`` and not allowed otherwise.
+    hump_sigma_oct : float, default 0.7
+        Standard deviation in octaves of the hump (positive).
+    seed : int, numpy.random.Generator or None
+        Random source for the phases and the noise. The same seed gives
+        bit-identical output.
+
+    Returns
+    -------
+    ToneNoiseSignal
+        ``x``, the ``tone`` and ``noise`` stems, times and configuration. All
+        amplitudes are in the unit of ``level_rms`` (RMS convention for the
+        levels; partial amplitudes of a sinusoidal tone are peak values).
+
+    References
+    ----------
+    ECMA-74 (Annex D: prominent discrete tones) and ISO 7779 (Annex D) for the
+    critical-band tone-to-noise ratio that this broadband ratio is not.
+    Zwicker, E., & Fastl, H. (2007). Psychoacoustics: Facts and Models, 3rd
+    ed. Springer.
+    Rice, S. O. (1944). Mathematical analysis of random noise. Bell System
+    Technical Journal, 23(3), 282-332 (noise as a sum of random-phase
+    components).
+    """
+    from . import __version__
+
+    fs = float(fs)
+    if not (np.isfinite(fs) and fs > 0):
+        raise ValueError("fs must be a positive sampling rate in Hz")
+    duration = float(duration)
+    if not (np.isfinite(duration) and duration > 0):
+        raise ValueError("duration must be a positive time in s")
+    n = round(duration * fs)
+    if n < 16:
+        raise ValueError("duration * fs must give at least 16 samples")
+    level_rms = float(level_rms)
+    if not (np.isfinite(level_rms) and level_rms >= 0):
+        raise ValueError("level_rms must be finite and non-negative")
+    tnr_db = float(tnr_db)
+    if np.isnan(tnr_db):
+        raise ValueError("tnr_db must not be NaN (use inf or -inf for a single component)")
+    w = np.asarray(harmonics, dtype=float)
+    if w.ndim != 1 or w.size == 0 or not np.all(np.isfinite(w)) or np.any(w < 0) or not np.any(w > 0):
+        raise ValueError("harmonics must be a non-empty 1-D sequence of non-negative weights, not all zero")
+    bw = float(tone_bandwidth_oct)
+    if not (np.isfinite(bw) and bw >= 0):
+        raise ValueError("tone_bandwidth_oct must be finite and non-negative")
+    if noise not in ("white", "hump"):
+        raise ValueError(f"noise must be 'white' or 'hump', got {noise!r}")
+    if noise == "hump":
+        if hump_fc is None:
+            raise ValueError("noise='hump' needs hump_fc")
+        hump_fc = float(hump_fc)
+        if not (np.isfinite(hump_fc) and 0 < hump_fc < 0.5 * fs):
+            raise ValueError("hump_fc must satisfy 0 < hump_fc < fs/2")
+        hump_sigma_oct = float(hump_sigma_oct)
+        if not (np.isfinite(hump_sigma_oct) and hump_sigma_oct > 0):
+            raise ValueError("hump_sigma_oct must be positive")
+    elif hump_fc is not None:
+        raise ValueError("hump_fc is only used with noise='hump'")
+    if tone_freq is None:
+        if tnr_db != -np.inf:
+            raise ValueError("tone_freq is required unless tnr_db is -inf (noise only)")
+    else:
+        tone_freq = float(tone_freq)
+        if not (np.isfinite(tone_freq) and 0 < tone_freq < 0.5 * fs):
+            raise ValueError("tone_freq must satisfy 0 < tone_freq < fs/2")
+        k_top = int(np.flatnonzero(w > 0).max()) + 1
+        if not k_top * tone_freq * 2.0 ** (0.5 * bw) < 0.5 * fs:
+            raise ValueError(
+                "the highest partial (including its band edge) must lie below fs/2"
+            )
+
+    with np.errstate(over="ignore"):
+        w_tone = 1.0 / (1.0 + 10.0 ** (-tnr_db / 10.0))
+        w_noise = 1.0 / (1.0 + 10.0 ** (tnr_db / 10.0))
+    power = level_rms**2
+
+    rng = np.random.default_rng(seed)
+    seeds = rng.integers(0, 2**63 - 1, size=2, dtype=np.int64)
+    rng_tone, rng_noise = (np.random.default_rng(int(s)) for s in seeds)
+    t = np.arange(n) / fs
+    freqs = np.arange(n // 2 + 1) * (fs / n)
+
+    tone_u = noise_u = None
+    phases = None
+    if tone_freq is not None and w_tone > 0.0:
+        if bw == 0.0:
+            phases = rng_tone.uniform(0.0, _TWO_PI, size=w.size)
+            v = np.zeros(n)
+            for k in np.flatnonzero(w > 0):
+                v += w[k] * np.cos(_TWO_PI * (k + 1) * tone_freq * t + phases[k])
+        else:
+            mag2 = np.zeros(freqs.size)
+            for k in np.flatnonzero(w > 0):
+                fc = (k + 1) * tone_freq
+                band = (freqs >= fc * 2.0 ** (-0.5 * bw)) & (freqs <= fc * 2.0 ** (0.5 * bw))
+                if band.sum() < 2:
+                    raise ValueError(
+                        f"the band of partial {k + 1} holds fewer than 2 spectral bins; "
+                        "widen tone_bandwidth_oct or lengthen the record"
+                    )
+                mag2[band] += w[k] ** 2 / band.sum()
+            v = _random_phase_signal(rng_tone, n, np.sqrt(mag2))
+        tone_u = _unit_rms(v)
+    if w_noise > 0.0:
+        mag = np.ones(freqs.size)
+        if noise == "hump":
+            mag[1:] = np.exp(-((np.log2(freqs[1:] / hump_fc) / hump_sigma_oct) ** 2) / 4.0)
+            if not np.sum(mag[1:-1] ** 2) > 0:
+                raise ValueError("the hump is narrower than the frequency resolution")
+        noise_u = _unit_rms(_random_phase_signal(rng_noise, n, mag))
+    if tone_u is not None and noise_u is not None:
+        noise_u = _unit_rms(noise_u - (noise_u @ tone_u) / (tone_u @ tone_u) * tone_u)
+
+    tone = np.zeros(n) if tone_u is None else np.sqrt(power * w_tone) * tone_u
+    noise_stem = np.zeros(n) if noise_u is None else np.sqrt(power * w_noise) * noise_u
+    x = tone + noise_stem
+
+    config = {
+        "rota_version": __version__,
+        "seed": int(seed) if isinstance(seed, (int, np.integer)) else None,
+        "fs": fs,
+        "duration": duration,
+        "n": int(n),
+        "level_rms": level_rms,
+        "tnr_db": _json_float(tnr_db),
+        "tnr_definition": "broadband power ratio of the tone and noise stems (not ECMA-74 critical-band TNR)",
+        "tone_power": power * w_tone,
+        "noise_power": power * w_noise,
+        "tone_freq": tone_freq,
+        "harmonics": w.tolist(),
+        "tone_bandwidth_oct": bw,
+        "tone_phases": None if phases is None else phases.tolist(),
+        "noise": noise,
+        "hump_fc": hump_fc,
+        "hump_sigma_oct": hump_sigma_oct if noise == "hump" else None,
+    }
+    return ToneNoiseSignal(fs=fs, t=t, x=x, tone=tone, noise=noise_stem, config=_py(config))

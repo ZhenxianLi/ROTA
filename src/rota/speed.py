@@ -16,9 +16,12 @@ __all__ = [
     "tacho_to_rpm",
     "regularize_control",
     "speed_to_rpm",
+    "virtual_rpm",
     "fit_speed_to_rpm",
     "steady_segments",
     "Segment",
+    "rpm_from_ridge",
+    "RidgeResult",
 ]
 
 
@@ -442,6 +445,101 @@ def speed_to_rpm(
     return rpm
 
 
+def virtual_rpm(speed_kmh, rpm_per_kmh, *, idle, redline, smooth=None, fs=None):
+    """Virtual engine or motor speed from vehicle speed, for listening studies.
+
+    Decouples the sound from the vehicle dynamics: whatever the real
+    driveline did, the stimulus follows ``rpm = clip(rpm_per_kmh * v, idle,
+    redline)``, a single-slope map with the engine held at ``idle`` at
+    standstill and at the ``redline`` limiter. The result drives order
+    synthesis or :func:`rota.angle.stationarize` as an ordinary speed curve.
+
+    Smoothing. With ``smooth`` the clipped target ``r`` is passed through a
+    causal first-order low-pass (one pole), the engine-inertia model a
+    real-time sound engine would run sample by sample:
+    ``y[n] = a y[n-1] + (1 - a) r[n]`` with ``a = exp(-1 / (smooth fs))``.
+    A step in the target is followed as ``1 - exp(-t / smooth)`` (the
+    recursion equals the continuous response at the end of each sample
+    interval, for a target held constant over the interval), so ``smooth`` is
+    the time to reach 63.2 % of a step. The filter is causal, not zero-phase:
+    the output lags a ramp by ``smooth - 0.5 / fs`` seconds (about
+    ``smooth``), as an inertial engine would. It starts at ``r[0]`` (no
+    start-up transient) and, being a convex combination of values within
+    ``[idle, redline]``, never leaves that range. Clipping is applied before
+    smoothing, so the limits are respected without a kink.
+
+    Parameters
+    ----------
+    speed_kmh : array_like, shape (), (n,) or (n, ch)
+        Vehicle speed in km/h (not m/s). Smoothing runs along the first axis,
+        channel by channel. NaN marks a gap: it stays NaN in the output and is
+        bridged by linear interpolation (ends held) for the smoothing only.
+        Negative speeds (reversing) map to ``idle``.
+    rpm_per_kmh : float
+        Slope in rpm per km/h, positive (e.g. the value fitted by
+        :func:`fit_speed_to_rpm`).
+    idle, redline : float
+        Lower and upper rpm limits, ``0 <= idle <= redline`` (``redline`` may
+        be ``inf`` for no upper limit).
+    smooth : float, optional
+        Time constant in s of the causal first-order smoothing (None or 0:
+        none). Requires ``fs``.
+    fs : float, optional
+        Sampling rate in Hz of ``speed_kmh``; used only for smoothing.
+
+    Returns
+    -------
+    rpm : ndarray, same shape as ``speed_kmh``
+        Rotational speed in rev/min. No amplitudes are involved.
+
+    References
+    ----------
+    Gillespie, T. D. (1992). Fundamentals of Vehicle Dynamics, ch. 2
+    (driveline ratios and rolling radius). SAE International.
+    Oppenheim, A. V., & Schafer, R. W. (2010). Discrete-Time Signal
+    Processing, 3rd ed., ch. 2 (linear constant-coefficient difference
+    equations; first-order recursive systems). Pearson.
+    """
+    k = float(rpm_per_kmh)
+    if not (np.isfinite(k) and k > 0):
+        raise ValueError("rpm_per_kmh must be a positive slope in rpm per km/h")
+    idle, redline = float(idle), float(redline)
+    if not (np.isfinite(idle) and idle >= 0):
+        raise ValueError("idle must be a finite, non-negative speed in rpm")
+    if np.isnan(redline) or redline < idle:
+        raise ValueError("redline must be a speed in rpm not below idle")
+    v = np.asarray(speed_kmh, dtype=float)
+    if v.ndim > 2:
+        raise ValueError("speed_kmh must have shape (), (n,) or (n, ch)")
+    rpm = np.clip(k * v, idle, redline)
+    if smooth is None or smooth == 0:
+        return rpm
+    smooth = float(smooth)
+    if not (np.isfinite(smooth) and smooth > 0):
+        raise ValueError("smooth must be a non-negative time constant in s")
+    if fs is None or not (np.isfinite(fs) and fs > 0):
+        raise ValueError("smooth needs the sampling rate fs in Hz")
+    if rpm.ndim == 0:
+        raise ValueError("smooth needs a time series, not a scalar speed")
+    alpha = float(np.exp(-1.0 / (smooth * fs)))
+    b, a = [1.0 - alpha], [1.0, -alpha]
+    zi = signal.lfilter_zi(b, a)
+    cols = rpm[:, None] if rpm.ndim == 1 else rpm
+    out = np.full(cols.shape, np.nan)
+    idx = np.arange(cols.shape[0])
+    for c in range(cols.shape[1]):
+        r = cols[:, c]
+        ok = np.isfinite(r)
+        if not ok.any():
+            continue
+        if not ok.all():
+            r = np.interp(idx, idx[ok], r[ok])
+        y, _ = signal.lfilter(b, a, r, zi=zi * r[0])
+        y[~ok] = np.nan
+        out[:, c] = y
+    return out[:, 0] if rpm.ndim == 1 else out
+
+
 def fit_speed_to_rpm(speed_kmh, rpm, mask=None):
     """Fit the lumped slope ``rpm = k * v`` by least squares through the origin.
 
@@ -583,3 +681,6 @@ def steady_segments(
             )
         )
     return out
+
+
+from ._ridge import RidgeResult, rpm_from_ridge  # noqa: E402  (tacholess estimation)
