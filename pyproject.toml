@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rota"
+dynamic = ["version"]
+description = "Rotational order tracking and analysis for noise and vibration signals"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Zhenxian Li" }]
+keywords = ["order tracking", "order analysis", "NVH", "acoustics", "vibration", "rotating machinery"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = ["numpy>=1.23", "scipy>=1.9"]
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+plot = ["matplotlib>=3.5"]
+
+[tool.setuptools.dynamic]
+version = { attr = "rota.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
