@@ -56,15 +56,20 @@ def angular_resample(
     min_rpm=None,
     delay=0.0,
     attenuation=80.0,
+    upsample=4,
 ):
     """Resample a time signal to uniform shaft-angle increments.
 
     The shaft angle is obtained from ``rpm`` with :func:`rota.speed.rpm_to_phase`.
-    To avoid aliasing whatever the speed, the signal is first interpolated
-    (cubic spline) onto an intermediate angle grid dense enough that the
-    time-domain Nyquist frequency at the *lowest* speed maps below the
-    intermediate angular Nyquist order; there the interpolation is a local
-    upsampling and creates no aliases. The intermediate signal is then
+    The signal is first upsampled in time by the integer factor ``upsample``
+    with a linear-phase polyphase FIR (pass band to ``0.45 fs``, stop band
+    from ``0.55 fs``), so that the subsequent cubic-spline interpolation only
+    sees content below about ``0.14`` of its sampling rate, where its gain is
+    flat and its images are small. To avoid aliasing whatever the speed, the
+    spline is evaluated on an intermediate angle grid dense enough that
+    ``0.55 fs`` at the *lowest* speed maps below the intermediate angular
+    Nyquist order; there the interpolation is a local upsampling. The
+    intermediate signal is then
     low-pass filtered *in the angle domain* (linear-phase Kaiser FIR) and
     decimated to ``samples_per_rev``. Because the filter acts on order, not
     frequency, the anti-aliasing cut-off follows the speed: orders above
@@ -93,14 +98,20 @@ def angular_resample(
     delay : float, default 0
         Speed-reference delay in s, see :func:`rota.speed.rpm_to_phase`.
     attenuation : float, default 80
-        Stop-band attenuation in dB of the angle-domain anti-aliasing filter.
+        Stop-band attenuation in dB of the angle-domain anti-aliasing filter
+        and of the time-domain upsampling filter.
+    upsample : int, default 4
+        Time-domain upsampling factor before spline interpolation (1 disables
+        it; faster, but high orders then droop by up to about 1-2 dB near
+        ``0.4 fs`` and content near ``fs/2`` can leak at about -45 dB).
 
     Returns
     -------
     AngularSignal
-        Amplitudes are preserved sample by sample (peak and RMS conventions
-        are unchanged); the first and last few revolutions carry filter edge
-        effects of about ``numtaps / (2 * samples_per_rev * M)`` revolutions.
+        Amplitudes are preserved for content below ``0.45 fs`` (peak and RMS
+        conventions are unchanged); content between ``0.45 fs`` and ``fs/2``
+        lies in the upsampling filter's transition band. The first and last
+        few revolutions carry filter edge effects.
 
     References
     ----------
@@ -140,10 +151,14 @@ def angular_resample(
         np.interp(np.arange(n) / fs + delay, np.arange(n) / fs, rpm), min_rpm
     )
     rpm_lo = float(rpm_eff.min())
+    upsample = int(upsample)
+    if upsample < 1:
+        raise ValueError("upsample must be a positive integer")
 
     # Intermediate angular rate: an integer multiple M of the output rate with
-    # at least fs * 60 / rpm_lo samples per revolution.
-    M = max(1, int(np.ceil(fs * 60.0 / rpm_lo / samples_per_rev)))
+    # at least 1.2 * fs * 60 / rpm_lo samples per revolution, so that the
+    # upsampler's transition band (up to 0.55 fs) does not fold.
+    M = max(1, int(np.ceil(1.2 * fs * 60.0 / rpm_lo / samples_per_rev)))
     spr_hi = samples_per_rev * M
     m_hi = int(np.floor(rev[-1] * spr_hi)) + 1
     if m_hi * X.shape[1] > _MAX_INTERMEDIATE:
@@ -152,8 +167,18 @@ def angular_resample(
         )
     rev_hi = np.arange(m_hi) / spr_hi
     t_hi = np.interp(rev_hi, rev, np.arange(n) / fs)
-    spline = interpolate.make_interp_spline(np.arange(n), X, k=3, axis=0)
-    x_hi = spline(t_hi * fs)
+    if upsample > 1:
+        # Normalised to the upsampled Nyquist upsample * fs / 2: cut-off fs/2,
+        # transition band 0.45 fs to 0.55 fs.
+        numtaps, beta = signal.kaiserord(attenuation, 0.2 / upsample)
+        numtaps = 2 * (numtaps // 2) + 1
+        h = signal.firwin(numtaps, 1.0 / upsample, window=("kaiser", beta))
+        h /= h.sum()  # resample_poly applies the factor `upsample` itself
+        X_up = signal.resample_poly(X, upsample, 1, axis=0, window=h)
+    else:
+        X_up = X
+    spline = interpolate.make_interp_spline(np.arange(X_up.shape[0]), X_up, k=3, axis=0)
+    x_hi = spline(t_hi * (fs * upsample))
 
     if M > 1:
         nyq_hi = 0.5 * spr_hi

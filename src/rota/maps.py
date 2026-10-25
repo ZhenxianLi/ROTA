@@ -78,6 +78,8 @@ class Map:
     @property
     def resolution(self):
         """Bin spacing in Hz or orders."""
+        if self.axis.size < 2:
+            raise ValueError("map has fewer than two bins; resolution undefined")
         return float(self.axis[1] - self.axis[0])
 
 
@@ -179,6 +181,8 @@ def rpm_frequency_map(
     check_amplitude(amplitude)
     X, was_1d = as_2d(x)
     rpm = broadcast_rpm(rpm, X.shape[0])
+    if resolution is not None and not resolution > 0:
+        raise ValueError("resolution must be positive (Hz)")
     if nperseg is None:
         nperseg = int(round(fs / resolution)) if resolution else int(round(0.1 * fs))
     hop = _hop(nperseg, overlap)
@@ -258,6 +262,8 @@ def rpm_order_map(
     Brandt, A. (2011). Noise and Vibration Analysis, ch. 12. Wiley.
     """
     check_amplitude(amplitude)
+    if not order_resolution > 0:
+        raise ValueError("order_resolution must be positive")
     a = angular_resample(
         x, fs, rpm, samples_per_rev=samples_per_rev, max_order=max_order,
         min_rpm=min_rpm, delay=delay,

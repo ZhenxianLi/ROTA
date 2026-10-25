@@ -197,7 +197,14 @@ def tacho_to_rpm(
         short = np.flatnonzero(d < ref / gap_factor)
         if short.size == 0:
             break
-        te = np.delete(te, short[:1] + 1)
+        # Interval i is too short: drop whichever of its two pulses leaves the
+        # merged interval closest to the local median.
+        i = int(short[0])
+        cost = []
+        for drop, lo, hi in ((i + 1, i, i + 2), (i, i - 1, i + 1)):
+            ok = 0 <= lo and hi < te.size
+            cost.append(abs(np.log((te[hi] - te[lo]) / ref[i])) if ok else np.inf)
+        te = np.delete(te, i + 1 if cost[0] <= cost[1] else i)
         n_spurious += 1
     d = np.diff(te)
     ref = ndimage.median_filter(d, size=min(9, d.size), mode="nearest")
@@ -302,7 +309,7 @@ def regularize_control(
     """
     x = np.asarray(x, dtype=float)
     one_d = x.ndim == 1
-    X = x[:, None] if one_d else x.copy()
+    X = (x[:, None] if one_d else x).copy()
     n = X.shape[0]
     tt = time_axis(n, fs, t) + offset
     dt_med = float(np.median(np.diff(tt)))
