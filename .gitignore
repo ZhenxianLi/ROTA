@@ -6,3 +6,8 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+
+# Validation signals and reference outputs are generated locally
+validation/signals/
+validation/reference/
+.pytest_cache/
