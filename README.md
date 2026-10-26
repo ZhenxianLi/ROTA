@@ -13,18 +13,18 @@ The design document is [ROADMAP.md](ROADMAP.md) (written in Chinese).
 
 ## Status
 
-Pre-alpha. Version 0.1 is in development; functions and signatures may change before it is released. Not every function listed below exists yet. The package is not published on PyPI (a PyPI release is planned for v1.0).
+Pre-alpha. The current release is 0.2.0; functions and signatures may still change before 1.0. The package is not published on PyPI yet (planned for v1.0); install from source.
 
 | Module | Contents | Status |
 |---|---|---|
-| `rota.speed` | v0.1: tachometer pulses to rpm, rpm to shaft angle, control-signal cleanup and resampling, vehicle speed to rpm, steady-segment selection. Later: tacholess rpm estimation (v0.2), virtual rpm (v0.3), signal alignment (v0.4) | v0.1 (in progress) |
-| `rota.angle` | v0.1: resampling from uniform time to uniform shaft angle (computed order tracking). Later: inverse mapping and time warping (v0.3) | v0.1 (in progress) |
-| `rota.maps` | v0.1: rpm-frequency (Campbell) map, rpm-order map. Later: binning options (v0.4) | v0.1 (in progress) |
-| `rota.slices` | v0.1: order spectrum, order slice. Later: frequency slice, overall level, metric versus rpm, order share (v0.4) | v0.1 (in progress) |
-| `rota.synth` | v0.1: speed profiles and run-up signals with analytic ground truth. Later: tone-plus-noise stimuli (v0.3) | v0.1 (in progress) |
-| `rota.metrics` | v0.1: speed-track error. Later: waveform similarity and residual order energy (v0.2), window and envelope checks (v0.3) | v0.1 (in progress) |
-| `rota.extract` | Order extraction (Vold-Kalman filter, phase-locked tracked harmonics), order removal, residual, resolvability check | v0.2 (planned) |
-| `rota.resynth` | Order tables, order-based synthesis, broadband synthesis, speed remapping, resynthesis | v0.3 (planned) |
+| `rota.speed` | Tachometer pulses to rpm, rpm to shaft angle, control-signal cleanup and resampling, vehicle speed to rpm, steady-segment selection; tacholess speed estimation (order comb + dynamic programming, with confidence and search-boundary flags). Later: virtual rpm (v0.3), signal alignment (v0.4) | 0.1, 0.2 |
+| `rota.angle` | Resampling from uniform time to uniform shaft angle (computed order tracking) with angle-domain anti-aliasing. Later: inverse mapping and time warping (v0.3) | 0.1 |
+| `rota.maps` | Rpm-frequency (Campbell) map, rpm-order map. Later: binning options (v0.4) | 0.1 |
+| `rota.slices` | Order spectrum, order slice. Later: frequency slice, overall level, metric versus rpm, order share (v0.4) | 0.1 |
+| `rota.extract` | Order extraction (second-generation Vold-Kalman filter, joint over orders and shafts; phase-locked tracked harmonics), order removal, residual, resolvability check | 0.2 |
+| `rota.synth` | Speed profiles and run-up signals with analytic ground truth. Later: tone-plus-noise stimuli (v0.3) | 0.1 |
+| `rota.metrics` | Speed-track error, waveform similarity (energy-weighted), residual order energy. Later: window and envelope checks (v0.3) | 0.1, 0.2 |
+| `rota.resynth` | Order tables, order-based synthesis, broadband synthesis, speed remapping, resynthesis | v0.3 (in progress) |
 | `rota.tonal` | Thin bridge to open-source psychoacoustic tools: calibrated level, resampling, order prominence | v0.4 (planned) |
 | `rota.plot` | Plotting helpers, kept separate from computation | v0.4 (planned) |
 
@@ -101,7 +101,7 @@ The amplitude convention of every function is stated in its docstring.
 
 Analytic ground truth from `rota.synth` is the first reference: every test signal comes with its true speed, shaft angle, and amplitude and phase of each order. Where a public implementation elsewhere exists, a black-box comparison with explicit parameters is a second reference, and it compares physical quantities (speed curves, order amplitudes along a ridge), not map cells. When the two disagree, the analytic truth decides. Resynthesis is tested by round trip: synthesise, analyse, compare with the input table. Continuous integration runs pytest only.
 
-The design document defines 14 validation signals (T1 to T14). Version 0.1 covers T1 (single order, constant amplitude, linear run-up), T2 (several orders, a fixed-frequency resonance, noise), T5 (multi-pulse tachometer with jitter and dropped pulses) and T14 (low-speed start from idle with orders half an order apart).
+The design document defines 14 validation signals (T1 to T14). Version 0.1 covers T1 (single order, constant amplitude, linear run-up), T2 (several orders, a fixed-frequency resonance, noise), T5 (multi-pulse tachometer with jitter and dropped pulses) and T14 (low-speed start from idle with orders half an order apart). Version 0.2 adds T3 (exponential run-down), T4 (crossing orders on two shafts), T6 (fast run-up), T8 (twin shafts 0.5–4 % apart), T10 (true speed outside the search range), T12 (order removal) and T13 (extraction error versus speed-reference error). Cases and measured results: [validation/README.md](validation/README.md).
 
 Initial tolerances, to be adjusted after measurement:
 

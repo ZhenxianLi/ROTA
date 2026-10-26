@@ -21,7 +21,7 @@ independently and linearly. Amplitude conventions (peak or RMS) are stated
 in each docstring and selected explicitly where a choice exists.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from . import angle, extract, maps, metrics, resynth, slices, speed, synth  # noqa: F401
 
