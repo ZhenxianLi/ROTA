@@ -1,6 +1,7 @@
 # ROTA
 
 [![Tests](https://github.com/ZhenxianLi/ROTA/actions/workflows/tests.yml/badge.svg)](https://github.com/ZhenxianLi/ROTA/actions/workflows/tests.yml)
+[![PyPI](https://img.shields.io/pypi/v/rota-order.svg)](https://pypi.org/project/rota-order/)
 [![License: GPL v3+](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](https://github.com/ZhenxianLi/ROTA/blob/main/LICENSE)
 [![Python 3.10–3.13](https://img.shields.io/badge/python-3.10%E2%80%933.13-blue.svg)](https://github.com/ZhenxianLi/ROTA/blob/main/pyproject.toml)
 [![Dependencies: NumPy + SciPy](https://img.shields.io/badge/dependencies-NumPy%20%2B%20SciPy-informational.svg)](https://github.com/ZhenxianLi/ROTA/blob/main/pyproject.toml)
