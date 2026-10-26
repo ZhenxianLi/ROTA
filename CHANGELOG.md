@@ -28,7 +28,7 @@ Order-based resynthesis.
 
 ## [0.2.0] - 2026-10-26
 
-Order extraction and tacholess speed estimation.
+Order extraction and tacholess speed estimation. Development milestone; not released separately (first public release: 0.3.0).
 
 ### Added
 
@@ -46,7 +46,7 @@ Order extraction and tacholess speed estimation.
 
 ## [0.1.0] - 2026-10-25
 
-Core chain for the analysis of a run-up with a tachometer.
+Core chain for the analysis of a run-up with a tachometer. Development milestone; not released separately (first public release: 0.3.0).
 
 ### Added
 
@@ -61,6 +61,6 @@ Core chain for the analysis of a run-up with a tachometer.
 - Licence: GPL-3.0-or-later.
 
 [Unreleased]: https://github.com/ZhenxianLi/ROTA/compare/v0.3.0...main
-[0.3.0]: https://github.com/ZhenxianLi/ROTA/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/ZhenxianLi/ROTA/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/ZhenxianLi/ROTA/releases/tag/v0.1.0
+[0.3.0]: https://github.com/ZhenxianLi/ROTA/releases/tag/v0.3.0
+[0.2.0]: https://github.com/ZhenxianLi/ROTA/commit/767093c
+[0.1.0]: https://github.com/ZhenxianLi/ROTA/commit/9c1404d
