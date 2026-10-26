@@ -10,7 +10,16 @@ import warnings
 import numpy as np
 import pytest
 
-from rota._ridge import RidgeResult, _l1_max_sum, _viterbi, rpm_from_ridge
+from rota._ridge import (
+    RidgeResult,
+    WhiteningWarning,
+    _auto_slope,
+    _l1_max_sum,
+    _path_rate,
+    _running_median_warped,
+    _viterbi,
+    rpm_from_ridge,
+)
 from rota.metrics import track_error
 from rota.synth import rpm_profiles, synth_runup
 
@@ -196,14 +205,16 @@ def test_moving_suppresses_strong_fixed_tone():
     # at the speeds whose comb tooth m sits at 100 Hz (6000, 3000, 2000, 1500
     # rpm for m = 1..4), which out-scores the true comb at this SNR. Checked
     # over 8 seeds: without `moving` within-3 % is 0.0 each time, with it
-    # at least 0.99.
+    # at least 0.99. These numbers are those of a constant 15 Hz median, the
+    # default before whiten="auto": it is given explicitly in the first two
+    # runs (this test encoded the old default); the default is checked below.
     s = _runup(1200.0, 2800.0, noise=6.0, tones=[dict(freq=100.0, amplitude=5000.0, phase=0.3)])
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        plain = rpm_from_ridge(s.x, FS, (1000.0, 6000.0), moving=False)
+        plain = rpm_from_ridge(s.x, FS, (1000.0, 6000.0), moving=False, whiten=15.0)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")  # noise this high: a few chance flags
-        moved = rpm_from_ridge(s.x, FS, (1000.0, 6000.0), moving=True)
+        moved = rpm_from_ridge(s.x, FS, (1000.0, 6000.0), moving=True, whiten=15.0)
     w_plain = _err(plain, s)["within"][0.03]
     w_moved = _err(moved, s)["within"][0.03]
     assert w_moved >= 0.95  # measured: 1.0
@@ -216,6 +227,18 @@ def test_moving_suppresses_strong_fixed_tone():
     far = _truth(moved, s) < 2000.0
     g = int(np.argmin(np.abs(moved.rpm_grid - 3000.0)))
     assert plain.score[far, g].mean() > 3.0 * moved.score[far, g].mean()
+
+    # Default whitening (whiten="auto"): moving=True still removes the tone
+    # (over 8 seeds 0.98 to 1.0 within 3 %; stripe score 2.6 times lower than
+    # without moving).
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        auto_moved = rpm_from_ridge(s.x, FS, (1000.0, 6000.0), moving=True)
+        auto_plain = rpm_from_ridge(s.x, FS, (1000.0, 6000.0), moving=False)
+    assert _err(auto_moved, s)["within"][0.03] >= 0.95  # measured: 0.99
+    assert auto_moved.bound_fraction < 0.1
+    assert not auto_moved.whiten_violated.any()
+    assert auto_plain.score[far, g].mean() > 2.0 * auto_moved.score[far, g].mean()  # measured: 2.6
 
 
 # --------------------------------------------------------------------------
@@ -641,3 +664,250 @@ def test_validation_errors(kwargs, match):
 def test_bad_signal_raises(x):
     with pytest.raises(ValueError):
         rpm_from_ridge(x, FS, (1000.0, 6000.0))
+
+
+# --------------------------------------------------------------------------
+# whitening width: whiten="auto" (default), explicit widths, diagnostics
+# --------------------------------------------------------------------------
+
+# Three-cylinder-like order set with weak sub-orders between the comb lines: the
+# lines are dense, which is what makes a too-narrow running median erase them.
+HALF_ORDERS = ((0.5, 0.15), (1.0, 0.35), (1.5, 1.0), (3.0, 0.5), (4.5, 0.3), (6.0, 0.2))
+HALF_COMB = (1.5, 3.0, 4.5, 6.0)
+HALF_RANGE = (600.0, 6000.0)
+
+
+def _half_runup(dur, *, down=False, lo=900.0, hi=4500.0, hold=1.2, seed=7):
+    """Hold at one end for ``hold`` s, then a linear ramp to the other until ``dur``.
+
+    The slew is ``(hi - lo) / (dur - hold)``: 750 rpm/s for 6 s, 333 for 12 s,
+    158 for 24 s, 1500 for 3.6 s.
+    """
+    t = np.arange(round(dur * FS)) / FS
+    a, b = (hi, lo) if down else (lo, hi)
+    rpm = rpm_profiles(t, "linear", start=a, stop=b, t_start=hold, t_stop=dur)
+    specs = [{"order": o, "amplitude": amp} for o, amp in HALF_ORDERS]
+    return synth_runup(FS, rpm, specs, noise_rms=0.05, seed=seed)
+
+
+@pytest.mark.parametrize(
+    "dur", [6.0, 12.0, 24.0, 3.6], ids=["750rpm/s", "333rpm/s", "158rpm/s", "1500rpm/s"]
+)
+def test_default_whitening_follows_ordinary_runups(dur):
+    # The defect: with the former fixed 15 Hz median the top comb order (6 x speed)
+    # sweeps 30 Hz (750 rpm/s) or 13 Hz (333 rpm/s) within a window, wider than
+    # the median, and the lines were erased: 66 % median error, only a misleading
+    # search-range warning. All defaults now; no warning of any kind.
+    s = _half_runup(dur)
+    res = _quiet(s.x, FS, HALF_RANGE, orders=HALF_COMB)
+    e = _err(res, s)
+    assert e["within"][0.03] >= 0.9  # ROADMAP 5.4
+    assert e["within"][0.03] >= 0.95  # measured: 0.97 (1500 rpm/s), 0.99 (750), 1.0 (333, 158)
+    assert e["median_rel_error"] < 0.005  # measured: 0.00014 (158 rpm/s) to 0.0034 (1500 rpm/s)
+    assert res.bound_fraction == 0.0 and not res.beyond.any()
+    assert not res.whiten_violated.any()
+
+
+@pytest.mark.parametrize("dur", [6.0, 12.0], ids=["750rpm/s", "333rpm/s"])
+def test_default_whitening_follows_rundowns(dur):
+    s = _half_runup(dur, down=True)
+    res = _quiet(s.x, FS, HALF_RANGE, orders=HALF_COMB)
+    e = _err(res, s)
+    assert e["within"][0.03] >= 0.95  # measured: 0.99 (750 rpm/s), 1.0 (333)
+    assert res.rpm[0] > 4000.0 and res.rpm[-1] < 1200.0  # it followed the decay
+    assert res.bound_fraction == 0.0
+
+
+def test_default_whitening_at_steady_speed_and_comb_to_order_ten():
+    t = np.arange(round(5.0 * FS)) / FS
+    specs = [{"order": o, "amplitude": a} for o, a in HALF_ORDERS]
+    s = synth_runup(FS, np.full(t.size, 2500.0), specs, noise_rms=0.05, seed=7)
+    res = _quiet(s.x, FS, HALF_RANGE, orders=HALF_COMB)
+    assert _err(res, s)["within"][0.03] >= 0.98  # measured: 1.0
+    # A comb of ten integer orders at 1500 rpm/s (order 10 sweeps 100 Hz per window).
+    comb = tuple(range(1, 11))
+    t = np.arange(round(2.5 * FS)) / FS
+    t_stop = 1.2 + 1900.0 / 1500.0
+    rpm = rpm_profiles(t, "linear", start=900.0, stop=2800.0, t_start=1.2, t_stop=t_stop)
+    specs = [{"order": k, "amplitude": k**-0.5} for k in comb]
+    s = synth_runup(FS, rpm, specs, noise_rms=0.05, seed=7)
+    res = _quiet(s.x, FS, (600.0, 3000.0), orders=comb)
+    assert _err(res, s)["within"][0.03] >= 0.95  # measured: 1.0
+
+
+def test_auto_width_follows_the_documented_rule():
+    s = _half_runup(6.0)
+    res = _quiet(s.x, FS, HALF_RANGE, orders=HALF_COMB)
+    # idle, no sweep: the static 6 / window = 15 Hz (the sweep estimate reaches
+    # about 0.5 s ahead of the start of the ramp at 1.2 s)
+    hold = res.t < 0.7
+    assert hold.sum() > 8 and np.allclose(res.whiten_width[hold], 6.0 / 0.4)
+    # in the ramp the median is at least the line extent 4 / window + sweep of
+    # order 6 (30 Hz sweep at 750 rpm/s and 900 rpm; 4 / window = 10 Hz)
+    ramp = (res.t > 2.0) & (res.t < 5.0)
+    assert np.all(res.whiten_width[ramp] >= res.line_width[ramp])
+    truth_extent = 4.0 / 0.4 + 6.0 * 750.0 / 60.0 * 0.4  # 40 Hz, the true value
+    extent = np.median(res.line_width[ramp])
+    assert extent == pytest.approx(truth_extent, rel=0.03)  # measured: 40.0
+    assert np.median(res.whiten_width[ramp]) > truth_extent
+    # an explicit number is reported as given, None as infinite
+    assert np.all(_quiet(s.x, FS, HALF_RANGE, orders=HALF_COMB, whiten=60.0).whiten_width == 60.0)
+    none = _quiet(s.x, FS, HALF_RANGE, orders=HALF_COMB, whiten=None)
+    assert np.all(np.isinf(none.whiten_width)) and not none.whiten_violated.any()
+    assert _err(none, s)["within"][0.03] >= 0.98  # the frame median is robust against any sweep
+
+
+def test_default_whitening_keeps_removing_a_noise_hump():
+    # As test_whitening_removes_the_bias_of_a_noise_hump, with the default width.
+    from scipy import signal
+
+    sos = signal.butter(4, [70.0, 130.0], btype="bandpass", fs=FS, output="sos")
+    w_auto, w_off = [], []
+    for seed in (1, 2, 3):
+        s = _runup(1500.0, 3000.0, noise=4.0, seed=seed)
+        hump = signal.sosfiltfilt(sos, np.random.default_rng(100 + seed).standard_normal(s.x.size))
+        x = s.x + 40.0 * hump / hump.std()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            auto = rpm_from_ridge(x, FS, (1000.0, 6000.0))
+            off = rpm_from_ridge(x, FS, (1000.0, 6000.0), whiten=None)
+        w_auto.append(_err(auto, s)["within"][0.03])
+        w_off.append(_err(off, s)["within"][0.03])
+    assert np.mean(w_auto) >= 0.8  # measured: 0.88
+    assert np.mean(w_auto) > np.mean(w_off) + 0.15  # measured: 0.88 vs 0.61
+
+
+def _record(*args, **kwargs):
+    """Call the estimator; return its result and the list of warnings it issued."""
+    with warnings.catch_warnings(record=True) as rec:
+        warnings.simplefilter("always")
+        res = rpm_from_ridge(*args, **kwargs)
+    return res, rec
+
+
+def test_too_narrow_explicit_whiten_warns_and_lowers_confidence():
+    # The former default on the 6 s run: the median (15 Hz) is narrower than the
+    # 40 Hz a line occupies. The result is wrong; it must not be silent.
+    s = _half_runup(6.0)
+    good = _quiet(s.x, FS, HALF_RANGE, orders=HALF_COMB)
+    bad, rec = _record(s.x, FS, HALF_RANGE, orders=HALF_COMB, whiten=15.0)
+    assert _err(bad, s)["within"][0.03] < 0.5  # measured: 0.19; the warning is right
+    assert issubclass(WhiteningWarning, RuntimeWarning)
+    specific = [str(w.message) for w in rec if issubclass(w.category, WhiteningWarning)]
+    assert len(specific) == 1
+    # the specific message names the width, the cause and the remedy
+    assert "whitening width (15 Hz)" in specific[0] and "whiten='auto'" in specific[0]
+    # frames are marked, and their confidence is derated by (width / (0.8 line))^2
+    v = bad.whiten_violated
+    assert v.mean() > 0.5  # measured: 0.84
+    assert np.all(bad.whiten_width[v] < 0.8 * bad.line_width[v])
+    assert np.all(bad.confidence[v] <= (bad.whiten_width[v] / (0.8 * bad.line_width[v])) ** 2 + 1e-12)
+    assert np.median(bad.confidence) < 0.5 * np.median(good.confidence)  # measured: 0.075 vs 0.24
+    assert np.all((bad.confidence >= 0) & (bad.confidence <= 1))
+    # the search-range warning, if it also fires (19.5 % of the frames here),
+    # says that the whitening can cause it
+    bound = [str(w.message) for w in rec if "search range" in str(w.message)]
+    assert bound and all("whitening width is too small" in m for m in bound)
+
+
+def test_a_width_slightly_too_narrow_is_not_silent():
+    # 30 Hz against 40 Hz (0.75): the final path is wrong here, and so is its own
+    # slope (it shows 19 Hz); the sweep taken from the first pass, which does not
+    # depend on the width, is what catches it.
+    s = _half_runup(6.0)
+    res, rec = _record(s.x, FS, HALF_RANGE, orders=HALF_COMB, whiten=30.0)
+    assert _err(res, s)["within"][0.03] < 0.5  # measured: 0.19
+    assert any(issubclass(w.category, WhiteningWarning) for w in rec)
+    assert np.median(res.line_width[(res.t > 2.0) & (res.t < 5.0)]) > 35.0  # measured: 40
+
+
+@pytest.mark.parametrize("whiten, dur", [(45.0, 6.0), (60.0, 6.0), (30.0, 12.0)])
+def test_a_sufficient_explicit_whiten_is_quiet_and_right(whiten, dur):
+    # 45 and 60 Hz against 40 Hz; 30 Hz against 23 Hz: at or above the line extent.
+    s = _half_runup(dur)
+    res = _quiet(s.x, FS, HALF_RANGE, orders=HALF_COMB, whiten=whiten)
+    assert _err(res, s)["within"][0.03] >= 0.95  # measured: 1.0
+    assert not res.whiten_violated.any()
+
+
+def test_a_run_beyond_the_sweep_limit_is_not_silent():
+    # 2000 rpm/s: order 6 sweeps 80 Hz per window and the lines blur into each
+    # other; no width helps (the median is wide enough here) and the estimate
+    # fails (0.0 within 3 % in the ramp, 25 % of the frames in at_bound). It must
+    # not do so silently. A shorter window cures it (0.25 s: 1.0).
+    s = _half_runup(3.0)
+    res, rec = _record(s.x, FS, HALF_RANGE, orders=HALF_COMB)
+    assert _err(res, s)["within"][0.03] < 0.9  # measured: 0.40 (all frames)
+    assert any(issubclass(w.category, RuntimeWarning) for w in rec)
+    assert res.bound_fraction > 0.1  # measured: 0.25
+    short, rec = _record(s.x, FS, HALF_RANGE, orders=HALF_COMB, window=0.25)
+    assert _err(short, s)["within"][0.03] >= 0.95  # measured: 1.0
+
+
+def test_warnings_are_separate_when_the_speed_really_leaves_the_range():
+    # Truth outside the range with an adequate width: only the search-range warning.
+    s = _runup(1500.0, 3000.0)
+    with warnings.catch_warnings(record=True) as rec:
+        warnings.simplefilter("always")
+        res = rpm_from_ridge(s.x, FS, (1000.0, 2000.0))
+    assert any("search range" in str(w.message) for w in rec)
+    assert not any(issubclass(w.category, WhiteningWarning) for w in rec)
+    assert not res.whiten_violated.any()
+
+
+def test_whiten_argument_forms():
+    s = _half_runup(6.0)
+    default = _quiet(s.x, FS, HALF_RANGE, orders=HALF_COMB)
+    for form in ("auto", "Auto", " AUTO "):
+        same = _quiet(s.x, FS, HALF_RANGE, orders=HALF_COMB, whiten=form)
+        assert np.array_equal(same.rpm, default.rpm)
+    for bad in ("wide", "", "15"):
+        with pytest.raises(ValueError, match="whiten"):
+            rpm_from_ridge(s.x, FS, HALF_RANGE, orders=HALF_COMB, whiten=bad)
+
+
+def test_path_rate_is_the_relative_slope():
+    hop = 0.05
+    t = np.arange(60) * hop
+    rpm = 1000.0 + 200.0 * t  # a ramp of 200 rpm/s: exact for a linear fit, ends included
+    assert np.allclose(_path_rate(rpm, hop, 0.4), 200.0 / rpm, rtol=1e-9)
+    assert np.allclose(_path_rate(np.full(30, 2000.0), hop, 0.4), 0.0, atol=1e-12)
+    # one wrong frame (an outlier of the path) does not make a sweep
+    spiked = np.full(60, 2000.0)
+    spiked[30] = 3500.0
+    assert _path_rate(spiked, hop, 0.4).max() < 1e-9
+    assert np.array_equal(_path_rate(np.array([1000.0, 1100.0]), hop, 0.4), [0.0, 0.0])
+    # the spread envelope is never below the plain rate and widens a step
+    step = np.where(np.arange(60) < 30, 1000.0, 1500.0)
+    assert np.all(_path_rate(step, hop, 0.4, spread=True) >= _path_rate(step, hop, 0.4))
+
+
+def test_auto_slope_rounds_the_relative_rate_up_on_a_ladder():
+    hop, window = 0.05, 0.4
+    t = np.arange(80) * hop
+    rpm = 1000.0 * np.exp(0.5 * t)  # constant relative rate 0.5 /s
+    q = _auto_slope(rpm, window, hop)
+    want = 0.5 * window  # _AUTO_FACTOR = 1: q = rate * window
+    assert np.all(q >= want * (1 - 1e-2)) and np.all(q <= want * 2 ** (1 / 3) * (1 + 1e-2))
+    assert np.all(_auto_slope(np.full(80, 2000.0), window, hop) == 0.0)  # steady: static width
+
+
+def test_warped_median_widens_with_frequency():
+    # A flat-topped line of 14 Hz in a flat floor of 1, at 30 Hz and at 300 Hz.
+    # The median erases a line wider than half of its width (it ignores up to half
+    # of the samples): width(30 Hz) = 16 Hz erases it, width(300 Hz) = 70 Hz does not.
+    df, nb = 0.625, 700
+    w0, w1, q = 15.0, 10.0, 0.2  # width(f) = max(15, 10 + 0.2 f)
+    P = np.ones((1, nb))
+    for f0 in (30.0, 300.0):
+        k = round(f0 / df)
+        P[0, k - 11 : k + 12] = 100.0  # 23 bins, 14.4 Hz
+    floor = _running_median_warped(P, df, w0, w1, q)[0]
+    assert floor[round(30.0 / df)] > 50.0  # erased: 16 Hz wide median
+    assert floor[round(300.0 / df)] < 2.0  # kept: 70 Hz wide median
+    # a flat floor stays flat, and q -> 0 gives a constant width (the line at
+    # 300 Hz is then erased as well)
+    flat = _running_median_warped(np.full((2, nb), 3.0), df, w0, w1, q)
+    assert np.allclose(flat, 3.0)
+    narrow = _running_median_warped(P, df, w0, w1, 1e-9)[0]
+    assert narrow[round(300.0 / df)] > 50.0

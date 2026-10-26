@@ -14,9 +14,11 @@ wrong value, and only ``at_bound`` and the collapse of ``confidence`` tell it.
 
 Settings that the data call for (see the docstring of ``rpm_from_ridge``):
 ``orders=(1.5, 3, 4.5, 6)``, because with the default integer comb the half-order
-signal locks at exactly 1.5 times the speed; ``whiten=None``, because the lines are
-dense and sweep up to 30 Hz during the 0.4 s window, wider than the default 15 Hz
-running-median width, which would erase them.
+signal locks at exactly 1.5 times the speed; ``whiten=None``, because the fixed
+250 Hz tone sits on a comb tooth at a speed above the search range and, with
+whitening, briefly outscores the orders there (``moving=True`` would also remove
+it). The default ``whiten="auto"`` widens the whitening with the sweep of the
+lines and tracks this run-up as well.
 
 No amplitude convention is involved (the tacholess estimator uses ratios of
 spectral levels only). Speeds are in rpm, times in s.

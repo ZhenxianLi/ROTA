@@ -22,6 +22,7 @@ __all__ = [
     "Segment",
     "rpm_from_ridge",
     "RidgeResult",
+    "WhiteningWarning",
 ]
 
 
@@ -685,4 +686,4 @@ def steady_segments(
     return out
 
 
-from ._ridge import RidgeResult, rpm_from_ridge  # noqa: E402  (tacholess estimation)
+from ._ridge import RidgeResult, WhiteningWarning, rpm_from_ridge  # noqa: E402  (tacholess estimation)

@@ -14,7 +14,22 @@ from scipy import ndimage, signal
 
 from ._utils import as_2d
 
-__all__ = ["RidgeResult", "rpm_from_ridge"]
+__all__ = ["RidgeResult", "WhiteningWarning", "rpm_from_ridge"]
+
+
+class WhiteningWarning(RuntimeWarning):
+    """The whitening width is smaller than the spectral lines it must keep.
+
+    Issued by :func:`rpm_from_ridge` when, along the tracked path, the
+    frequency range one comb line occupies within a window (Hann main lobe
+    plus the sweep of the highest comb order) is wider than the running
+    median that whitens the spectrum. The median then follows the lines and
+    erases them, and the speed estimate cannot be trusted there (its
+    ``confidence`` is lowered on those frames). It is a ``RuntimeWarning``
+    but is not the search-range warning: the true speed need not be outside
+    ``rpm_range``.
+    """
+
 
 # Decimated Nyquist frequency over the highest comb frequency.
 _NYQUIST_MARGIN = 1.25
@@ -37,6 +52,35 @@ _GUARD = 2.0
 _BEYOND_MARGIN = 0.25
 # Largest score matrix (frames x grid, guard bands included), in elements.
 _MAX_SCORE_SIZE = 150_000_000
+# Whitening. One comb line of frequency f occupies (null to null)
+# _LINE_BINS / window Hz for a Hann window (Harris 1978), plus the frequency it
+# sweeps during the window, f * rate * window (rate = |d rpm/dt| / rpm). The
+# running median must be at least that wide at the line's frequency: that is the
+# condition checked after tracking. The automatic width is the larger of a static
+# floor, _STATIC_BINS * _LINE_BINS / window (6 / window, 15 Hz for 0.4 s: the
+# classical default, kept wherever it already satisfies the condition), and the
+# line extent itself:
+#   width(f) = max(_STATIC_BINS * _LINE_BINS / window,
+#                  _AUTO_FACTOR * (_LINE_BINS / window + rate * window * f)).
+_LINE_BINS = 4.0
+_STATIC_BINS = 1.5
+_AUTO_FACTOR = 1.0
+# A frame violates the condition if its width at the top comb frequency is below
+# this fraction of the line extent (calibrated on synthetic run-ups: see the
+# Notes of rpm_from_ridge).
+_VIOLATION_RATIO = 0.8
+# Growth of the automatic width with frequency (Hz per Hz): rounded up to a
+# ladder of _AUTO_STEPS steps per octave from _Q_MIN (below which it is 0),
+# capped at _Q_MAX; frames of equal growth are whitened together.
+_AUTO_STEPS = 3
+_Q_MIN = 0.01
+_Q_MAX = 1.0
+# First pass of the automatic width: coarse grid step (relative), this many
+# times the final step, but within [_PASS1_MIN_GRID, _PASS1_MAX_GRID] (and never
+# finer than the final step).
+_PASS1_GRID_FACTOR = 4.0
+_PASS1_MIN_GRID = 0.002
+_PASS1_MAX_GRID = 0.01
 
 
 @dataclass
@@ -63,7 +107,10 @@ class RidgeResult:
         path total). 1: no competitor stands out; 0: a distant competitor is
         as good as the choice (or the choice is not above the median).
         Octave candidates (half or double speed) score part of the true comb
-        and typically hold the value below 1.
+        and typically hold the value below 1. On frames flagged in
+        ``whiten_violated`` it is multiplied by ``(whiten_width / (0.8 *
+        line_width)) ** 2``: the score profile there is that of a spectrum
+        whose lines were erased and says nothing about the speed.
     at_bound : ndarray of bool, shape (T,)
         True where the estimate sits at or evidently beyond a bound of
         ``rpm_range``: the chosen grid point lies within one grid step of
@@ -104,6 +151,25 @@ class RidgeResult:
     t_out, rpm_out : ndarray or None
         Times requested through ``t_out`` and the speed interpolated there
         (see :meth:`rpm_at`); None if ``t_out`` was not given.
+    whiten_width : ndarray, shape (T,)
+        Width in Hz of the running median that whitened each frame, at the
+        frequency of the highest comb order at the estimated speed (a number
+        given as ``whiten``: that number; ``whiten='auto'``: it grows with
+        frequency and differs from frame to frame). ``inf`` for
+        ``whiten=None`` (the frame's median over all bins was used).
+    line_width : ndarray, shape (T,)
+        Frequency in Hz that one line of the highest comb order occupies
+        within the frame's window: ``4 / window`` (Hann main lobe) plus its
+        sweep ``max(orders) * rpm / 60 * (|d rpm/dt| / rpm) * window``. The
+        rate comes from the tracked path (not on frames flagged in
+        ``at_bound``) and from the first-pass path, which does not depend on
+        the whitening, whichever is larger (see Notes of
+        :func:`rpm_from_ridge`).
+    whiten_violated : ndarray of bool, shape (T,)
+        True where ``whiten_width < 0.8 * line_width``: the running median is
+        narrower than the lines and erases them. A :class:`WhiteningWarning`
+        is issued if any is set, and ``confidence`` is multiplied there by
+        ``(whiten_width / (0.8 * line_width)) ** 2``.
     """
 
     t: np.ndarray
@@ -120,6 +186,9 @@ class RidgeResult:
     guard_range: tuple
     t_out: np.ndarray | None = None
     rpm_out: np.ndarray | None = None
+    whiten_width: np.ndarray | None = None
+    line_width: np.ndarray | None = None
+    whiten_violated: np.ndarray | None = None
 
     @property
     def bound_fraction(self):
@@ -201,6 +270,185 @@ def _running_median_freq(P, width_bins):
     return med[:, i0] * (1.0 - fr) + med[:, i0 + 1] * fr
 
 
+def _running_median_warped(P, df, w0_hz, w1_hz, q):
+    """Running median along axis 1 whose width grows with frequency.
+
+    The median width at frequency ``f`` is ``max(w0_hz, w1_hz + q * f)``: the
+    constant ``w0_hz`` below the knee ``(w0_hz - w1_hz) / q`` and growing in
+    proportion to the frequency (constant Q) above it (``w1_hz <= w0_hz``). The
+    spectrum is read at points equally spaced in ``u(f) = integral of df /
+    width(f)``, so that a median over a fixed number of those points spans the
+    local width at every frequency; the result is interpolated back to the
+    bins. Like :func:`_running_median_freq`, the median is evaluated on a
+    sub-sampled set (16 points per width).
+    """
+    nb = P.shape[1]
+    per = 16  # points per median width
+    w0_hz = max(w0_hz, w1_hz)
+    f_c = (w0_hz - w1_hz) / q  # knee
+    u_c = f_c / w0_hz
+
+    def u_of(f):
+        f = np.asarray(f, dtype=float)
+        return np.where(f <= f_c, f / w0_hz, u_c + np.log((w1_hz + q * f) / w0_hz) / q)
+
+    u_max = float(u_of((nb - 1) * df))
+    n_pt = int(np.ceil(u_max * per)) + 2
+    uu = np.arange(n_pt) / per
+    f_pt = np.where(uu <= u_c, uu * w0_hz, (w0_hz * np.exp(q * (uu - u_c)) - w1_hz) / q)
+    sub = P[:, np.minimum(np.rint(f_pt / df).astype(int), nb - 1)]
+    med = ndimage.median_filter(sub, size=(1, per + 1), mode="reflect")
+    pos = u_of(np.arange(nb) * df) * per
+    i0 = np.minimum(pos.astype(int), n_pt - 2)
+    fr = np.minimum(pos - i0, 1.0)
+    return med[:, i0] * (1.0 - fr) + med[:, i0 + 1] * fr
+
+
+def _floor_of(P, df, w0_hz, w1_hz, q):
+    """Noise-floor estimate of each row of ``P`` (frames x bins).
+
+    ``w0_hz = 0``: the frame's median over all bins. Otherwise the running
+    median along frequency, of width ``max(w0_hz, w1_hz + q * f)`` (constant
+    ``w0_hz`` for ``q = 0``).
+    """
+    if not w0_hz:
+        return np.median(P, axis=1, keepdims=True)
+    if not q:
+        return _running_median_freq(P, max(3, round(w0_hz / df)))
+    return _running_median_warped(P, df, w0_hz, w1_hz, q)
+
+
+def _whitened_levels(frames_all, starts, win, nfft, nb, df, w0_hz, w1_hz, q, moving):
+    """Whitened level (dB, floored at 0) of the Hann-STFT frames, float32.
+
+    ``w0_hz`` and ``q`` give, per frame, the running-median width
+    ``max(w0_hz, w1_hz + q f)`` (see :func:`_floor_of`; ``w1_hz`` is a
+    scalar); ``w0_hz = 0`` selects the frame median over the ``nb`` retained
+    bins. Frames are processed in chunks, grouped by width.
+    """
+    n_fr = starts.size
+    level = np.empty((n_fr, nb), dtype=np.float32)
+    chunk = max(1, int(2**22 // nfft))
+    tiny = np.finfo(float).tiny
+    for a in range(0, n_fr, chunk):
+        fr = frames_all[starts[a : a + chunk]]
+        fr = (fr - fr.mean(axis=1, keepdims=True)) * win
+        F = np.fft.rfft(fr, n=nfft, axis=1)[:, :nb]
+        P = F.real**2 + F.imag**2
+        w0_c, q_c = w0_hz[a : a + chunk], q[a : a + chunk]
+        groups = np.unique(np.column_stack([w0_c, q_c]), axis=0)
+        if len(groups) == 1:
+            ratio = P / np.maximum(_floor_of(P, df, groups[0, 0], w1_hz, groups[0, 1]), tiny)
+        else:
+            ratio = np.empty_like(P)
+            for g0, gq in groups:
+                sel = (w0_c == g0) & (q_c == gq)
+                Ps = P[sel]
+                ratio[sel] = Ps / np.maximum(_floor_of(Ps, df, g0, w1_hz, gq), tiny)
+        level[a : a + chunk] = 10.0 * np.log10(np.maximum(ratio, 1e-12))
+    if moving:
+        level -= np.median(level, axis=0).astype(np.float32)
+    np.maximum(level, 0.0, out=level)
+    return level
+
+
+def _comb_scores(level, df, rpm_values, ords, w):
+    """Comb score (frames x speeds): weighted mean of the interpolated level."""
+    nb = level.shape[1]
+    S = np.zeros((level.shape[0], rpm_values.size))
+    for m, wm in zip(ords, w):
+        if wm == 0.0:
+            continue
+        pos = m * rpm_values / 60.0 / df
+        i0 = np.minimum(pos.astype(int), nb - 2)
+        fr = pos - i0
+        S += wm * (level[:, i0] * (1.0 - fr) + level[:, i0 + 1] * fr)
+    return S
+
+
+def _path_rate(rpm, hop, window, spread=False):
+    """Relative rate of change ``|d rpm/dt| / rpm`` (1/s) along a speed path.
+
+    ``rpm`` has one value per frame (step ``hop`` s). The slope of each frame
+    is the least-squares slope over the frames whose centres lie within one
+    window of it (at least two on either side; odd reflection at the ends
+    keeps a linear trend), which averages the jitter of the path down to a few
+    % of the slope. A short median first removes isolated outliers of a poor
+    path. With ``spread`` the largest rate within half a window is returned (a
+    conservative envelope for choosing a width).
+
+    One line of order ``m`` at frequency ``f = m rpm / 60`` sweeps ``f * rate
+    * window`` Hz within a window.
+    """
+    n = rpm.size
+    if n < 3:
+        return np.zeros(n)
+    h_fit = max(2, int(np.ceil(window / hop - 1e-9)))
+    r = ndimage.median_filter(np.asarray(rpm, dtype=float), size=3, mode="nearest")
+    pad = min(h_fit, n - 1)
+    rp = np.pad(r, pad, mode="reflect", reflect_type="odd")
+    u = np.arange(-pad, pad + 1, dtype=float)
+    slope = np.correlate(rp, u, mode="valid") / (np.sum(u * u) * hop)  # rpm/s
+    rate = np.abs(slope) / r
+    if spread:
+        h = max(1, int(np.floor(0.5 * window / hop + 1e-9)))
+        rate = ndimage.maximum_filter1d(rate, size=2 * h + 1, mode="nearest")
+    return rate
+
+
+def _line_extent(rpm, hop, window, max_order):
+    """Frequency in Hz one line of the highest comb order occupies in a window.
+
+    ``_LINE_BINS / window`` (Hann main lobe) plus its sweep within the window,
+    ``max_order * rpm / 60 * rate * window``, with the relative rate of the
+    speed path ``rpm`` (:func:`_path_rate`).
+    """
+    return _LINE_BINS / window + max_order * rpm / 60.0 * _path_rate(rpm, hop, window) * window
+
+
+def _first_pass_path(
+    frames_all, starts, win, nfft, df, ords, w, rpm_range, grid, moving, f_top
+):
+    """Coarse speed path (rpm per frame) that does not depend on any width.
+
+    Frames are normalised by their own median (there is no running-median
+    width to get wrong), the comb is scored on a coarse grid and a Viterbi
+    path with the default penalty is taken. It is accurate to a fraction of a
+    percent in the absence of coloured noise or fixed lines (which a frame
+    median does not remove), which is all that the slope of the path needs.
+    """
+    lo, hi = rpm_range
+    n_fr = starts.size
+    nb1 = min(nfft // 2 + 1, int(np.ceil(f_top / df)) + 3)
+    level = _whitened_levels(
+        frames_all, starts, win, nfft, nb1, df, np.zeros(n_fr), 0.0, np.zeros(n_fr), moving
+    )
+    g1 = max(grid, _PASS1_MIN_GRID, min(_PASS1_GRID_FACTOR * grid, _PASS1_MAX_GRID))
+    n1 = max(3, int(np.ceil(np.log(hi / lo) / np.log1p(g1))) + 1)
+    rpm1 = np.geomspace(lo, hi, n1)
+    S1 = _comb_scores(level, df, rpm1, ords, w)
+    del level
+    prominence = S1.max(axis=1) - np.median(S1, axis=1)
+    cost = float(np.median(prominence)) / _PENALTY_DIVISOR * 100.0 * np.log(hi / lo) / (n1 - 1)
+    return rpm1[_viterbi(S1, cost)]
+
+
+def _auto_slope(path1, win_s, hop_s):
+    """Growth ``q`` of the running-median width with frequency, per frame.
+
+    The relative rate of the first-pass path (:func:`_path_rate`, largest
+    value within half a window) gives the sweep of a line at frequency ``f``
+    in a window, ``f * rate * window``; the median width must follow it, so
+    ``q = _AUTO_FACTOR * rate * window``. ``q`` is capped at ``_Q_MAX`` and
+    rounded up to a ladder of ``_AUTO_STEPS`` steps per octave from ``_Q_MIN``
+    (below which it is 0), so that frames fall into a few groups.
+    """
+    q = _AUTO_FACTOR * win_s * _path_rate(path1, hop_s, win_s, spread=True)
+    rung = np.ceil(_AUTO_STEPS * np.log2(np.maximum(q, 1e-12) / _Q_MIN) - 1e-9)
+    q = np.where(q > _Q_MIN, _Q_MIN * 2.0 ** (np.maximum(rung, 0.0) / _AUTO_STEPS), 0.0)
+    return np.minimum(q, _Q_MAX)
+
+
 def _check_positive(value, name):
     value = float(value)
     if not (np.isfinite(value) and value > 0):
@@ -217,7 +465,7 @@ def rpm_from_ridge(
     weights=None,
     window=0.4,
     hop=0.05,
-    whiten=15.0,
+    whiten="auto",
     moving=False,
     penalty=None,
     grid=None,
@@ -235,11 +483,16 @@ def rpm_from_ridge(
        times the highest comb frequency ``max(orders) * rpm_range[1] / 60``.
     2. A Hann-window STFT (``window`` s, step ``hop`` s, zero-padded 4x)
        gives the power spectrum of each frame. It is whitened: divided by its
-       running median along frequency over ``whiten`` Hz, then expressed in dB
-       and floored at 0 dB, so the noise floor reads about 0 dB and a
-       spectral line reads its height above the local floor. With
+       running median along frequency (width ``whiten``, see below), then
+       expressed in dB and floored at 0 dB, so the noise floor reads about
+       0 dB and a spectral line reads its height above the local floor. With
        ``moving=True`` each bin's median over time is also subtracted (before
-       the floor), which removes lines at fixed frequencies.
+       the floor), which removes lines at fixed frequencies. The median must
+       be wider than the lines it leaves in place (Notes, "Whitening
+       width"); with ``whiten='auto'`` a first, coarse pass tracks the speed
+       without any running median (each frame divided by its median over
+       all bins), and the sweep of its path sets the width of the final
+       pass.
     3. For every candidate speed ``r`` on a logarithmic grid over
        ``rpm_range``, the comb score of a frame is
        ``sum_m w_m * L(order_m * r / 60)``, with ``L`` the whitened level
@@ -287,21 +540,28 @@ def rpm_from_ridge(
         window`` Hz (Hann main lobe).
     hop : float, default 0.05
         Frame step in s.
-    whiten : float or None, default 15.0
-        Width in Hz of the running median along frequency. It must be larger
-        than the width a spectral line occupies, about ``4 / window`` plus
-        the frequency the highest order sweeps during a window,
-        ``max(orders) * |d rpm/dt| / 60 * window``; and the lines must cover
-        less than half of the width, i.e. harmonic spacing (``rpm_range[0] /
-        60``) well above ``4 / window``. Otherwise whitening erases the
-        orders (very low idle speed or fast run-ups: use a longer window or a
-        larger ``whiten``). None disables whitening: levels are then relative
-        to the frame's median over all bins.
+    whiten : "auto", float or None, default "auto"
+        Width of the running median along frequency that whitens the
+        spectrum. ``"auto"``: chosen per frame and growing with frequency,
+        ``max(6 / window, 4 / window + rate * window * f)`` Hz at frequency
+        ``f`` (``rate`` is the relative speed rate ``|d rpm/dt| / rpm`` of
+        the first-pass path), i.e. 15 Hz for the default window wherever the
+        sweep is small and the width of a swept line where it is not; see
+        the Notes. A number: that constant width in Hz, which must satisfy
+        the condition of the Notes (it is checked after tracking, see
+        Warns). None: no running median; levels are then relative to the
+        frame's median over all bins, which is robust against any sweep but
+        keeps coloured noise (resonances, humps) in the levels.
     moving : bool, default False
         Subtract each frequency bin's median over time, to suppress lines at
         fixed frequency (resonances, tones, mains hum). Valid only when the
         speed sweeps: a bin must be hit by an order for less than half of the
-        frames, so at near-constant speed this removes the orders too.
+        frames, so at near-constant speed this removes the orders too. A fixed
+        tone also puts a stripe into the guard bands, which can flag a few
+        ``beyond`` frames on the weakest frames of a correct run (a window
+        across the start of a ramp, ``confidence`` near 0; measured with a
+        250 Hz tone and the comb 1.5 to 6, whose first tooth sits on it at
+        10000 rpm): ``moving=True`` removes it.
     penalty : float, optional
         Path penalty in score units (dB of the weighted mean level) per %
         speed change per frame; 0 gives independent per-frame maxima. Default:
@@ -329,19 +589,87 @@ def rpm_from_ridge(
     RidgeResult
         ``t`` (s), ``rpm`` (rpm), ``confidence`` (0 to 1), ``at_bound``,
         ``beyond``, ``rpm_grid``, ``score``, ``bound_fraction``,
-        :meth:`~RidgeResult.rpm_at` and, if ``t_out`` was given, ``rpm_out``.
+        :meth:`~RidgeResult.rpm_at`, ``whiten_width``, ``line_width``,
+        ``whiten_violated`` and, if ``t_out`` was given, ``rpm_out``.
         A ``RuntimeWarning`` is issued when ``bound_fraction > 0``: the
         estimator never returns a boundary value silently.
 
     Warns
     -----
     RuntimeWarning
-        If any frame has ``at_bound`` set.
+        If any frame has ``at_bound`` set (search-range warning).
+    WhiteningWarning
+        (A subclass of ``RuntimeWarning``.) If on any frame the running
+        median is narrower than 0.8 times the frequency a comb line occupies
+        within the window (``whiten_violated``). It names the width, the line
+        extent and the worst time; ``confidence`` is lowered on those frames.
+        This is not about the search range: if both warnings appear and the
+        speed is believed to be in range, fix the whitening first.
 
     Notes
     -----
     * The estimate is scale invariant; ``x`` has no amplitude convention.
       Output speeds are in rpm.
+    * Whitening width. Whitening the spectrum so that discrete components stand
+      out against a coloured background is routine in diagnostics (Randall &
+      Antoni 2011; the cepstral form for variable speed, Borghesani et al.
+      2013); here it is a running median of the power spectrum along
+      frequency. A line of frequency ``f`` occupies ``L(f) = 4 / window
+      + rate * window * f`` Hz in a window: the Hann main lobe (Harris 1978)
+      plus the sweep, which is proportional to the frequency (``rate`` is the
+      relative speed rate ``|d rpm/dt| / rpm``; at 750 rpm/s the sixth order
+      sweeps 30 Hz at any speed, three times the main lobe). A running median
+      erases what fills more than half of it (it ignores up to half of its
+      samples as outliers; Huber 1981), so its width must reach ``L(f)`` at
+      every comb frequency, the highest order being the binding one.
+      Measured on synthetic half-order run-ups (8 kHz, windows of 0.4 s and
+      0.25 s, 330 to 1500 rpm/s, low and moderate noise: 12 cases), a
+      constant width fails abruptly, at a point between 0.4 and 1.1 ``L`` of
+      the top order depending on the case, and works from 1.2 ``L`` in every
+      case. ``'auto'`` therefore takes ``max(6 / window, L(f))`` per frame,
+      with the rate rounded up on a ladder of three steps per octave (0 to
+      26 % wider than ``L``). Below the knee ``f = 2 / (rate * window**2)``
+      that is the classical 15 Hz (for 0.4 s), because the narrower the
+      median the closer it follows coloured noise: a 60 Hz wide noise hump
+      is removed by widths up to 60 Hz (0.86 of the frames within 3 %,
+      against 0.89 at 15 Hz), not by the frame median (0.62). Above the knee
+      the width grows in proportion to ``f``, the growth ``rate * window``
+      capped at 1.
+    * Sweep range, measured with ``'auto'`` and all other defaults (8 kHz,
+      900 to 4500 rpm, comb 1.5 to 6): 97 to 100 % of the frames within 3 %
+      at 158, 333, 750 and 1500 rpm/s up, 99 to 100 % at 333 and 750 rpm/s
+      down, and 100 % for a comb of ten integer orders at 1500 rpm/s up.
+      Two limits are not about the median. Run-downs faster than about 1000
+      rpm/s lose frames at low speed to the path penalty (at 1500 rpm/s 94 %
+      for the half-order comb and 79 % for ten orders, where the relative rate
+      is 5 % per frame; ``penalty=0``: 98 to 100 %; the frame median or
+      another width: 79 to 95 %). And above about 1500 rpm/s at the default
+      window the lines blur into each other (the sixth order sweeps 80 Hz
+      per window at 2000 rpm/s) whatever the width: the estimate fails with
+      about a quarter of the frames in ``at_bound``, and a shorter window
+      cures it (0.25 s: 100 % at 2000 rpm/s). Lines that overlap at low speed
+      (harmonic spacing below the line extent) are the same limit.
+    * Whitening check. After tracking, the line extent ``L`` of the top comb
+      order is computed per frame from the relative rate of the path. A path
+      that was tracked on erased lines is itself wrong, and so is its slope
+      (with ``whiten=30`` on a 750 rpm/s run-up the path reads an extent of 20
+      Hz against a true 40 Hz), so the rate is
+      also taken from the first-pass path (frame-median normalisation, which
+      does not depend on the width), median-filtered over 2.5 windows because
+      that path has spikes where it is wrong (coloured noise without
+      ``moving``), and the larger extent counts; the final path is left out
+      on frames in ``at_bound``, where it is not valid. A frame violates the
+      condition when the width is below 0.8 ``L`` (``whiten_violated``): 0.8
+      is the tolerance for the scatter of the slope and lies where the
+      measured failures begin; on a clean run-up the extent is within 1 % of
+      the true one. The first pass costs up to about 15 % of the run time for an
+      explicit width (none for ``None``); with ``'auto'`` the total is below
+      that of the former constant 15 Hz median (0.6 to 0.85 times at 12 to
+      50 s of signal), whose 25-bin median is dearer than the sub-sampled one
+      used here. Frames with different widths are whitened in groups; with
+      ``moving=True`` the time median of a bin then mixes them, which leaves a
+      small residue at an extreme fixed tone (the stripe score is 2.6 times
+      lower than without ``moving``, against 4.5 for a constant width).
     * Subharmonic ambiguity. A comb also scores part of its teeth at the
       ratios k/m of the true speed (k an order present in the signal, m a
       comb order): 1/2, 2/3, 3/2, 2, ... The default weights make the true
@@ -390,6 +718,15 @@ def rpm_from_ridge(
     Information Theory, 13(2), 260-269.
     Felzenszwalb, P. F., & Huttenlocher, D. P. (2012). Distance transforms of
     sampled functions. Theory of Computing, 8(19), 415-428.
+    Harris, F. J. (1978). On the use of windows for harmonic analysis with the
+    discrete Fourier transform. Proceedings of the IEEE, 66(1), 51-83.
+    Huber, P. J. (1981). Robust Statistics. Wiley.
+    Randall, R. B., & Antoni, J. (2011). Rolling element bearing diagnostics -
+    A tutorial. Mechanical Systems and Signal Processing, 25(2), 485-520.
+    Borghesani, P., Pennacchi, P., Randall, R. B., Sawalhi, N., & Ricci, R.
+    (2013). Application of cepstrum pre-whitening for the diagnosis of
+    bearing faults under variable speed conditions. Mechanical Systems and
+    Signal Processing, 36(2), 370-384.
     """
     # ---- validation -------------------------------------------------------
     fs = _check_positive(fs, "fs")
@@ -418,7 +755,12 @@ def rpm_from_ridge(
     w = w / w.sum()
     window = _check_positive(window, "window")
     hop = _check_positive(hop, "hop")
-    if whiten is not None:
+    auto = isinstance(whiten, str)
+    if auto:
+        if whiten.strip().lower() != "auto":
+            raise ValueError("whiten must be 'auto', None or a positive width in Hz")
+        whiten = None
+    elif whiten is not None:
         whiten = _check_positive(whiten, "whiten")
     if penalty is not None:
         penalty = float(penalty)
@@ -464,30 +806,12 @@ def rpm_from_ridge(
     n_fr = starts.size
     nfft = 1 << int(np.ceil(np.log2(_PAD * n_win)))
     df = fs_d / nfft
-    f_keep = f_top_guard + (0.5 * whiten if whiten else 0.0)
-    nb = min(nfft // 2 + 1, int(np.ceil(f_keep / df)) + 3)
-    width_bins = max(3, round(whiten / df)) if whiten else 0
-
+    win_s, hop_s = n_win / fs_d, n_hop / fs_d  # window and step as realised, s
     win = signal.get_window("hann", n_win)
     frames_all = np.lib.stride_tricks.sliding_window_view(y, n_win)
-    level = np.empty((n_fr, nb), dtype=np.float32)
-    chunk = max(1, int(2**22 // nfft))
-    for a in range(0, n_fr, chunk):
-        fr = frames_all[starts[a : a + chunk]]
-        fr = (fr - fr.mean(axis=1, keepdims=True)) * win
-        F = np.fft.rfft(fr, n=nfft, axis=1)[:, :nb]
-        P = F.real**2 + F.imag**2
-        if width_bins:
-            med = _running_median_freq(P, width_bins)
-        else:
-            med = np.median(P, axis=1, keepdims=True)
-        ratio = P / np.maximum(med, np.finfo(float).tiny)
-        level[a : a + chunk] = 10.0 * np.log10(np.maximum(ratio, 1e-12))
-    if moving:
-        level -= np.median(level, axis=0).astype(np.float32)
-    np.maximum(level, 0.0, out=level)
+    nb_max = nfft // 2 + 1
 
-    # ---- comb score on a logarithmic speed grid ---------------------------
+    # ---- speed grid (checked before any large array is built) --------------
     if grid is None:
         grid = float(np.clip(_GRID_FRACTION**-1 * 1.44 / (window * f_top), *_GRID_LIMITS))
     ln_ratio = np.log(hi / lo)
@@ -500,16 +824,31 @@ def rpm_from_ridge(
             f"score matrix of {n_fr} frames x {n_low + n_grid + n_up} speeds is too "
             "large; increase grid or hop, or shorten the signal"
         )
+
+    # ---- width of the running median: w0 + q f per frame (w0 = 0: frame median)
+    path1 = None  # first-pass path: sets the automatic width, and checks any width
+    w1 = 0.0
+    if whiten is None and not auto:
+        w0, q_f = np.zeros(n_fr), np.zeros(n_fr)
+    else:
+        path1 = _first_pass_path(
+            frames_all, starts, win, nfft, df, ords, w, (lo, hi), grid, moving, f_top
+        )
+        if auto:
+            w0 = np.full(n_fr, _STATIC_BINS * _LINE_BINS / win_s)
+            w1 = _AUTO_FACTOR * _LINE_BINS / win_s
+            q_f = _auto_slope(path1, win_s, hop_s)
+        else:
+            w0, q_f = np.full(n_fr, whiten), np.zeros(n_fr)
+    widest = np.maximum(w0, w1 + q_f * f_top_guard)[w0 > 0]
+    f_keep = f_top_guard + (0.5 * widest.max() if widest.size else 0.0)
+    nb = min(nb_max, int(np.ceil(f_keep / df)) + 3)
+    level = _whitened_levels(frames_all, starts, win, nfft, nb, df, w0, w1, q_f, moving)
+
+    # ---- comb score on a logarithmic speed grid ---------------------------
     rpm_ext = lo * np.exp(step * np.arange(-n_low, n_grid + n_up))
     rpm_ext[n_low + n_grid - 1] = hi
-    S_ext = np.zeros((n_fr, rpm_ext.size))
-    for m, wm in zip(ords, w):
-        if wm == 0.0:
-            continue
-        pos = m * rpm_ext / 60.0 / df
-        i0 = np.minimum(pos.astype(int), nb - 2)
-        fr = pos - i0
-        S_ext += wm * (level[:, i0] * (1.0 - fr) + level[:, i0 + 1] * fr)
+    S_ext = _comb_scores(level, df, rpm_ext, ords, w)
     del level
     rpm_grid = rpm_ext[n_low : n_low + n_grid].copy()
     S = np.ascontiguousarray(S_ext[:, n_low : n_low + n_grid])
@@ -560,6 +899,28 @@ def rpm_from_ridge(
         conf = np.where(height > 1e-9, (s_sel - s_alt) / height, 0.0)
     conf = np.clip(conf, 0.0, 1.0)
 
+    # Whitening check: does the running median that was used keep the lines?
+    # Width and line extent are both linear in frequency, so the highest comb
+    # order is the binding one. The extent comes from the sweep of the final
+    # path (frames flagged at_bound excluded: their path is not valid) and from
+    # that of the first-pass path, which does not depend on the width: when the
+    # width is too small the final path is itself wrong and its slope with it.
+    # The first-pass extent is median-filtered over 2.5 windows (it has spikes
+    # where that path is wrong, e.g. in coloured noise).
+    if path1 is not None:
+        span = max(3, 2 * round(1.25 * win_s / hop_s) + 1)
+        line = ndimage.median_filter(
+            _line_extent(path1, hop_s, win_s, max_order), size=span, mode="nearest"
+        )
+        line = np.maximum(line, np.where(at_bound, 0.0, _line_extent(rpm, hop_s, win_s, max_order)))
+    else:
+        line = _line_extent(rpm, hop_s, win_s, max_order)
+    width_top = np.where(w0 > 0, np.maximum(w0, w1 + q_f * max_order * rpm / 60.0), np.inf)
+    violated = width_top < _VIOLATION_RATIO * line
+    if violated.any():
+        ratio = width_top[violated] / (_VIOLATION_RATIO * line[violated])
+        conf[violated] *= np.minimum(1.0, ratio) ** 2
+
     res = RidgeResult(
         t=(starts + 0.5 * (n_win - 1)) / fs_d,
         rpm=rpm,
@@ -573,17 +934,39 @@ def rpm_from_ridge(
         penalty=float(penalty),
         rpm_range=(lo, hi),
         guard_range=(float(rpm_ext[0]), float(rpm_ext[-1])),
+        whiten_width=width_top,
+        line_width=line,
+        whiten_violated=violated,
     )
     if t_out is not None:
         res.t_out = t_out
         res.rpm_out = res.rpm_at(t_out)
+    if violated.any():
+        k = int(np.argmax(np.where(violated, line / width_top, 0.0)))
+        warnings.warn(
+            f"rpm_from_ridge: the whitening width ({width_top[k]:.3g} Hz) is smaller than "
+            f"the frequency one comb line occupies within a window ({line[k]:.3g} Hz = "
+            f"4/window + sweep of order {max_order:g}) in {100.0 * violated.mean():.1f} % "
+            f"of the frames (worst at t = {res.t[k]:.3g} s). The running median follows "
+            "the lines and erases them, so the speed there is unreliable (confidence "
+            "lowered). Use whiten='auto' (default) or a larger whiten, or a shorter "
+            "window.",
+            WhiteningWarning,
+            stacklevel=2,
+        )
     frac = res.bound_fraction
     if frac > 0:
+        cause = ""
+        if violated.any():
+            cause = (
+                f" The whitening width is too small on {100.0 * violated.mean():.1f} % of "
+                "the frames (see the other warning), which can by itself cause these flags."
+            )
         warnings.warn(
             f"rpm_from_ridge: {100.0 * frac:.1f} % of the frames sit at or beyond a "
             f"bound of the search range ({lo:g}, {hi:g}) rpm; the true speed may be "
             "outside it (or the data too noisy to tell: see confidence). Widen "
-            "rpm_range and check RidgeResult.at_bound.",
+            "rpm_range and check RidgeResult.at_bound." + cause,
             RuntimeWarning,
             stacklevel=2,
         )
