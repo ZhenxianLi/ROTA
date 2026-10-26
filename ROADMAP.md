@@ -1,361 +1,361 @@
-# ROTA 开发路线图
+# ROTA Development Roadmap
 
-**ROTA**：**R**otational **O**rder **T**racking & **A**nalysis
+**ROTA**: **R**otational **O**rder **T**racking & **A**nalysis
 
-拉丁语 *rota* 意为"轮子"，与 rotate、rotation、rotor 同源。
+Latin *rota* means "wheel", from the same root as rotate, rotation and rotor.
 
-ROTA 是一个轻量、开源、经过验证的 Python 阶次分析库，用于旋转机械（发动机、电机、齿轮箱等）的噪声与振动信号分析，并提供基于阶次的声音重合成工具。它只依赖 NumPy 和 SciPy。每个函数都依据公开文献独立实现，并附带验证脚本。
+ROTA is a lightweight, open-source, validated Python library for order analysis of noise and vibration signals from rotating machinery (engines, electric motors, gearboxes, etc.), with tools for order-based sound resynthesis. It depends only on NumPy and SciPy. Each function is implemented independently from the published literature and comes with a validation script.
 
-命名约定：正文中写作 ROTA；代码中的包名和导入名为小写 `rota`（`pip install rota`，`import rota`）。
+Naming convention: the project is written ROTA in running text; the package and import name in code is lowercase `rota` (`pip install rota`, `import rota`).
 
-许可证：GPL-3.0-or-later（2026-10-25 确定）。
+Licence: GPL-3.0-or-later (decided 2026-10-25).
 
-**本版修订（2026-10-25）**：在初稿基础上吸收了作者既往研究项目中的经验教训（第 6 节）。ROTA 不复用任何既往代码，全部函数按公开文献从零实现。主要变化：
+**Revision (2026-10-25)**: on top of the first draft, lessons from the author's earlier research projects were incorporated (section 6). ROTA reuses no earlier code; all functions are implemented from scratch from the published literature. Main changes:
 
-- 新增 `rota.resynth`（重合成）、`rota.metrics`（验证指标）、`rota.tonal`（心理声学桥接）三个模块；
-- `rota.vkf` 扩展为 `rota.extract`，在 Vold-Kalman 之外增加相位锁定的短时谐波提取器；
-- `rota.speed` 增加无转速计的梳齿–Viterbi 转速估计、转速→相位、车速→转速、控制信号整理；
-- 验证用例从 T1–T7 扩展到 T1–T14，版本计划改为 v0.1–v0.4 + v1.0；
-- 独立实现规范从 MATLAB 扩展到所有商业软件、专有文件格式、许可不明的第三方代码和受限数据。
-
----
-
-## 1. 设计原则
-
-1. **独立实现**：算法只依据公开文献，不参照任何商业软件的源代码或内部数据结构（见第 4 节）。
-2. **可验证**：每个函数都在已知解析真值的合成信号上测试。有商业软件可对照的部分，另做黑盒对照，并公开结果。
-3. **透明**：docstring 写明所依据的文献、幅值定义（RMS 或峰值）和单位约定。估计类函数（转速、阶次幅值）返回置信度，并报告是否触碰了搜索边界。
-4. **Python 风格**：函数用 snake_case 命名，输入输出为 NumPy 数组，计算与绘图分离。
-5. **可衔接**：结果能直接送入 SQAT、MoSQITo、ECMA-418-2 开源实现等心理声学工具。
-6. **多通道优先**：所有算子对每个通道独立、线性地作用，输入形状为 `(n,)` 或 `(n, ch)`，不改变通道间的幅相关系。Ambisonics、传声器阵列等多通道录音可以直接处理，提取或去除阶次后空间信息保持不变。
-7. **可复现**：所有随机过程接受 `rng`（`numpy.random.Generator`）或整数种子；重合成输出可附带 JSON 侧车文件（参数、种子、版本、输入摘要）。
-8. **无隐含常数**：增益、校准因子、参考声压一律显式传入，不在函数内部埋默认倍数。
+- Three modules added: `rota.resynth` (resynthesis), `rota.metrics` (validation metrics) and `rota.tonal` (psychoacoustic bridge);
+- `rota.vkf` extended to `rota.extract`, which adds a phase-locked short-time harmonic extractor alongside Vold-Kalman;
+- `rota.speed` gains tacholess comb–Viterbi rpm estimation, rpm → phase, vehicle speed → rpm and control-signal clean-up;
+- Validation cases extended from T1–T7 to T1–T14, and the version plan changed to v0.1–v0.4 + v1.0;
+- The independent-implementation rules extended from MATLAB to all commercial software, proprietary file formats, third-party code of unclear licence and restricted data.
 
 ---
 
-## 2. 功能清单
+## 1. Design principles
 
-模块划分：`rota.speed`、`rota.angle`、`rota.maps`、`rota.slices`、`rota.extract`、`rota.resynth`、`rota.synth`、`rota.metrics`、`rota.tonal`、`rota.plot`。
+1. **Independent implementation**: algorithms follow the published literature only and do not consult the source code or internal data structures of any commercial software (see section 4).
+2. **Verifiable**: every function is tested on synthetic signals with known analytic ground truth. Where commercial software is available for comparison, a separate black-box comparison is made and the results are published.
+3. **Transparent**: the docstring states the literature relied on, the amplitude definition (RMS or peak) and the unit conventions. Estimator functions (rpm, order amplitude) return a confidence and report whether the search boundary was reached.
+4. **Python style**: functions are named in snake_case, inputs and outputs are NumPy arrays, and computation is separated from plotting.
+5. **Interoperable**: results can be passed directly to psychoacoustic tools such as SQAT, MoSQITo and open-source ECMA-418-2 implementations.
+6. **Multichannel first**: every operator acts on each channel independently and linearly; the input shape is `(n,)` or `(n, ch)`, and the amplitude and phase relations between channels are not changed. Multichannel recordings such as Ambisonics and microphone arrays can be processed directly, and the spatial information is preserved after orders are extracted or removed.
+7. **Reproducible**: every random process accepts `rng` (a `numpy.random.Generator`) or an integer seed; resynthesis output can come with a JSON sidecar file (parameters, seed, version, input digest).
+8. **No hidden constants**: gains, calibration factors and reference sound pressures are always passed explicitly; no default multiplier is buried inside a function.
 
-### 2.1 转速参考（`rota.speed`）
+---
 
-| 函数 | 作用 | 依据文献 | 版本 |
+## 2. Feature list
+
+Modules: `rota.speed`, `rota.angle`, `rota.maps`, `rota.slices`, `rota.extract`, `rota.resynth`, `rota.synth`, `rota.metrics`, `rota.tonal`, `rota.plot`.
+
+### 2.1 Speed reference (`rota.speed`)
+
+| Function | Purpose | Literature | Version |
 |---|---|---|---|
-| `tacho_to_rpm` | 转速计脉冲 → 转速曲线。支持每转多脉冲、亚采样边沿插值、丢脉冲与抖动处理、平滑 | Brandt 2011 | v0.1 |
-| `rpm_to_phase` | 转速曲线 → 累计转角（圈数）。梯形积分；可选转速计延迟补偿；最小转速下限（避免 f→0 的奇异） | — | v0.1 |
-| `regularize_control` | 转速、车速等控制信号整理：去毛刺（滑动中值 + 容差）、重采样到等间隔网格（如 100 Hz）、缺口置 NaN、与音频时间轴对齐；支持与声学通道成整数比的慢速通道（如 5:1） | — | v0.1 |
-| `speed_to_rpm` | 车速 → 转速。两种模型：集总斜率（过原点最小二乘拟合，报告残差）；物理链（轮周长、挡位比、主减速比，截止到怠速与红线）。可从稳态段自动标定比例 | — | v0.1 |
-| `steady_segments` | 按目标车速或转速从加速、变速录音中抽取稳态段：容差内最长连续段取中心，最小时长约束；用于稳态谱与听音片段 | — | v0.1 |
-| `rpm_from_ridge` | 无转速计时从信号估计转速：在白化谱图上用阶次梳齿打分（梳齿由缸数、极对数、齿数等先验生成），再用带连续性惩罚的 Viterbi 动态规划选路；可选"移动工况"模式（去除固定频率线）。返回转速、置信度和触界标志 | Peeters et al. 2019（综述）；梳齿与动态规划设计参考基频跟踪文献（Hermes 1988） | v0.2 |
-| `virtual_rpm` | 由车速生成虚拟转速曲线 `clip(k·v, idle, redline)`，用于听音或驾驶实验中声音与动力学的解耦 | — | v0.3 |
-| `align_signals` | 两套未同步采集系统的时间对齐：拍手等瞬态起始检测与广义互相关（GCC-PHAT）粗对齐，低频波形亚样本精修；起止两次标记估计时钟漂移；报告不确定度 | Knapp & Carter 1976 | v0.4 |
+| `tacho_to_rpm` | Tachometer pulses → rpm curve. Supports several pulses per revolution, sub-sample edge interpolation, handling of dropped pulses and jitter, and smoothing | Brandt 2011 | v0.1 |
+| `rpm_to_phase` | Rpm curve → accumulated shaft angle (revolutions). Trapezoidal integration; optional tachometer delay compensation; minimum-rpm floor (avoids the f→0 singularity) | — | v0.1 |
+| `regularize_control` | Clean-up of control signals such as rpm and vehicle speed: spike removal (moving median + tolerance), resampling to a uniform grid (e.g. 100 Hz), gaps set to NaN, alignment to the audio time axis; supports slow channels at an integer ratio to the acoustic channels (e.g. 5:1) | — | v0.1 |
+| `speed_to_rpm` | Vehicle speed → rpm. Two models: lumped slope (least-squares fit through the origin, residual reported); physical chain (wheel circumference, gear ratio, final drive ratio, limited to idle and redline). The proportionality factor can be calibrated automatically from steady segments | — | v0.1 |
+| `steady_segments` | Extracts steady segments from accelerating or varying-speed recordings by target vehicle speed or rpm: the centre of the longest continuous segment within tolerance is taken, with a minimum-duration constraint; used for steady-state spectra and listening excerpts | — | v0.1 |
+| `rpm_from_ridge` | Estimates rpm from the signal when there is no tachometer: order combs (generated from priors such as number of cylinders, pole pairs, tooth count) are scored on a whitened spectrogram, then a path is selected by Viterbi dynamic programming with a continuity penalty; optional "moving-condition" mode (removes fixed-frequency lines). Returns rpm, confidence and a search-boundary flag | Peeters et al. 2019 (review); comb and dynamic-programming design follows the fundamental-frequency tracking literature (Hermes 1988) | v0.2 |
+| `virtual_rpm` | Generates a virtual rpm curve `clip(k·v, idle, redline)` from vehicle speed, for decoupling sound from vehicle dynamics in listening or driving experiments | — | v0.3 |
+| `align_signals` | Time alignment of two unsynchronised acquisition systems: onset detection of transients such as hand claps and coarse alignment by generalised cross-correlation (GCC-PHAT), sub-sample refinement on the low-frequency waveform; clock drift estimated from start and end markers; reports the uncertainty | Knapp & Carter 1976 | v0.4 |
 
-### 2.2 转角域（`rota.angle`）
+### 2.2 Angle domain (`rota.angle`)
 
-| 函数 | 作用 | 依据文献 | 版本 |
+| Function | Purpose | Literature | Version |
 |---|---|---|---|
-| `angular_resample` | 等时间采样 → 等转角采样（计算阶次跟踪 COT 的核心）。按最小转速自适应的抗混叠低通；高阶插值（样条或多相）；返回角域信号与每转采样数 | Fyfe & de Munck 1997；Brandt 2011 | v0.1 |
-| `angular_to_time` | 角域信号映射回等时间采样（角域处理后的逆变换，用于重合成） | 同上 | v0.3 |
-| `stationarize` | 已知转速比例（固定传动比、线性升速）时的时间扭曲，使阶次频率恒定，便于长窗谱指标；提供逆变换 | — | v0.3 |
+| `angular_resample` | Uniform time sampling → uniform shaft-angle sampling (the core of computed order tracking, COT). Anti-aliasing low-pass adapted to the minimum rpm; high-order interpolation (spline or polyphase); returns the angle-domain signal and the samples per revolution | Fyfe & de Munck 1997; Brandt 2011 | v0.1 |
+| `angular_to_time` | Maps an angle-domain signal back to uniform time sampling (the inverse of the angle-domain transform, used for resynthesis) | As above | v0.3 |
+| `stationarize` | Time warping for a known rpm proportionality (fixed gear ratio, linear run-up) that makes the order frequencies constant, for long-window spectral metrics; provides the inverse transform | — | v0.3 |
 
-### 2.3 图谱（`rota.maps`）
+### 2.3 Maps (`rota.maps`)
 
-| 函数 | 作用 | 依据文献 | 版本 |
+| Function | Purpose | Literature | Version |
 |---|---|---|---|
-| `rpm_frequency_map` | 频率–转速图（Campbell 图） | Brandt 2011 | v0.1 |
-| `rpm_order_map` | 阶次–转速图（基于 `angular_resample`） | Fyfe & de Munck 1997；Brandt 2011 | v0.1 |
-| 分箱选项 | 按时间帧，或按 Δrpm 分箱（含迟滞）；单调段选择（升速、降速、自动） | Brandt 2011 | v0.4 |
+| `rpm_frequency_map` | Frequency–rpm map (Campbell diagram) | Brandt 2011 | v0.1 |
+| `rpm_order_map` | Order–rpm map (based on `angular_resample`) | Fyfe & de Munck 1997; Brandt 2011 | v0.1 |
+| Binning options | By time frame, or by Δrpm bin (with hysteresis); monotonic segment selection (run-up, run-down, automatic) | Brandt 2011 | v0.4 |
 
-### 2.4 谱与切片（`rota.slices`）
+### 2.4 Spectra and slices (`rota.slices`)
 
-| 函数 | 作用 | 依据文献 | 版本 |
+| Function | Purpose | Literature | Version |
 |---|---|---|---|
-| `order_spectrum` | 阶次图按时间做能量平均，得到平均阶次谱 | Brandt 2011 | v0.1 |
-| `order_slice` | 指定阶次的幅值随转速变化（可返回复幅值，供 `OrderTable` 使用） | Brandt 2011 | v0.1 |
-| `frequency_slice` | 固定频率切片，用于观察结构共振 | Brandt 2011 | v0.4 |
-| `overall_level` | 总声级随转速变化，可选 A 计权 | IEC 61672-1 | v0.4 |
-| `metric_vs_rpm` | 任意时变量（心理声学指标、声级、第三方工具输出）沿转速或车速分箱：单调段选择、分箱宽度、每箱最少样本、起始跳过、聚合方式（均值、百分位、功率平均）；返回计数与离散度 | — | v0.4 |
-| `frequency_to_order`、`order_share` | 频率轨迹（例如 tonality 工具给出的主导音频率）→ 阶次归属（给定容差）；统计落在某阶及其谐波上的比例 | — | v0.4 |
+| `order_spectrum` | Energy-averages the order map over time to obtain the average order spectrum | Brandt 2011 | v0.1 |
+| `order_slice` | Amplitude of a given order as a function of rpm (can return the complex amplitude, for use by `OrderTable`) | Brandt 2011 | v0.1 |
+| `frequency_slice` | Fixed-frequency slice, for observing structural resonances | Brandt 2011 | v0.4 |
+| `overall_level` | Overall sound level versus rpm, optionally A-weighted | IEC 61672-1 | v0.4 |
+| `metric_vs_rpm` | Bins any time-varying quantity (psychoacoustic metric, sound level, output of third-party tools) along rpm or vehicle speed: monotonic segment selection, bin width, minimum samples per bin, start skip, aggregation (mean, percentile, power average); returns the counts and the dispersion | — | v0.4 |
+| `frequency_to_order`, `order_share` | Frequency track (e.g. the dominant tone frequency given by a tonality tool) → order attribution (within a given tolerance); computes the fraction falling on a given order and its harmonics | — | v0.4 |
 
-### 2.5 阶次提取（`rota.extract`，原 `rota.vkf`）
+### 2.5 Order extraction (`rota.extract`, formerly `rota.vkf`)
 
-| 函数 | 作用 | 依据文献 | 版本 |
+| Function | Purpose | Literature | Version |
 |---|---|---|---|
-| `order_waveform` | Vold-Kalman 二代滤波提取阶次时域波形与复包络。联合多阶（带状对称正定方程，用 SciPy 带状求解器精确求解）；−3 dB 带宽 → 权重映射；多根轴各自的转速参考 | Vold & Leuridan 1993、1995；Vold et al. 1997；Feldbauer & Höldrich 2000；Tůma 2005；Pan & Lin 2006 | v0.2 |
-| `tracked_harmonics` | 相位锁定的短时谐波提取：按 `rpm_to_phase` 给出的相位对每阶解调，用满足 COLA 条件的归一化窗做短时平均得到复系数轨迹，再叠加重调制回时域。可选显著性门限（χ² 检验）、转速计延迟。计算量远小于 Vold-Kalman，适合长录音与多通道 | Antoni 2009；角–时循环平稳分析（Antoni 等，待核对） | v0.2 |
-| `remove_orders` | 从原信号中减去指定阶次（任一提取器），用于"去掉某阶再听" | 同上 | v0.2 |
-| `residual` | 原信号减去所有轴、所有阶次，得到宽带残差 | 同上 | v0.2 |
-| `resolution_check` | 可分辨性诊断：相邻阶次或双轴近似同速时的拍频与窗长倒数、包络带宽的关系；等带宽时域窗在低转速下跨越的阶次数；解调带宽是否超过相邻阶次间距。给出警告与建议的窗长（以圈数计）或带宽 | — | v0.2 |
-| `kalman_smoother`（可选） | 随机游走包络模型的 Kalman/RTS 平滑器，作为 Vold-Kalman 的贝叶斯参照实现 | — | v0.4 之后 |
+| `order_waveform` | Extracts the time-domain order waveform and complex envelope with the second-generation Vold-Kalman filter. Joint over several orders (banded symmetric positive-definite equations, solved exactly with the SciPy banded solver); −3 dB bandwidth → weight mapping; a separate rpm reference for each of several shafts | Vold & Leuridan 1993, 1995; Vold et al. 1997; Feldbauer & Höldrich 2000; Tůma 2005; Pan & Lin 2006 | v0.2 |
+| `tracked_harmonics` | Phase-locked short-time harmonic extraction: each order is demodulated with the phase given by `rpm_to_phase`, and short-time averaging with a normalised window satisfying the COLA condition gives a complex coefficient track, which is then re-modulated and summed back to the time domain. Optional significance threshold (χ² test), tachometer delay. Far cheaper than Vold-Kalman, suited to long recordings and many channels | Antoni 2009; angle–time cyclostationary analysis (Antoni et al., to be verified) | v0.2 |
+| `remove_orders` | Subtracts the specified orders from the original signal (using either extractor), for "remove an order and listen" | As above | v0.2 |
+| `residual` | Original signal minus all shafts and all orders, giving the broadband residual | As above | v0.2 |
+| `resolution_check` | Resolvability diagnostic: for adjacent orders, or two shafts at nearly the same speed, the relation of the beat frequency to the reciprocal of the window length and to the envelope bandwidth; the number of orders spanned by a constant-bandwidth time window at low rpm; whether the demodulation bandwidth exceeds the spacing between adjacent orders. Gives warnings and a recommended window length (in revolutions) or bandwidth | — | v0.2 |
+| `kalman_smoother` (optional) | Kalman/RTS smoother for a random-walk envelope model, as a Bayesian reference implementation of Vold-Kalman | — | after v0.4 |
 
-### 2.6 重合成（`rota.resynth`，新增）
+### 2.6 Resynthesis (`rota.resynth`, new)
 
-目标：把分析结果（阶次表、提取的阶次波形、残差）变回可听的声音，并允许修改后重新合成。典型用途：听音实验刺激（"去掉某阶再听"、"只保留宽带"）、虚拟工况（把阶次表映射到新的转速曲线）、驾驶模拟器的声音引擎（块式合成）。
+Goal: turn analysis results (order tables, extracted order waveforms, residuals) back into audible sound, and allow resynthesis after modification. Typical uses: listening-experiment stimuli ("remove an order and listen", "keep only the broadband"), virtual operating conditions (mapping an order table onto a new rpm profile), and the sound engine of a driving simulator (block-wise synthesis).
 
-| 函数或类 | 作用 | 依据文献 | 版本 |
+| Function or class | Purpose | Literature | Version |
 |---|---|---|---|
-| `OrderTable` | 数据结构：阶次 × 转速 → 复幅值（Pa），显式标记峰值或 RMS；支持非整数与负阶次、每阶的固定频率偏移（载波边带，如逆变器开关频率的边带）；可由 `order_slice` 或 `tracked_harmonics` 构建；NPZ/JSON 读写 | — | v0.3 |
-| `synthesize_orders` | 由 `OrderTable` 和 `rpm(t)` 做加法合成：相位为 2π·阶次·∫rpm/60 dt 的连续积分；在转速网格之间插值的是幅值，不是实部与虚部；超过 Nyquist 的阶次静音而非截断；起始相位可随机（seedable）、共享或取自表中相位 | McAulay & Quatieri 1986 | v0.3 |
-| `OrderSynth`（流式） | 块式 API：保持相位累加器与上一块的状态，每次接收一块转速或负载并输出一块音频，供实时程序或模拟器调用（ROTA 本身不做音频 I/O） | — | v0.3 |
-| `synthesize_broadband` | 由幅度谱包络（可随转速或车速变化的查表）生成宽带噪声：随机相位 IFFT 颗粒 + 功率互补窗叠加（√Hann，50 % 重叠），无帧率泵动；颗粒内去除超低频；相邻工况之间按 √ 权重交叉淡化 | Serra & Smith 1990；Allen & Rabiner 1977 | v0.3 |
-| `remap_rpm` | 把阶次表或提取结果映射到新的转速曲线（虚拟加速、改变传动比、改变录音的表观车速）。这是改变表观车速的正确做法，不是通用变调或变速；每 km/h 的频率变化只有约 0.25 %，转速与频率精度必须远高于此 | — | v0.3 |
-| `modify_orders` | 对提取的系数轨迹或阶次表做逐阶增益、静音、频移、替换，再重调制 | — | v0.3 |
-| `resynthesize` | 阶次 + 残差重新组合，可指定阶次–残差能量比（dB）；同时返回 orders-only、residual-only、mix 三路 | — | v0.3 |
-| `stationary_excerpt` | 从加速录音生成频率恒定、幅值平稳的听音片段：角域平均谱（或正弦 + 残差模型）+ 随机相位 IFFT；音调分量可选真正弦（无拍频）或随机相位簇两种模型；报告包络摆动与峰值因子 | — | v0.3 |
-| `provenance` | 为每次重合成写 JSON 侧车：全部参数、种子、ROTA 版本、输入文件摘要 | — | v0.3 |
+| `OrderTable` | Data structure: order × rpm → complex amplitude (Pa), explicitly marked as peak or RMS; supports non-integer and negative orders and a fixed frequency offset per order (carrier sidebands, e.g. sidebands of an inverter switching frequency); can be built from `order_slice` or `tracked_harmonics`; NPZ/JSON read and write | — | v0.3 |
+| `synthesize_orders` | Additive synthesis from an `OrderTable` and `rpm(t)`: the phase is the continuous integral 2π·order·∫rpm/60 dt; between rpm grid points the amplitude is interpolated, not the real and imaginary parts; orders above Nyquist are muted rather than clamped; the initial phase can be random (seedable), shared, or taken from the phases in the table | McAulay & Quatieri 1986 | v0.3 |
+| `OrderSynth` (streaming) | Block-wise API: keeps the phase accumulator and the state of the previous block, takes one block of rpm or load at a time and outputs one block of audio, for real-time programs or simulators (ROTA itself does no audio I/O) | — | v0.3 |
+| `synthesize_broadband` | Generates broadband noise from a magnitude-spectrum envelope (a lookup table that can vary with rpm or vehicle speed): random-phase IFFT grains + overlap-add with a power-complementary window (√Hann, 50 % overlap), no frame-rate pumping; very low frequencies removed within each grain; cross-fade between adjacent operating conditions with √ weights | Serra & Smith 1990; Allen & Rabiner 1977 | v0.3 |
+| `remap_rpm` | Maps an order table or extraction result onto a new rpm profile (virtual acceleration, changed gear ratio, changed apparent vehicle speed of a recording). This is the correct way to change the apparent vehicle speed, not a general pitch shift or speed change; the frequency changes by only about 0.25 % per km/h, so rpm and frequency accuracy must be far better than this | — | v0.3 |
+| `modify_orders` | Per-order gain, muting, frequency shift and replacement applied to extracted coefficient tracks or an order table, followed by re-modulation | — | v0.3 |
+| `resynthesize` | Recombines orders + residual, with an order-to-residual energy ratio (dB) that can be specified; returns three outputs: orders-only, residual-only and mix | — | v0.3 |
+| `stationary_excerpt` | Generates a listening excerpt with constant frequency and steady amplitude from an accelerating recording: angle-domain average spectrum (or a sinusoid + residual model) + random-phase IFFT; tonal components can use either of two models, true sinusoids (no beating) or random-phase clusters; reports the envelope fluctuation and the crest factor | — | v0.3 |
+| `provenance` | Writes a JSON sidecar for every resynthesis: all parameters, seed, ROTA version, input file digest | — | v0.3 |
 
-### 2.7 测试信号（`rota.synth`）
+### 2.7 Test signals (`rota.synth`)
 
-| 函数 | 作用 | 版本 |
+| Function | Purpose | Version |
 |---|---|---|
-| `synth_runup` | 合成升速或降速信号。运动学链：车速曲线 → 车轮转速 → 挡位比与主减速比 → 转速；曲线可选线性、幂律、端点零斜率的 S 形或任意数组；怠速、换挡事件与转速回落。阶次以数据给出：阶次（含半阶次）、基准幅值、随转速的幅值律（起始斜坡、最低频率掩模、可选 AM/FM）、初始相位（seedable）；可选共振（传递函数）与固定频率成分；路噪与风噪随车速的包络；多根轴（独立转速、固定转速比、近似同速）；转速计脉冲（每转多脉冲、抖动、丢脉冲）。输出 mix 与各分量 stem（同一增益），以及真值：rpm(t)、转角、每阶幅值与相位、噪声包络，外加 JSON 配置与种子 | v0.1 |
-| `rpm_profiles` | 转速曲线生成：线性、指数、分段保持（如 40→100→40 km/h 的映射）、双轴（独立、锁定比例、小差异） | v0.1 |
-| `synth_tone_noise` | 听音实验刺激：纯音或谐波复合 + 宽带或驼峰噪声，按总功率分配法设定音噪比（TNR）；锚点信号（如 60 dB SPL 的纯音与白噪） | v0.3 |
+| `synth_runup` | Synthesises run-up or run-down signals. Kinematic chain: vehicle speed profile → wheel speed → gear ratio and final drive ratio → rpm; the profile can be linear, power-law, S-shaped with zero slope at the end points, or an arbitrary array; idle, gear-shift events and rpm drop-back. Orders are given as data: order (including half orders), reference amplitude, amplitude law versus rpm (initial ramp, minimum-frequency mask, optional AM/FM), initial phase (seedable); optional resonances (transfer functions) and fixed-frequency components; road noise and wind noise with envelopes versus vehicle speed; several shafts (independent speeds, fixed speed ratio, nearly equal speeds); tachometer pulses (several pulses per revolution, jitter, dropped pulses). Outputs the mix and a stem for each component (same gain), together with the truth: rpm(t), shaft angle, amplitude and phase of each order, noise envelopes, plus the JSON configuration and the seed | v0.1 |
+| `rpm_profiles` | Rpm profile generation: linear, exponential, piecewise with holds (e.g. a 40→100→40 km/h mapping), twin shafts (independent, locked ratio, small difference) | v0.1 |
+| `synth_tone_noise` | Listening-experiment stimuli: a pure tone or harmonic complex + broadband or hump-shaped noise, with the tone-to-noise ratio (TNR) set by allocating the total power; anchor signals (e.g. a pure tone and white noise at 60 dB SPL) | v0.3 |
 
-### 2.8 验证指标（`rota.metrics`，新增）
+### 2.8 Validation metrics (`rota.metrics`, new)
 
-| 函数 | 作用 | 版本 |
+| Function | Purpose | Version |
 |---|---|---|
-| `track_error` | 转速轨迹误差：中位相对误差、在 3 % 与 5 % 内的帧比例、触界统计 | v0.1 |
-| `waveform_similarity` | 相关系数、NRMSE；多通道时按能量加权（避免对低能量通道做均匀平均）；交叉捕获（估计与另一源真值的相关）；零基线（原始混合与真值的相关） | v0.2 |
-| `order_residual_energy` | 去阶后残差中目标阶次的剩余能量（dB，相对原始阶次能量） | v0.2 |
-| `window_checks` | COLA 与功率互补检验；调制谱中帧率处的峰值（泵动检测） | v0.3 |
-| `envelope_stats` | 包络摆动（百分位）、峰值因子、与原始谱的误差 | v0.3 |
+| `track_error` | Rpm track error: median relative error, fraction of frames within 3 % and 5 %, boundary-hit statistics | v0.1 |
+| `waveform_similarity` | Correlation coefficient, NRMSE; energy-weighted for multichannel signals (avoids uniform averaging over low-energy channels); cross-capture (correlation of the estimate with the ground truth of another source); zero baseline (correlation of the raw mixture with the truth) | v0.2 |
+| `order_residual_energy` | Remaining energy of the target order in the residual after order removal (dB, relative to the original order energy) | v0.2 |
+| `window_checks` | COLA and power-complementarity checks; peak of the modulation spectrum at the frame rate (pumping detection) | v0.3 |
+| `envelope_stats` | Envelope fluctuation (percentiles), crest factor, error relative to the original spectrum | v0.3 |
 
-### 2.9 心理声学桥接（`rota.tonal`，薄层，新增）
+### 2.9 Psychoacoustic bridge (`rota.tonal`, thin layer, new)
 
-ROTA 不实现响度、尖锐度、粗糙度、ECMA-418-2 tonality 等已有开源实现的指标，只提供桥接：
+ROTA does not implement metrics that already have open-source implementations, such as loudness, sharpness, roughness and ECMA-418-2 tonality. It only provides bridges:
 
-| 函数 | 作用 | 依据文献 | 版本 |
+| Function | Purpose | Literature | Version |
 |---|---|---|---|
-| `a_weighting`、`level_db` | IEC 61672-1 A/C 计权（模拟极点双线性变换，1 kHz 归一化），只施加一次（时域单向或频域），不用零相位双向滤波；dB re 20 µPa；RMS 定义显式；双耳能量平均 | IEC 61672-1 | v0.4 |
-| `to_calibrated_48k` | 保持校准的多相重采样，输出 48 kHz 的 Pa 信号，供 SQAT、MoSQITo、ECMA-418-2 开源实现使用 | — | v0.4 |
-| `order_prominence` | 在阶次跟踪谱（角域）上计算 ECMA-74 Annex D 的音噪比 TNR 与突出比 PR：逐音检测、突出标志、频率相关阈值；窗长足以分辨低频音（如 140 Hz 的音落在约 100 Hz 宽的临界带内）；得到"阶次突出度随转速"曲线 | ECMA-74；ISO 7779；ECMA-418-1 | v0.4 |
-| `components` | 阶次分量描述结构（阶次、转速范围、级别、带宽、谐波性指数），便于与 tonality 工具的分量输出对照 | Becker & Sottek 2019（待核对） | v0.4 |
+| `a_weighting`, `level_db` | IEC 61672-1 A/C weighting (bilinear transform of the analogue poles, normalised at 1 kHz), applied only once (one pass in the time domain, or in the frequency domain), not zero-phase forward-backward filtering; dB re 20 µPa; RMS definition explicit; binaural energy averaging | IEC 61672-1 | v0.4 |
+| `to_calibrated_48k` | Calibration-preserving polyphase resampling, outputting a 48 kHz signal in Pa, for use with SQAT, MoSQITo and open-source ECMA-418-2 implementations | — | v0.4 |
+| `order_prominence` | Computes the ECMA-74 Annex D tone-to-noise ratio TNR and prominence ratio PR on the order-tracked spectrum (angle domain): per-tone detection, prominence flag, frequency-dependent threshold; the window is long enough to resolve low-frequency tones (e.g. a 140 Hz tone lies within a critical band about 100 Hz wide); yields an "order prominence versus rpm" curve | ECMA-74; ISO 7779; ECMA-418-1 | v0.4 |
+| `components` | Description structure for order components (order, rpm range, level, bandwidth, harmonicity index), to ease comparison with the component output of tonality tools | Becker & Sottek 2019 (to be verified) | v0.4 |
 
-### 2.10 绘图（`rota.plot`）
+### 2.10 Plotting (`rota.plot`)
 
-绘图辅助函数，与计算分离：Campbell 图、阶次图、切片、转速轨迹与置信度、重合成前后对比。v0.4。
-
----
-
-## 3. 版本计划
-
-**v0.1 核心链路**：完成一次带转速计的加速工况分析。
-`tacho_to_rpm`、`rpm_to_phase`、`regularize_control`、`speed_to_rpm`、`steady_segments`、`angular_resample`、`rpm_frequency_map`、`rpm_order_map`、`order_spectrum`、`order_slice`、`synth_runup`、`rpm_profiles`、`track_error`。验证用例 T1、T2、T5、T14。
-
-**v0.2 阶次提取与无转速计**：
-`rpm_from_ridge`、`order_waveform`、`tracked_harmonics`、`remove_orders`、`residual`、`resolution_check`、`waveform_similarity`、`order_residual_energy`。验证用例 T3、T4、T6、T8、T10、T12、T13。
-
-**v0.3 重合成**：
-`rota.resynth` 全部、`angular_to_time`、`stationarize`、`virtual_rpm`、`synth_tone_noise`、`window_checks`、`envelope_stats`。验证用例 T9、T11。
-
-**v0.4 应用层与桥接**：
-`frequency_slice`、`overall_level`、`metric_vs_rpm`、`order_share`、Δrpm 分箱、`align_signals`、`rota.tonal`、`rota.plot`。提供与 SQAT、MoSQITo、ECMA-418-2 开源实现衔接的示例，例如"去掉某阶后响度或 tonality 随转速的变化"。
-
-**v1.0 正式发布**：
-完整验证报告、英文文档、PyPI 发布、Zenodo DOI。投稿一篇验证论文（JOSS 或声学会议）。
-
-**暂不做**：
-
-- 实时音频 I/O（只提供块式合成 API）、GUI；
-- 转子动力学专用分析（轴心轨迹、波德图）；
-- 空间音频（DoA、波束形成、Ambisonics 解码与双耳渲染）：作为独立的配套包，ROTA 只保证多通道线性算子（设计原则 6）；
-- 任何专有或商业文件格式的读取（第 4 节）；
-- 响度、尖锐度、粗糙度、ECMA-418-2 tonality 等指标本体。
+Plotting helpers, separate from computation: Campbell diagram, order map, slices, rpm track and confidence, before/after comparison of resynthesis. v0.4.
 
 ---
 
-## 4. 独立实现规范
+## 3. Version plan
 
-ROTA 的 API 对 MATLAB 用户友好，但实现完全独立。所有贡献者遵守以下规则。
+**v0.1 Core chain**: complete the analysis of an accelerating run with a tachometer.
+`tacho_to_rpm`, `rpm_to_phase`, `regularize_control`, `speed_to_rpm`, `steady_segments`, `angular_resample`, `rpm_frequency_map`, `rpm_order_map`, `order_spectrum`, `order_slice`, `synth_runup`, `rpm_profiles`, `track_error`. Validation cases T1, T2, T5, T14.
 
-### 禁止
+**v0.2 Order extraction and tacholess operation**:
+`rpm_from_ridge`, `order_waveform`, `tracked_harmonics`, `remove_orders`, `residual`, `resolution_check`, `waveform_similarity`, `order_residual_energy`. Validation cases T3, T4, T6, T8, T10, T12, T13.
 
-1. 阅读、复制或翻译任何商业软件（MATLAB 工具箱、商用 NVH 分析与仿真软件）的源代码或内部数据结构。包括用 `edit`、`type` 打开内置函数，以及在调试器中单步进入内置函数。
-2. 复制商业软件文档的文字、示例代码和示例数据。docstring、教程和示例全部自行撰写。示例数据由 `synth_runup` 生成，或来自权利清晰的自有测量。
-3. 实现或内置任何专有、未公开文件格式的解析器，也不在文档中描述其内部结构。用户自行把数据转换为 WAV、NPZ、HDF5 或 CSV 后再使用 ROTA。
-4. 移植许可不明的第三方代码，包括同事或合作者分享的研究代码。只能依据其发表的论文重新实现，并引用论文。
-5. 在项目名、包名或宣传中使用 MATLAB 等商标。
-6. 在代码注释中写"复现某软件的某函数"。应写"基于某文献实现"。
-7. 把受限数据（合作方车辆录音、被试数据、未公开数据集）作为测试夹具或示例。仓库中不出现车型、合作单位、被试信息和本机绝对路径。
+**v0.3 Resynthesis**:
+All of `rota.resynth`, `angular_to_time`, `stationarize`, `virtual_rpm`, `synth_tone_noise`, `window_checks`, `envelope_stats`. Validation cases T9, T11.
 
-### 允许
+**v0.4 Application layer and bridges**:
+`frequency_slice`, `overall_level`, `metric_vs_rpm`, `order_share`, Δrpm binning, `align_signals`, `rota.tonal`, `rota.plot`. Provides examples linking to SQAT, MoSQITo and open-source ECMA-418-2 implementations, for example "how loudness or tonality varies with rpm after an order is removed".
 
-1. 依据公开文献实现算法，并在 docstring 的 References 节注明出处。
-2. 把 MATLAB 当作黑盒参考：只调用公开函数，记录输入和输出，用于数值对照。
-3. 在文档中提供"MATLAB 用户对照表"，事实性地说明功能对应关系。
-4. 复用与 GPL-3.0-or-later 兼容的开源代码（如 BSD、MIT、Apache-2.0、GPL-3.0），在 NOTICE 文件中致谢。
+**v1.0 Official release**:
+Full validation report, English documentation, PyPI release, Zenodo DOI. Submit a validation paper (JOSS or an acoustics conference).
 
-### 流程
+**Not planned for now**:
 
-- PR 模板包含一项确认："本次提交未参考任何商业软件的源代码，未移植许可不明的代码。"
-- 参考或复用第三方开源代码前，先确认许可证与 ROTA 兼容，并在 NOTICE 文件中致谢。
-- 每次发布前对整个 git 历史做敏感词检索（商业软件名、合作方、车型、人名、本机路径）。
-
-### 独立性声明（放在 README）
-
-> ROTA 是独立的学术项目，与 MathWorks 及任何商业软件厂商无关，也未获其认可或支持。MATLAB 是 The MathWorks, Inc. 的注册商标。
+- Real-time audio I/O (only a block-wise synthesis API is provided), GUI;
+- Analysis specific to rotor dynamics (orbits, Bode plots);
+- Spatial audio (DoA, beamforming, Ambisonics decoding and binaural rendering): to be a separate companion package; ROTA only guarantees multichannel linear operators (design principle 6);
+- Reading any proprietary or commercial file format (section 4);
+- The metrics themselves: loudness, sharpness, roughness, ECMA-418-2 tonality.
 
 ---
 
-## 5. 验证与对照
+## 4. Independent implementation rules
 
-### 5.1 原则
+ROTA's API is friendly to MATLAB users, but the implementation is fully independent. All contributors follow the rules below.
 
-- **解析真值是第一标准，MATLAB 是第二参考。** 对照的目的是确认两者对同一物理量的估计一致，而不是逐位复制 MATLAB 的输出。两者不一致时，以真值为准，并在报告中解释差异来源。
-- **显式指定参数。** MATLAB 调用中显式给出全部参数（窗函数、分辨率、重叠率、幅值类型、滤波带宽等），不依赖默认值。这样对照可以复现，ROTA 也不需要复制 MATLAB 的默认设置。
-- **比较物理量，不比较网格。** 两边的分帧细节可能不同。因此对照沿阶次脊线的幅值、峰值位置、转速曲线等派生量，不逐个比较图谱单元格。
-- **重合成用往返测试。** 合成 → 分析 → 与输入表比较；宽带合成用自检（窗功率和、调制谱）。
+### Prohibited
 
-### 5.2 对照表
+1. Reading, copying or translating the source code or internal data structures of any commercial software (MATLAB toolboxes, commercial NVH analysis and simulation software). This includes opening built-in functions with `edit` or `type`, and stepping into built-in functions in a debugger.
+2. Copying the text, example code or example data of commercial software documentation. Docstrings, tutorials and examples are all written independently. Example data are generated by `synth_runup`, or come from own measurements with clear rights.
+3. Implementing or bundling a parser for any proprietary or unpublished file format, or describing its internal structure in the documentation. Users convert their data to WAV, NPZ, HDF5 or CSV before using ROTA.
+4. Porting third-party code whose licence is unclear, including research code shared by colleagues or collaborators. Reimplement it only from the published paper, and cite the paper.
+5. Using trademarks such as MATLAB in the project name, the package name or in promotion.
+6. Writing "reproduces function X of software Y" in code comments. Write "implemented based on reference Z" instead.
+7. Using restricted data (partner vehicle recordings, participant data, unpublished datasets) as test fixtures or examples. The repository contains no vehicle models, partner organisations, participant information or absolute local paths.
 
-| ROTA | MATLAB（Signal Processing Toolbox） | 对照方式 | 对照指标 |
+### Allowed
+
+1. Implementing algorithms from the published literature, with the source stated in the References section of the docstring.
+2. Using MATLAB as a black-box reference: call only public functions, record the inputs and outputs, and use them for numerical comparison.
+3. Providing a "MATLAB user correspondence table" in the documentation that states the functional correspondence factually.
+4. Reusing open-source code compatible with GPL-3.0-or-later (e.g. BSD, MIT, Apache-2.0, GPL-3.0), with acknowledgement in the NOTICE file.
+
+### Process
+
+- The PR template contains one confirmation: "This submission did not consult the source code of any commercial software and did not port code of unclear licence."
+- Before consulting or reusing third-party open-source code, confirm that its licence is compatible with ROTA, and acknowledge it in the NOTICE file.
+- Before each release, search the whole git history for sensitive words (commercial software names, partners, vehicle models, personal names, local paths).
+
+### Independence statement (placed in the README)
+
+> ROTA is an independent academic project. It is not affiliated with, endorsed by, or supported by MathWorks or any commercial software vendor. MATLAB is a registered trademark of The MathWorks, Inc.
+
+---
+
+## 5. Validation and comparison
+
+### 5.1 Principles
+
+- **Analytic ground truth is the first standard; MATLAB is the second reference.** The purpose of the comparison is to confirm that the two agree in their estimate of the same physical quantity, not to copy MATLAB's output digit for digit. When the two disagree, the ground truth decides, and the report explains the source of the difference.
+- **Specify parameters explicitly.** In MATLAB calls, give all parameters explicitly (window function, resolution, overlap, amplitude type, filter bandwidth, etc.) and do not rely on defaults. This keeps the comparison reproducible, and ROTA does not need to copy MATLAB's default settings.
+- **Compare physical quantities, not grids.** The framing details of the two sides may differ. The comparison therefore uses derived quantities such as amplitudes along order ridges, peak positions and rpm curves, and does not compare map cells one by one.
+- **Round-trip tests for resynthesis.** Synthesis → analysis → comparison with the input table; broadband synthesis uses self-checks (window power sum, modulation spectrum).
+
+### 5.2 Comparison table
+
+| ROTA | MATLAB (Signal Processing Toolbox) | Comparison method | Comparison metric |
 |---|---|---|---|
-| `tacho_to_rpm` | `tachorpm` | 直接对照 | 转速曲线误差 |
-| `rpm_from_ridge` | `rpmtrack` | 直接对照 | 转速曲线误差；触界标志 |
-| `angular_resample` | 无公开对应 | 解析真值；通过 `rpm_order_map` 间接对照 | 转角域中恒定阶次的谱峰宽度和泄漏 |
-| `rpm_frequency_map` | `rpmfreqmap` | 直接对照 | 各阶沿脊线的幅值；频率轴 |
-| `rpm_order_map` | `rpmordermap` | 直接对照 | 各阶幅值；阶次分辨率 |
-| `order_spectrum` | `orderspectrum` | 直接对照 | 峰值阶次和幅值 |
-| `order_slice` | `ordertrack`（输入为阶次图） | 直接对照 | 幅值–转速曲线 |
-| `order_waveform`（波形） | `orderwaveform` | 直接对照 | 波形相关系数；−3 dB 带宽 |
-| `order_waveform`（包络） | `ordertrack`（输入为信号，Vold-Kalman 方式） | 直接对照 | 包络幅值 |
-| `tracked_harmonics` | 无公开对应 | 解析真值；与 `order_waveform` 交叉 | 波形相关系数；系数轨迹幅值 |
-| `remove_orders`、`residual` | 无公开对应 | 间接：原信号减去 `orderwaveform` 的结果 | 残差中该阶的剩余能量 |
-| `resolution_check` | 无 | 按定义（T8） | 警告是否触发 |
-| `frequency_slice` | 无公开对应 | 解析真值 | 共振峰位置和幅值 |
-| `overall_level`、`rota.tonal` | 不对照 MATLAB | 与 SQAT 的 `sound_level_meter` 交叉验证（开源，已按 IEC 61672-1 验证） | 声级差；TNR/PR 差 |
-| `rota.resynth` | 无公开对应 | 往返测试（T9）；自检（T11） | 表往返误差；泵动峰值 |
-| `rota.metrics`、`synth_runup` | 无 | 按定义 | — |
+| `tacho_to_rpm` | `tachorpm` | Direct comparison | Rpm curve error |
+| `rpm_from_ridge` | `rpmtrack` | Direct comparison | Rpm curve error; boundary-hit flag |
+| `angular_resample` | No public counterpart | Analytic truth; indirect through `rpm_order_map` | Spectral peak width and leakage of a constant order in the angle domain |
+| `rpm_frequency_map` | `rpmfreqmap` | Direct comparison | Amplitude of each order along the ridge; frequency axis |
+| `rpm_order_map` | `rpmordermap` | Direct comparison | Amplitude of each order; order resolution |
+| `order_spectrum` | `orderspectrum` | Direct comparison | Peak order and amplitude |
+| `order_slice` | `ordertrack` (input is an order map) | Direct comparison | Amplitude–rpm curve |
+| `order_waveform` (waveform) | `orderwaveform` | Direct comparison | Waveform correlation coefficient; −3 dB bandwidth |
+| `order_waveform` (envelope) | `ordertrack` (input is a signal, Vold-Kalman method) | Direct comparison | Envelope amplitude |
+| `tracked_harmonics` | No public counterpart | Analytic truth; cross-check with `order_waveform` | Waveform correlation coefficient; amplitude of the coefficient track |
+| `remove_orders`, `residual` | No public counterpart | Indirect: original signal minus the `orderwaveform` result | Remaining energy of that order in the residual |
+| `resolution_check` | None | By definition (T8) | Whether the warning is triggered |
+| `frequency_slice` | No public counterpart | Analytic truth | Position and amplitude of the resonance peak |
+| `overall_level`, `rota.tonal` | Not compared with MATLAB | Cross-validation against the `sound_level_meter` of SQAT (open source, verified against IEC 61672-1) | Level difference; TNR/PR difference |
+| `rota.resynth` | No public counterpart | Round-trip test (T9); self-check (T11) | Table round-trip error; pumping peak |
+| `rota.metrics`, `synth_runup` | None | By definition | — |
 
-### 5.3 测试信号
+### 5.3 Test signals
 
-| 编号 | 内容 | 主要考察 |
+| ID | Content | Main focus |
 |---|---|---|
-| T1 | 单阶、恒定幅值、线性加速 | 幅值与转速的绝对精度 |
-| T2 | 多阶 + 固定频率共振 + 噪声 | 图谱、切片、共振识别 |
-| T3 | 指数减速（非线性转速） | 重采样和脊线跟踪 |
-| T4 | 两根轴，阶次交叉 | Vold-Kalman 多阶解耦 |
-| T5 | 转速计每转多脉冲、脉冲抖动、丢失脉冲 | `tacho_to_rpm` 的鲁棒性 |
-| T6 | 高转速变化率的快速升速 | COT 和 Vold-Kalman 的极限 |
-| T7（可选） | 自有实测数据 | 实际工况；仅在数据权利允许时公开 |
-| T8 | 双轴转速比接近 1（相差 0.5 %、2 %、4 %），阶次相同 | 可分辨性极限；`resolution_check` 必须在不可分辨时警告 |
-| T9 | 阶次表往返：`OrderTable` → `synthesize_orders` → `rpm_order_map` 或 `order_slice` → 表 | 重合成与分析链路的一致性 |
-| T10 | 真值转速在 `rpm_from_ridge` 搜索范围之外 | 必须报告触界，不得静默返回边界值 |
-| T11 | `synthesize_broadband` 在恒定谱包络下的输出 | 调制谱在帧率处无峰；长时功率恒定 |
-| T12 | T2 信号经 `remove_orders` | 残差中目标阶次的剩余能量 |
-| T13 | 参考转速含误差（偏置 0.5 %、随机抖动、阶跃）时各提取器的退化曲线 | 提取对转速误差的鲁棒性；文档给出可接受的转速误差 |
-| T14 | 含怠速的低转速起步，相邻阶次仅差 0.5 阶 | 阶次分辨率随转速的变化；角域 STFT 与等带宽时域 STFT 的对比 |
+| T1 | Single order, constant amplitude, linear acceleration | Absolute accuracy of amplitude and rpm |
+| T2 | Several orders + fixed-frequency resonance + noise | Maps, slices, resonance identification |
+| T3 | Exponential deceleration (nonlinear rpm) | Resampling and ridge tracking |
+| T4 | Two shafts, crossing orders | Vold-Kalman multi-order decoupling |
+| T5 | Tachometer with several pulses per revolution, pulse jitter, dropped pulses | Robustness of `tacho_to_rpm` |
+| T6 | Fast run-up with a high rate of rpm change | Limits of COT and Vold-Kalman |
+| T7 (optional) | Own measured data | Real operating conditions; published only if the data rights allow |
+| T8 | Twin-shaft speed ratio close to 1 (differing by 0.5 %, 2 %, 4 %), same orders | Resolvability limit; `resolution_check` must warn when the orders are unresolvable |
+| T9 | Order-table round trip: `OrderTable` → `synthesize_orders` → `rpm_order_map` or `order_slice` → table | Consistency of the resynthesis and analysis chains |
+| T10 | True rpm outside the search range of `rpm_from_ridge` | Must report a boundary hit, and must not silently return the boundary value |
+| T11 | Output of `synthesize_broadband` for a constant spectral envelope | No peak at the frame rate in the modulation spectrum; constant long-term power |
+| T12 | T2 signal passed through `remove_orders` | Remaining energy of the target order in the residual |
+| T13 | Reference rpm with errors (0.5 % bias, random jitter, steps): degradation curves of each extractor | Robustness of extraction to rpm error; the documentation gives the acceptable rpm error |
+| T14 | Low-rpm start-up including idle, adjacent orders only 0.5 order apart | Variation of order resolution with rpm; angle-domain STFT versus constant-bandwidth time-domain STFT |
 
-### 5.4 初始容差（实测后调整）
+### 5.4 Initial tolerances (to be adjusted after measurement)
 
-| 指标 | 对解析真值 | 对 MATLAB |
+| Quantity | Against analytic truth | Against MATLAB |
 |---|---|---|
-| 转速中位相对误差 | ≤ 0.1 % | ≤ 0.1 % |
-| 无转速计转速：在 3 % 内的帧比例（稳态或缓慢升速） | ≥ 90 % | 与 `rpmtrack` 相差 ≤ 5 个百分点 |
-| 平稳段阶次幅值 | ≤ 0.2 dB | ≤ 0.5 dB |
-| 共振附近阶次幅值 | ≤ 1 dB | ≤ 1 dB |
-| 阶次波形相关系数（去掉首尾） | ≥ 0.99 | ≥ 0.99 |
-| Vold-Kalman −3 dB 带宽 | 与设定值相差 ≤ 5 % | 与 MATLAB 相差 ≤ 5 % |
-| 阶次表往返幅值（T9） | ≤ 0.2 dB | — |
-| 去阶残差中目标阶次剩余能量（T12） | ≤ −20 dB | — |
-| 宽带合成帧率泵动（T11，调制谱帧率处峰值；10 s 录音单次实现有约 1 dB 统计散布，故按多次实现的均值或 ≥ 40 s 录音判定） | ≤ 1 dB | — |
+| Median relative rpm error | ≤ 0.1 % | ≤ 0.1 % |
+| Tacholess rpm: fraction of frames within 3 % (steady or slowly rising) | ≥ 90 % | Differs from `rpmtrack` by ≤ 5 percentage points |
+| Order amplitude, steady segments | ≤ 0.2 dB | ≤ 0.5 dB |
+| Order amplitude near a resonance | ≤ 1 dB | ≤ 1 dB |
+| Order waveform correlation coefficient (edges removed) | ≥ 0.99 | ≥ 0.99 |
+| Vold-Kalman −3 dB bandwidth | Differs from the set value by ≤ 5 % | Differs from MATLAB by ≤ 5 % |
+| Order-table round-trip amplitude (T9) | ≤ 0.2 dB | — |
+| Remaining energy of the target order in the residual after order removal (T12) | ≤ −20 dB | — |
+| Frame-rate pumping of broadband synthesis (T11, peak of the modulation spectrum at the frame rate; a single realisation of a 10 s recording has about 1 dB of statistical scatter, so judge by the mean over several realisations or by a recording of ≥ 40 s) | ≤ 1 dB | — |
 
-### 5.5 目录与流程
+### 5.5 Directory and workflow
 
 ```
 validation/
-├── make_signals.py      # 用 synth_runup 生成 T1–T14 和解析真值，保存为 .mat / .npz
-├── signals/             # 测试信号与解析真值
+├── make_signals.py      # generates T1–T14 and the analytic truth with synth_runup, saved as .mat / .npz
+├── signals/             # test signals and analytic truth
 ├── matlab/
-│   └── run_reference.m  # 只包含：加载数据、调用公开函数、保存输出
-├── reference/           # MATLAB 输出，附 MATLAB 与工具箱版本信息
-└── compare.py           # 运行 ROTA，与真值和 MATLAB 对比，生成报告
+│   └── run_reference.m  # contains only: load data, call public functions, save output
+├── reference/           # MATLAB output, with MATLAB and toolbox version information
+└── compare.py           # runs ROTA, compares with the truth and with MATLAB, generates the report
 ```
 
-1. 运行 `make_signals.py`，生成测试信号和解析真值。
-2. 在 MATLAB 中运行 `run_reference.m`。输出存入 `reference/`，同时记录 `ver` 给出的版本信息。
-3. 运行 `compare.py`，生成对照报告（表格和图）。
-4. 持续集成只运行 pytest（对解析真值）和对已存参考数据的比较，不需要安装 MATLAB。
+1. Run `make_signals.py` to generate the test signals and the analytic truth.
+2. Run `run_reference.m` in MATLAB. Save the output to `reference/`, and record the version information given by `ver`.
+3. Run `compare.py` to generate the comparison report (tables and figures).
+4. Continuous integration runs only pytest (against the analytic truth) and the comparison with the stored reference data; MATLAB does not need to be installed.
 
-公开 `reference/` 中的 MATLAB 输出之前，先确认所在机构的 MATLAB 许可条款允许。
-
----
-
-## 6. 设计约束：来自既往工作的教训
-
-以下经验来自作者既往的阶次分析、听音实验刺激制作和声音合成工作，决定了上文若干函数的设计。ROTA 不复用那些代码，只吸收教训。
-
-**转速与相位**
-
-1. 转速估计器必须报告是否触碰搜索边界。曾有基频跟踪器在整批文件上锁死在搜索下限，后续的角域重采样实际上什么也没做，而流程没有任何报错。→ `rpm_from_ridge` 的触界标志，T10。
-2. 单一基频无法对齐多个不相关的谐波族（如电机阶次与逆变器边带）。→ 多轴、多载波的设计：`OrderTable` 的频率偏移，`tracked_harmonics` 与 `order_waveform` 按轴分别处理。
-3. 三缸机的整数阶与点火阶（1.5 阶）能量相当，只用点火阶梳齿会锁到 2/3 或 4/3 倍转速；快速升速时窗内阶次频率的变化超过白化带宽，会把阶次本身抹掉。→ 梳齿可配置，白化带宽随工况调整，Viterbi 连续性惩罚。
-4. 换挡使转速非单调，沿转速分箱只对固定挡位工况有意义。→ `metric_vs_rpm` 的单调段选择与计数输出。
-5. 车速与转速的单位陷阱（m/s 与 km/h、rad/s 与 rpm）反复出错。→ 函数签名中显式单位，文档写明。
-
-**角域与提取**
-
-6. 线性插值的角域重采样没有抗混叠；静态高斯阶次掩模不能跟随幅相调制。→ `angular_resample` 带自适应低通与高阶插值；提取用相位锁定解调或 Vold-Kalman。
-7. 双轴转速相差 0.5 % 时，任何单通道跟踪器都会遇到偏差–方差墙（拍频与包络变化率同量级）。→ `resolution_check` 给出可分辨性警告，T8。
-8. 多通道指标做均匀平均会严重低估（能量集中在少数通道）。→ `waveform_similarity` 的能量加权。
-9. 时间平均谱会抹平漂移的阶次；纯正弦重合成则丢掉噪声底色，听起来不像原录音。→ `stationarize` 或角域平均 + 阶次与残差分开建模。
-
-**重合成**
-
-10. 在转速网格之间插值复幅值的实部与虚部时，相位不同的相邻点会相消，幅值塌陷可达数十 dB，并产生数十 Hz 的斩波。→ 插值幅值，相位单独处理。
-11. 随机相位的独立帧叠加必须用功率互补窗（√Hann）；用幅值 COLA 窗会产生帧率的功率泵动（曾达 +14 dB）。颗粒内的超低频会在窗切换处产生咔嗒声。→ `synthesize_broadband` 的窗设计与颗粒高通，T11。
-12. 对整谱加增益后再做 RMS 归一化，增益会被抵消。→ 增益只作用于阶次相对残差的超出部分，归一化基于参考合成。
-13. 相近的随机相位谱线会产生拍频；而把谱峰合并为高斯簇又会使音调变成窄带噪声、包络大幅摆动。→ `stationary_excerpt` 提供真正弦与随机相位簇两种模型，并报告包络摆动。
-14. 幅值约定不明确（峰值或 RMS、每 bin 幅值或功率）会造成 3 dB 乃至 30 dB 的错误。→ `OrderTable` 显式标记，设计原则 8。
-15. 参数在笔记本与脚本之间漂移，最终刺激所用的设置无法重建。→ `provenance` 侧车、由文件名派生的确定性种子。
-16. 超过 Nyquist 的阶次被钳到 fs/2 会产生一个假音。→ 静音。
-
-**桥接**
-
-17. 第三方心理声学工具需要校准的 Pa、48 kHz、规则时间轴和带缺口的 rpm(t)；它们各自有起始瞬态（响度与 tonality 约 0.6 s，粗糙度约 1.5 s，波动度 4–5 s），聚合时需跳过。→ `to_calibrated_48k`、`regularize_control`、`metric_vs_rpm` 的起始跳过参数。
-18. 长窗谱指标（TNR、PR、单帧 Aures）对阶次漂移敏感，听觉模型类指标不敏感。→ `order_prominence` 在角域（阶次恒定）上计算。
-
-**测试信号与验证**
-
-19. 既往的合成测试信号让转速从 0 开始且各阶满幅，幅值与转速无关，并用"合成所用的精确转速 + 已知阶次列表"做验证，属于循环论证。→ `synth_runup` 保存每阶幅值与相位的真值，带怠速与幅值律；验证加入转速误差（T13）和低转速起步（T14）。
-20. 等带宽的时域 STFT 重标为阶次轴，在低转速下主瓣跨越多个阶次，半阶次分不开。→ `rpm_order_map` 用角域 STFT，窗长按圈数定义；`resolution_check` 给出提示。
-21. 同步解调用固定 20 Hz 低通，相邻阶次（0.5 阶间隔）互相泄漏，转速接近 0 时所有阶次塌缩。→ 解调带宽按阶次间距随转速缩放；`tracked_harmonics` 的窗长以圈数计。
-22. 同一算法的 MATLAB 与 Python 实现在采样点数、窗函数、积分规则上悄悄不一致，结果无法互相印证。→ 单一实现、单一真值生成器、配置落盘。
-
-**测量与对齐**
-
-23. 多套采集系统无硬件同步时只能靠拍手，精度为几十 ms；一次录音没有标记就无法对齐。→ `align_signals` 支持起止两次标记与漂移估计，并报告不确定度；文档建议每段录音首尾各一次标记。
-24. 慢速通道（车速、加速度）与声学通道的采样率成整数比（如 5:1），且各车的通道布局与标定不同。→ `regularize_control` 接受任意采样率；标定因子显式传入。
-25. 球谐基的约定（ACN/SN3D、Condon–Shortley 相位、N3D 缩放）在不同代码间不一致，会让方向图旋转 180° 或按阶加权。这是配套空间包的教训；ROTA 核心只保证按通道线性，不内置任何球谐约定。
-
-**声音操控**
-
-26. 改变录音的表观车速不能靠视频变速或通用的变调、变速；要把阶次与残差分开，按新转速重调制阶次，按车速律缩放残差。每 km/h 的频率变化只有约 0.25 %，转速与频率精度必须远高于此。→ `remap_rpm`、`resynthesize`。
-27. 分量分别渲染再混合时的增益必须显式记录（曾有未说明的 ×2 和混音工具的 1/N 缩放）；A 计权用零相位双向滤波会加权两次。→ 设计原则 8；`a_weighting` 只施加一次。
+Before publishing the MATLAB output in `reference/`, confirm that the MATLAB licence terms of the institution concerned allow it.
 
 ---
 
-## 7. 参考文献
+## 6. Design constraints: lessons from earlier work
 
-标"待核对"的条目在实现对应函数前核对题录。
+The following experience comes from the author's earlier work on order analysis, preparation of listening-experiment stimuli and sound synthesis, and it shaped the design of several functions above. ROTA reuses none of that code; it takes over only the lessons.
+
+**Speed and phase**
+
+1. A speed estimator must report whether it has hit the search boundary. A fundamental-frequency tracker once locked at the lower search limit on an entire batch of files, so the subsequent angle-domain resampling effectively did nothing, and the pipeline raised no error. → the boundary-hit flag of `rpm_from_ridge`, T10.
+2. A single fundamental frequency cannot align several unrelated harmonic families (e.g. motor orders and inverter sidebands). → multi-shaft, multi-carrier design: the frequency offset of `OrderTable`; `tracked_harmonics` and `order_waveform` process each shaft separately.
+3. In a three-cylinder engine the integer orders and the firing order (order 1.5) have comparable energy, so a comb built only on the firing order locks onto 2/3 or 4/3 of the true speed; in a fast run-up the change of order frequency within the window exceeds the whitening bandwidth, which erases the order itself. → configurable combs, whitening bandwidth adjusted to the operating condition, Viterbi continuity penalty.
+4. Gear shifts make rpm non-monotonic, so binning along rpm is meaningful only for fixed-gear conditions. → monotonic segment selection and count output in `metric_vs_rpm`.
+5. Unit pitfalls between vehicle speed and rpm (m/s versus km/h, rad/s versus rpm) caused repeated errors. → units explicit in function signatures and stated in the documentation.
+
+**Angle domain and extraction**
+
+6. Angle-domain resampling with linear interpolation has no anti-aliasing; a static Gaussian order mask cannot follow amplitude and phase modulation. → `angular_resample` has an adaptive low-pass and high-order interpolation; extraction uses phase-locked demodulation or Vold-Kalman.
+7. When two shafts differ in speed by 0.5 %, any single-channel tracker meets a bias–variance wall (the beat frequency and the rate of envelope change are of the same order). → `resolution_check` gives a resolvability warning, T8.
+8. Uniform averaging of multichannel metrics severely underestimates them (the energy is concentrated in a few channels). → energy weighting in `waveform_similarity`.
+9. A time-averaged spectrum smears drifting orders; pure-sinusoid resynthesis loses the noise floor and does not sound like the original recording. → `stationarize` or angle-domain averaging + modelling orders and residual separately.
+
+**Resynthesis**
+
+10. When the real and imaginary parts of complex amplitudes are interpolated between rpm grid points, adjacent points with different phases cancel; the amplitude can collapse by tens of dB, and chopping at tens of Hz appears. → interpolate the amplitude, and handle the phase separately.
+11. Independent frames with random phases must be overlap-added with a power-complementary window (√Hann); an amplitude-COLA window produces power pumping at the frame rate (once as much as +14 dB). Very low frequencies within a grain produce clicks at the window switch. → window design and grain high-pass in `synthesize_broadband`, T11.
+12. If RMS normalisation is applied after a gain is applied to the whole spectrum, the gain is cancelled out. → the gain acts only on the part by which the orders exceed the residual, and normalisation is based on the reference synthesis.
+13. Nearby random-phase spectral lines produce beating, whereas merging spectral peaks into Gaussian clusters turns the tone into narrowband noise with a strongly fluctuating envelope. → `stationary_excerpt` offers two models, true sinusoids and random-phase clusters, and reports the envelope fluctuation.
+14. An unclear amplitude convention (peak or RMS, amplitude or power per bin) causes errors of 3 dB or even 30 dB. → explicit marking in `OrderTable`, design principle 8.
+15. Parameters drifted between notebooks and scripts, and the settings used for the final stimulus could not be reconstructed. → `provenance` sidecar, deterministic seeds derived from the file name.
+16. An order above Nyquist clamped to fs/2 produces a spurious tone. → mute it.
+
+**Bridging**
+
+17. Third-party psychoacoustic tools need calibrated Pa, 48 kHz, a regular time axis and rpm(t) with gaps; each has its own start-up transient (about 0.6 s for loudness and tonality, about 1.5 s for roughness, 4–5 s for fluctuation strength), which must be skipped when aggregating. → `to_calibrated_48k`, `regularize_control`, and the start-skip parameter of `metric_vs_rpm`.
+18. Long-window spectral metrics (TNR, PR, single-frame Aures) are sensitive to order drift; auditory-model metrics are not. → `order_prominence` is computed in the angle domain (orders constant).
+
+**Test signals and validation**
+
+19. Earlier synthetic test signals started the rpm at 0 with every order at full amplitude, so the amplitude was independent of rpm, and they were validated with "the exact rpm used for synthesis + the known list of orders", which is circular reasoning. → `synth_runup` stores the true amplitude and phase of each order, with idle and amplitude laws; validation adds rpm errors (T13) and low-rpm start-up (T14).
+20. A constant-bandwidth time-domain STFT relabelled onto an order axis has a main lobe that spans several orders at low rpm, so half orders cannot be separated. → `rpm_order_map` uses an angle-domain STFT with the window length defined in revolutions; `resolution_check` gives a hint.
+21. Synchronous demodulation with a fixed 20 Hz low-pass lets adjacent orders (0.5-order spacing) leak into each other, and at rpm near 0 all orders collapse. → the demodulation bandwidth scales with rpm according to the order spacing; the window length of `tracked_harmonics` is in revolutions.
+22. The MATLAB and Python implementations of the same algorithm silently differed in the number of samples, the window function and the integration rule, so the results could not corroborate each other. → a single implementation, a single ground-truth generator, configuration saved to disk.
+
+**Measurement and alignment**
+
+23. Without hardware synchronisation between several acquisition systems, only hand claps are available, with an accuracy of tens of ms; a recording without a marker cannot be aligned. → `align_signals` supports start and end markers and drift estimation, and reports the uncertainty; the documentation recommends one marker at the start and one at the end of each recording.
+24. Slow channels (vehicle speed, acceleration) have a sampling rate at an integer ratio to the acoustic channels (e.g. 5:1), and the channel layout and calibration differ from vehicle to vehicle. → `regularize_control` accepts any sampling rate; calibration factors are passed explicitly.
+25. Spherical-harmonic conventions (ACN/SN3D, Condon–Shortley phase, N3D scaling) are inconsistent between codes, which can rotate a directional pattern by 180° or weight it per order. This is a lesson for the companion spatial package; the ROTA core only guarantees per-channel linearity and builds in no spherical-harmonic convention.
+
+**Sound manipulation**
+
+26. Changing the apparent vehicle speed of a recording cannot be done by video speed change or by general pitch shifting and speed change; the orders and the residual must be separated, the orders re-modulated at the new rpm, and the residual scaled according to a vehicle-speed law. The frequency changes by only about 0.25 % per km/h, so rpm and frequency accuracy must be far better than this. → `remap_rpm`, `resynthesize`.
+27. The gains used when components are rendered separately and then mixed must be recorded explicitly (there was once an undocumented ×2 and a 1/N scaling in a mixing tool); zero-phase forward-backward A-weighting weights twice. → design principle 8; `a_weighting` is applied only once.
+
+---
+
+## 7. References
+
+Entries marked "to be verified" are checked against their bibliographic records before the corresponding function is implemented.
 
 - Brandt, A. (2011). *Noise and Vibration Analysis: Signal Analysis and Experimental Procedures*. Wiley.
 - Fyfe, K. R., & de Munck, E. D. S. (1997). Analysis of computed order tracking. *Mechanical Systems and Signal Processing*, 11(2), 187–205. doi:10.1006/mssp.1996.0056
-- Potter, R. (1990). A new order tracking method for rotating machinery. *Sound and Vibration*, 24(9), 30–34.（待核对）
-- Gade, S., Herlufsen, H., Konstantin-Hansen, H., & Wismer, N. J. (1995). Order tracking analysis. *Brüel & Kjær Technical Review*, No. 2.（待核对）
+- Potter, R. (1990). A new order tracking method for rotating machinery. *Sound and Vibration*, 24(9), 30–34. (to be verified)
+- Gade, S., Herlufsen, H., Konstantin-Hansen, H., & Wismer, N. J. (1995). Order tracking analysis. *Brüel & Kjær Technical Review*, No. 2. (to be verified)
 - Vold, H., & Leuridan, J. (1993). High resolution order tracking at extreme slew rates, using Kalman tracking filters. SAE Technical Paper 931288.
 - Vold, H., & Leuridan, J. (1995). High resolution order tracking using Kalman tracking filters: theory and applications. SAE Technical Paper 951332.
 - Vold, H., Mains, M., & Blough, J. (1997). Theoretical foundations for high performance order tracking with the Vold-Kalman tracking filter. SAE Technical Paper 972007.
 - Feldbauer, C., & Höldrich, R. (2000). Realization of Vold-Kalman tracking filter: a least squares problem. *Proceedings of the COST G-6 Conference on Digital Audio Effects (DAFx-00)*, Verona.
 - Tůma, J. (2005). The passband width of the Vold-Kalman order tracking filter. *Sborník vědeckých prací VŠB-TU Ostrava, Řada strojní*, 51(2), 149–154.
 - Pan, M.-C., & Lin, Y.-F. (2006). Further exploration of Vold–Kalman-filtering order tracking with shaft-speed information—I: Theoretical part, numerical implementation and parameter investigations. *Mechanical Systems and Signal Processing*, 20(5), 1134–1154.
-- Pan, M.-C., & Wu, C.-X. (2007). Adaptive Vold–Kalman filtering order tracking. *Mechanical Systems and Signal Processing*, 21(8), 2957–2969.（待核对）
+- Pan, M.-C., & Wu, C.-X. (2007). Adaptive Vold–Kalman filtering order tracking. *Mechanical Systems and Signal Processing*, 21(8), 2957–2969. (to be verified)
 - Peeters, C., Leclère, Q., Antoni, J., Lindahl, P., Donnal, J., Leeb, S., & Helsen, J. (2019). Review and comparison of tacholess instantaneous speed estimation methods on experimental vibration data. *Mechanical Systems and Signal Processing*, 129, 407–436. doi:10.1016/j.ymssp.2019.02.031
 - Antoni, J. (2009). Cyclostationarity by examples. *Mechanical Systems and Signal Processing*, 23(4), 987–1036.
-- Antoni, J., et al. (2022). 角–时循环平稳框架下的谐波跟踪与提取。*AIAA Journal*, 60.（待核对）
-- Rémond, D., Antoni, J., & Randall, R. B. (2014). Editorial for the special issue on instantaneous angular speed (IAS) processing and angular applications. *Mechanical Systems and Signal Processing*, 44.（待核对）
+- Antoni, J., et al. (2022). Harmonic tracking and extraction in the angle–time cyclostationary framework. *AIAA Journal*, 60. (to be verified)
+- Rémond, D., Antoni, J., & Randall, R. B. (2014). Editorial for the special issue on instantaneous angular speed (IAS) processing and angular applications. *Mechanical Systems and Signal Processing*, 44. (to be verified)
 - Hermes, D. J. (1988). Measurement of pitch by subharmonic summation. *Journal of the Acoustical Society of America*, 83(1), 257–264.
 - McAulay, R. J., & Quatieri, T. F. (1986). Speech analysis/synthesis based on a sinusoidal representation. *IEEE Transactions on Acoustics, Speech, and Signal Processing*, 34(4), 744–754.
 - Serra, X., & Smith, J. O. (1990). Spectral modeling synthesis: A sound analysis/synthesis system based on a deterministic plus stochastic decomposition. *Computer Music Journal*, 14(4), 12–24.
@@ -363,15 +363,15 @@ validation/
 - Welch, P. D. (1967). The use of fast Fourier transform for the estimation of power spectra: A method based on time averaging over short, modified periodograms. *IEEE Transactions on Audio and Electroacoustics*, 15(2), 70–73.
 - Knapp, C. H., & Carter, G. C. (1976). The generalized correlation method for estimation of time delay. *IEEE Transactions on Acoustics, Speech, and Signal Processing*, 24(4), 320–327.
 - Griffin, D. W., & Lim, J. S. (1984). Signal estimation from modified short-time Fourier transform. *IEEE Transactions on Acoustics, Speech, and Signal Processing*, 32(2), 236–243.
-- Becker, J., & Sottek, R. (2019). Psychoacoustic order tonality calculation. SAE Technical Paper.（待核对）
-- Sottek, R., Becker, J., & Lobato, T. (2025). High-resolution option for the Sottek hearing model tonality enables accurate order analysis. SAE Technical Paper.（待核对）
-- Dupré, T., et al. (2023). Analysis-by-synthesis of engine sounds. *Acta Acustica*, 7.（待核对）
+- Becker, J., & Sottek, R. (2019). Psychoacoustic order tonality calculation. SAE Technical Paper. (to be verified)
+- Sottek, R., Becker, J., & Lobato, T. (2025). High-resolution option for the Sottek hearing model tonality enables accurate order analysis. SAE Technical Paper. (to be verified)
+- Dupré, T., et al. (2023). Analysis-by-synthesis of engine sounds. *Acta Acustica*, 7. (to be verified)
 - IEC 61672-1:2013. Electroacoustics – Sound level meters – Part 1: Specifications.
 - ECMA-74 (Annex D: prominent discrete tones); ISO 7779 (Annex D); ECMA-418-1; ECMA-418-2:2025.
 - ISO 532-1:2017. Acoustics – Methods for calculating loudness – Part 1: Zwicker method.
 
 ---
 
-## 8. 作者与致谢
+## 8. Author and acknowledgements
 
-ROTA 由 Zhenxian Li 设计、实现与维护，是唯一贡献者。开发过程中使用了 Claude（Anthropic）作为辅助工具，用于文献梳理、代码审查和文档整理；所有算法选择、实现与验证由作者负责。
+ROTA is designed, implemented and maintained by Zhenxian Li. Claude (Anthropic) was used as an assistant during development.
