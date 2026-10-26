@@ -1,15 +1,15 @@
 # ROTA
 
 [![Tests](https://github.com/ZhenxianLi/ROTA/actions/workflows/tests.yml/badge.svg)](https://github.com/ZhenxianLi/ROTA/actions/workflows/tests.yml)
-[![License: GPL v3+](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
-[![Python 3.10–3.13](https://img.shields.io/badge/python-3.10%E2%80%933.13-blue.svg)](pyproject.toml)
-[![Dependencies: NumPy + SciPy](https://img.shields.io/badge/dependencies-NumPy%20%2B%20SciPy-informational.svg)](pyproject.toml)
+[![License: GPL v3+](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](https://github.com/ZhenxianLi/ROTA/blob/main/LICENSE)
+[![Python 3.10–3.13](https://img.shields.io/badge/python-3.10%E2%80%933.13-blue.svg)](https://github.com/ZhenxianLi/ROTA/blob/main/pyproject.toml)
+[![Dependencies: NumPy + SciPy](https://img.shields.io/badge/dependencies-NumPy%20%2B%20SciPy-informational.svg)](https://github.com/ZhenxianLi/ROTA/blob/main/pyproject.toml)
 
 **R**otational **O**rder **T**racking & **A**nalysis. *Rota* is Latin for "wheel".
 
 ROTA is a lightweight, open-source Python library for order analysis of noise and vibration signals from rotating machinery (engines, electric motors, gearboxes), with tools for order-based sound resynthesis. It depends only on NumPy and SciPy. The project rule is that each function is implemented independently from the published literature and tested on synthetic signals with known analytic ground truth.
 
-The design document is [ROADMAP.md](ROADMAP.md).
+The design document is [ROADMAP.md](https://github.com/ZhenxianLi/ROTA/blob/main/ROADMAP.md).
 
 ## Status
 
@@ -79,11 +79,11 @@ The amplitude convention of every function is stated in its docstring.
 
 ## Examples
 
-Four scripts in [examples/](examples/) cover order maps and slices, tachometer and tacholess speed, order extraction and removal, and order-table resynthesis. Each builds its signal with `rota.synth` and prints its results against the known truth.
+Four scripts in [examples/](https://github.com/ZhenxianLi/ROTA/tree/main/examples) cover order maps and slices, tachometer and tacholess speed, order extraction and removal, and order-table resynthesis. Each builds its signal with `rota.synth` and prints its results against the known truth.
 
-![Campbell diagram, order map and order slices against the synthetic truth](docs/images/01_order_map.png)
+![Campbell diagram, order map and order slices against the synthetic truth](https://raw.githubusercontent.com/ZhenxianLi/ROTA/main/docs/images/01_order_map.png)
 
-*Campbell diagram and order map of a run-up from idle (half orders, a 180 Hz resonance, a fixed 250 Hz tone, noise), and two order slices against the amplitude put into the signal ([examples/01_order_map.py](examples/01_order_map.py)).*
+*Campbell diagram and order map of a run-up from idle (half orders, a 180 Hz resonance, a fixed 250 Hz tone, noise), and two order slices against the amplitude put into the signal ([examples/01_order_map.py](https://github.com/ZhenxianLi/ROTA/blob/main/examples/01_order_map.py)).*
 
 ## Conventions
 
@@ -109,7 +109,7 @@ Four scripts in [examples/](examples/) cover order maps and slices, tachometer a
 
 Analytic ground truth from `rota.synth` is the first reference: every test signal comes with its true speed, shaft angle, and amplitude and phase of each order. Where a public implementation elsewhere exists, a black-box comparison with explicit parameters is planned as a second reference, comparing physical quantities (speed curves, order amplitudes along a ridge), not map cells; when the two disagree, the analytic truth decides. **This comparison has not been run yet: every result reported so far is against the analytic truth only.** Resynthesis is tested by round trip: synthesise, analyse, compare with the input table. Continuous integration runs pytest only.
 
-The design document defines 14 validation signals (T1 to T14). Version 0.1 covers T1 (single order, constant amplitude, linear run-up), T2 (several orders, a fixed-frequency resonance, noise), T5 (multi-pulse tachometer with jitter and dropped pulses) and T14 (low-speed start from idle with orders half an order apart). Version 0.2 adds T3 (exponential run-down), T4 (crossing orders on two shafts), T6 (fast run-up), T8 (twin shafts 0.5–4 % apart), T10 (true speed outside the search range), T12 (order removal) and T13 (extraction error versus speed-reference error). Version 0.3 adds T9 (order table → synthesis → analysis → table round trip, `tests/test_ordertable.py`) and T11 (broadband synthesis: PSD accuracy and no frame-rate pumping, `tests/test_broadband.py`). Cases and measured results: [validation/README.md](validation/README.md).
+The design document defines 14 validation signals (T1 to T14). Version 0.1 covers T1 (single order, constant amplitude, linear run-up), T2 (several orders, a fixed-frequency resonance, noise), T5 (multi-pulse tachometer with jitter and dropped pulses) and T14 (low-speed start from idle with orders half an order apart). Version 0.2 adds T3 (exponential run-down), T4 (crossing orders on two shafts), T6 (fast run-up), T8 (twin shafts 0.5–4 % apart), T10 (true speed outside the search range), T12 (order removal) and T13 (extraction error versus speed-reference error). Version 0.3 adds T9 (order table → synthesis → analysis → table round trip, `tests/test_ordertable.py`) and T11 (broadband synthesis: PSD accuracy and no frame-rate pumping, `tests/test_broadband.py`). Cases and measured results: [validation/README.md](https://github.com/ZhenxianLi/ROTA/blob/main/validation/README.md).
 
 Tolerances (the analytic column is enforced by the test suite; the black-box column is the target for the planned comparison):
 
@@ -125,7 +125,7 @@ Tolerances (the analytic column is enforced by the test suite; the black-box col
 | Remaining energy of a removed order in the residual (T12) | <= -20 dB | not compared |
 | Frame-rate pumping of broadband synthesis (T11) | <= 1 dB | not compared |
 
-All rows of the analytic column are met by the current release; measured values are in [validation/README.md](validation/README.md).
+All rows of the analytic column are met by the current release; measured values are in [validation/README.md](https://github.com/ZhenxianLi/ROTA/blob/main/validation/README.md).
 
 ## Independence statement
 
@@ -135,11 +135,11 @@ All algorithms are implemented from the published literature cited in each docst
 
 ## License
 
-ROTA is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. See [LICENSE](LICENSE).
+ROTA is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. See [LICENSE](https://github.com/ZhenxianLi/ROTA/blob/main/LICENSE).
 
 ## Citation
 
-See [CITATION.cff](CITATION.cff) (GitHub shows it as "Cite this repository"). A Zenodo DOI is planned for v1.0.
+See [CITATION.cff](https://github.com/ZhenxianLi/ROTA/blob/main/CITATION.cff) (GitHub shows it as "Cite this repository"). A Zenodo DOI is planned for v1.0.
 
 ## Acknowledgements
 
