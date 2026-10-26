@@ -236,7 +236,7 @@ def stable_seed(*keys):
     Returns
     -------
     int
-        Seed in ``[0, 2**63)``.
+        Seed in ``[0, 2**63)``. No amplitudes are involved.
 
     Raises
     ------

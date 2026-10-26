@@ -56,7 +56,7 @@ def rpm_to_phase(rpm, fs=None, *, t=None, delay=0.0, min_rpm=None, rev0=0.0):
     -------
     rev : ndarray, same shape as ``rpm``
         Cumulative shaft angle in revolutions. Multiply by ``2*pi*order`` to
-        obtain the phase in rad of a given order.
+        obtain the phase in rad of a given order. No amplitudes are involved.
 
     References
     ----------
@@ -164,7 +164,8 @@ def tacho_to_rpm(
     Returns
     -------
     rpm : ndarray
-        Speed in rev/min at ``t_out``.
+        Speed in rev/min at ``t_out``. The tachometer amplitude only sets the
+        trigger levels; no amplitude convention applies.
     info : dict
         Only if ``return_info``.
 
@@ -303,7 +304,8 @@ def regularize_control(
     t_out : ndarray
         Output times in s.
     y : ndarray
-        Resampled signal, same unit as ``x``; NaN in gaps.
+        Resampled signal, same unit as ``x``; NaN in gaps. Values are
+        resampled, not scaled, so no amplitude convention applies.
 
     References
     ----------

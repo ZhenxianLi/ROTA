@@ -96,7 +96,8 @@ def rpm_profiles(
     Returns
     -------
     ndarray, shape (n,)
-        Profile values, in the unit of ``start`` and ``stop``.
+        Profile values, in the unit of ``start`` and ``stop``. No amplitudes
+        are involved.
 
     References
     ----------
