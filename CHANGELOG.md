@@ -20,6 +20,7 @@ Order-based resynthesis.
 - Validation cases T9 (order-table round trip) and T11 (broadband synthesis).
 - Four example scripts with figures (`examples/`).
 - CI job testing the oldest supported dependencies (Python 3.10, NumPy 1.23, SciPy 1.9).
+- Published on PyPI as `rota-order` (`pip install rota-order`; the import name stays `rota`).
 
 ### Changed
 

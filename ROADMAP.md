@@ -6,7 +6,7 @@ Latin *rota* means "wheel", from the same root as rotate, rotation and rotor.
 
 ROTA is a lightweight, open-source, validated Python library for order analysis of noise and vibration signals from rotating machinery (engines, electric motors, gearboxes, etc.), with tools for order-based sound resynthesis. It depends only on NumPy and SciPy. Each function is implemented independently from the published literature and comes with a validation script.
 
-Naming convention: the project is written ROTA in running text; the package and import name in code is lowercase `rota` (`pip install rota`, `import rota`).
+Naming convention: the project is written ROTA in running text; the import name in code is lowercase `rota` (`import rota`); the distribution on PyPI is `rota-order` (`pip install rota-order`), because the name `rota` is taken on PyPI.
 
 Licence: GPL-3.0-or-later (decided 2026-10-25).
 

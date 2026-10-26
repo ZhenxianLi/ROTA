@@ -13,7 +13,7 @@ The design document is [ROADMAP.md](https://github.com/ZhenxianLi/ROTA/blob/main
 
 ## Status
 
-Pre-alpha. The current release is 0.3.0; functions and signatures may still change before 1.0. The package is not published on PyPI yet (planned for v1.0); install from source.
+Pre-alpha. The current release is 0.3.0; functions and signatures may still change before 1.0.
 
 | Module | Contents | Since |
 |---|---|---|
@@ -28,13 +28,21 @@ Pre-alpha. The current release is 0.3.0; functions and signatures may still chan
 | `rota.tonal` | Thin bridge to open-source psychoacoustic tools: calibrated level, resampling, order prominence | v0.4 (planned) |
 | `rota.plot` | Plotting helpers, kept separate from computation | v0.4 (planned) |
 
-Planned for v1.0: full validation report, English documentation, PyPI release, Zenodo DOI.
+Planned for v1.0: full validation report, complete documentation, Zenodo DOI.
 
 Out of scope: real-time audio I/O, GUI, rotor-dynamics analysis (orbits, Bode plots), spatial audio, reading proprietary file formats, and the psychoacoustic metrics themselves (loudness, sharpness, roughness, tonality).
 
 ## Installation
 
-Python 3.10 or later, NumPy 1.23 or later, SciPy 1.9 or later. Install from source:
+Python 3.10 or later, NumPy 1.23 or later, SciPy 1.9 or later. From PyPI:
+
+```
+pip install rota-order
+```
+
+The distribution is called `rota-order` because the name `rota` is taken on PyPI; the import name is `rota` (`import rota`).
+
+From source:
 
 ```
 git clone https://github.com/ZhenxianLi/ROTA.git
