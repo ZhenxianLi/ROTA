@@ -13,8 +13,10 @@ in Hz that may vary with time:
   analysis such as :func:`rota.maps.rpm_order_map` or a phase-locked
   short-time extractor). Resolution ``c * rpm / (60 * window_revs)`` Hz: the
   same in orders at every speed.
-* ``bandwidth``: Vold-Kalman -3 dB filter bandwidth in Hz. Resolution
-  ``VK_SEPARATION_FACTOR * bandwidth`` Hz at every speed.
+* ``bandwidth``: Vold-Kalman -3 dB bandwidth ``B`` in Hz, with the meaning of
+  the ``bandwidth`` argument of :func:`rota.extract.order_waveform` (one-sided
+  offset from the carrier; pass band ``2 B`` wide). Resolution
+  ``VK_SEPARATION_FACTOR * 2 * B`` Hz at every speed.
 * ``time_window``: fixed window in seconds (equal-bandwidth STFT). Resolution
   ``c / time_window`` Hz at every speed, so at low speed it spans several
   orders (ROADMAP section 6, items 20 and 21).
@@ -30,7 +32,9 @@ Constants (module level, used by the check and documented in
     Half of the Hann -3 dB bandwidth (1.44 bins): the envelope modulation
     frequency, in bins, below which a window follows an amplitude change.
 ``VK_SEPARATION_FACTOR`` = 1
-    Required line separation in units of the Vold-Kalman -3 dB bandwidth.
+    Required line separation in units of the Vold-Kalman pass-band width
+    ``2 B``. At a separation of ``2 B`` the neighbouring line is attenuated by
+    about 17.6 dB by the second-order filter.
 """
 
 import math
@@ -215,7 +219,7 @@ def _resolution_hz(kind, value, r_max):
     if kind == "window_revs":
         return HANN_MAINLOBE_HALF_WIDTH * r_max / (60.0 * value)
     if kind == "bandwidth":
-        return np.full(np.shape(r_max), VK_SEPARATION_FACTOR * value)
+        return np.full(np.shape(r_max), VK_SEPARATION_FACTOR * 2.0 * value)
     return np.full(np.shape(r_max), HANN_MAINLOBE_HALF_WIDTH / value)
 
 
@@ -290,7 +294,7 @@ def _evaluate(kind, value, t, d, r_max, r_min, f_max, valid, crossings):
         near_equal=bool(rel_min <= NEAR_EQUAL_RELATIVE),
         max_envelope_rate_hz=env_max,
         required_window_revs=math.inf if d_min == 0.0 else req_w,
-        required_bandwidth_hz=d_min / VK_SEPARATION_FACTOR,
+        required_bandwidth_hz=d_min / (2.0 * VK_SEPARATION_FACTOR),
         required_time_window_s=math.inf if d_min == 0.0 else c / d_min,
     )
     return out
@@ -349,12 +353,12 @@ def resolution_check(
         are separated down to the first side lobe, -31.5 dB). For a pair on
         two shafts the coarser (faster) shaft sets the resolution.
     ``bandwidth``
-        Vold-Kalman -3 dB bandwidth in Hz, taken as the full width of the pass
-        band centred on each order. Two lines are resolved if they are at
-        least ``VK_SEPARATION_FACTOR * bandwidth`` apart (factor 1: the other
-        line lies at least half a pass-band width outside the edge). The exact
-        roll-off depends on the filter order and weighting, so this is a rule
-        of thumb, constant in Hz at every speed.
+        Vold-Kalman -3 dB bandwidth ``B`` in Hz, as the ``bandwidth`` argument
+        of :func:`rota.extract.order_waveform`: the one-sided offset from the
+        carrier at which the envelope response is -3 dB, so the pass band is
+        ``2 B`` wide. Two lines are resolved if they are at least
+        ``VK_SEPARATION_FACTOR * 2 * B`` apart (factor 1: the neighbour is
+        attenuated by about 17.6 dB). Constant in Hz at every speed.
     ``time_window``
         Fixed window of ``time_window`` seconds (equal-bandwidth STFT, Hann).
         Resolution ``c / time_window`` Hz, constant in Hz. At low speed the
@@ -373,8 +377,8 @@ def resolution_check(
     near-equal lines but cannot follow fast envelope changes, a wide one
     follows the envelope but lets the neighbour leak in. A setting that just
     resolves a pair follows envelope changes only up to
-    ``max_envelope_rate_hz``: for ``bandwidth`` the envelope cut-off is half
-    the -3 dB bandwidth, so at most ``separation / (2 * VK_SEPARATION_FACTOR)``;
+    ``max_envelope_rate_hz``: for ``bandwidth`` the envelope cut-off is ``B``,
+    so at most ``separation / (2 * VK_SEPARATION_FACTOR)``;
     for the windows it is ``HANN_ENVELOPE_CUTOFF / c * separation`` (0.36
     times the separation), where ``HANN_ENVELOPE_CUTOFF = 0.72`` is half the
     Hann -3 dB bandwidth of 1.44 bins. For twin shafts differing by
@@ -587,7 +591,7 @@ def resolution_check(
                 "setting both resolves the pair and follows the envelope"
             )
         if kind == "bandwidth":
-            setting_env = 0.5 * value
+            setting_env = value
         elif kind == "time_window":
             setting_env = HANN_ENVELOPE_CUTOFF / value
         else:
@@ -635,7 +639,7 @@ def resolution_check(
                 HANN_ENVELOPE_CUTOFF * float(np.nanmin(speed)) / (60.0 * rec_w) < floor
             ):
                 rec_w = None
-            if rec_b is not None and 0.5 * rec_b < floor:
+            if rec_b is not None and rec_b < floor:
                 rec_b = None
             if rec_t is not None and HANN_ENVELOPE_CUTOFF / rec_t < floor:
                 rec_t = None

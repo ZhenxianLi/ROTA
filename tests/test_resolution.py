@@ -20,6 +20,7 @@ from rota._resolution import (
     ResolutionWarning,
     resolution_check,
 )
+from rota.extract import order_waveform
 from rota.synth import rpm_profiles, synth_runup
 
 FS = 2000.0
@@ -135,19 +136,75 @@ def test_recommendation_matches_analytic_values_for_half_percent_twins():
     rep = _twin(1.0 + eps, window_revs=W)
     # window: c * (1 + eps) / (order * eps) revolutions
     assert rep.recommended_window_revs == pytest.approx(2.0 * (1 + eps) / (ORDER * eps), rel=3e-3)
-    # bandwidth: smallest separation (at 2800 rpm); time window: c / separation
+    # bandwidth B (one-sided -3 dB offset, pass band 2 B): the pass band must fit
+    # in the smallest separation (at 2800 rpm), B = d_min / 2; time window: c / d_min
     df_min = ORDER * eps * 2800.0 / 60.0
-    assert rep.recommended_bandwidth == pytest.approx(df_min, rel=3e-3)
+    # (rounded down to three significant figures: 1.1667 -> 1.16, a 0.6 % step)
+    assert rep.recommended_bandwidth == pytest.approx(df_min / 2.0, rel=1e-2)
     assert rep.recommended_time_window == pytest.approx(2.0 / df_min, rel=3e-3)
     # recommended window is rounded up, bandwidth down (never to the unsafe side)
     assert rep.recommended_window_revs >= 2.0 * (1 + eps) / (ORDER * eps) * (1 - 1e-9)
-    assert rep.recommended_bandwidth <= df_min * (1 + 1e-9)
+    assert rep.recommended_bandwidth <= df_min / 2.0 * (1 + 1e-9)
 
 
-def test_vk_bandwidth_limit_is_one_bandwidth():
+def test_vk_bandwidth_limit_is_half_the_separation():
+    # bandwidth B is the one-sided -3 dB offset, as in order_waveform: the pass
+    # band is 2 B wide and two lines are resolved from 2 B * VK_SEPARATION_FACTOR apart.
     df_min = ORDER * 0.02 * 2800.0 / 60.0  # 9.33 Hz for 2 % twins
-    assert _twin(1.02, bandwidth=0.99 * df_min).ok
-    assert not _twin(1.02, bandwidth=1.01 * df_min).ok
+    assert _twin(1.02, bandwidth=0.99 * df_min / 2.0).ok
+    assert not _twin(1.02, bandwidth=1.01 * df_min / 2.0).ok
+    # The resolution is reported in Hz: the full pass-band width 2 B.
+    assert _twin(1.02, bandwidth=3.0).pairs[0]["resolution_hz"] == pytest.approx(6.0)
+    # ... and the old reading (B as full width) would have resolved B = df_min.
+    assert not _twin(1.02, bandwidth=df_min).ok
+
+
+@pytest.mark.parametrize("delta", [3.0, 8.0])
+def test_vk_rule_matches_the_real_filter_on_stationary_twins(delta):
+    """The bandwidth rule against order_waveform: leakage of the neighbour line.
+
+    Two stationary lines ``delta`` Hz apart (order 10 on two shafts, strong
+    line 1.0, weak line 0.3). The weak line is extracted alone
+    (``joint=False``), so whatever the strong neighbour contributes to its
+    envelope is leakage; its size relative to the neighbour's amplitude is the
+    single-order response ``H(delta)`` of the filter. With ``B = delta / 2``
+    (pass band ``2 B = delta``: just resolved according to the check) that is
+    -17.6 dB; with ``B = delta`` the neighbour sits at the -3 dB point of the
+    pass band (the check calls the pair unresolved) and leaks -3 dB.
+    """
+    fs, n, r0 = 2000.0, 12000, 3000.0
+    rpm = np.column_stack([np.full(n, r0), np.full(n, r0 + 6.0 * delta)])  # 10 * dr / 60 = delta
+    orders = [
+        {"order": ORDER, "shaft": 0, "amplitude": 0.3, "phase": 0.4},
+        {"order": ORDER, "shaft": 1, "amplitude": 1.0, "phase": 2.0},
+    ]
+    sig = synth_runup(fs, rpm, orders, seed=1)
+    assert np.abs(sig.order_frequency[:, 0] - sig.order_frequency[:, 1]).min() == pytest.approx(delta)
+    truth = sig.order_amplitude[:, 0] * np.exp(1j * (sig.order_phase[:, 0] - 2 * np.pi * ORDER * sig.rev[:, 0]))
+    interior = slice(round(2.0 * fs), -round(2.0 * fs))  # many time constants (0.18 / B) from the ends
+
+    def leakage_db(bandwidth):
+        comp = order_waveform(sig.x, fs, rpm, [ORDER], shafts=[0], bandwidth=bandwidth, joint=False)
+        err = comp.envelopes[interior, 0] - truth[interior]
+        return 20.0 * np.log10(np.sqrt(np.mean(np.abs(err) ** 2)) / 1.0)  # re the neighbour's amplitude
+
+    def response_db(bandwidth):  # H(delta) of the documented single-order response
+        r2 = 0.5 * (np.sqrt(2.0) - 1.0) / (2.0 * np.sin(np.pi * bandwidth / fs)) ** 4
+        return -20.0 * np.log10(1.0 + 2.0 * r2 * (2.0 * np.sin(np.pi * delta / fs)) ** 4)
+
+    # B = delta: the check says unresolved and recommends B = delta / 2 ...
+    too_wide = _check(rpm, fs, [ORDER, ORDER], shafts=[0, 1], bandwidth=delta)
+    assert not too_wide.ok
+    b_ok = too_wide.recommended_bandwidth
+    assert b_ok == pytest.approx(delta / 2.0, rel=1e-2) and b_ok <= delta / 2.0
+    assert _check(rpm, fs, [ORDER, ORDER], shafts=[0, 1], bandwidth=b_ok).ok
+    # ... with which the neighbour is below -15 dB, against about -3 dB at B = delta.
+    leak_ok, leak_wide = leakage_db(b_ok), leakage_db(delta)
+    assert leak_ok < -15.0
+    assert leak_wide > -6.0 and leak_wide - leak_ok > 10.0
+    # Both readings are the analytic filter response, to a fraction of a dB.
+    assert leak_ok == pytest.approx(response_db(b_ok), abs=0.1)
+    assert leak_wide == pytest.approx(response_db(delta), abs=0.1)
 
 
 def test_time_window_limit_is_two_over_window():
@@ -277,11 +334,13 @@ def test_beat_frequency_matches_the_synthesised_twin_lines():
 
 
 def test_resolved_near_equal_pair_gets_an_envelope_note_not_a_warning():
-    rep = _twin(1.04, bandwidth=10.0)
+    # 4 % twins are at least 18.7 Hz apart; B = 5 Hz has a 10 Hz pass band.
+    rep = _twin(1.04, bandwidth=5.0)
     assert rep.ok and rep.warnings == []
     p = rep.pairs[0]
     assert p["near_equal"]
-    # Separation / 2 for a Vold-Kalman bandwidth (Hz).
+    # Separation / 2 for a Vold-Kalman bandwidth (Hz): the envelope cut-off of a
+    # setting that just resolves the pair is B = d_min / 2.
     assert p["max_envelope_rate_hz"] == pytest.approx(ORDER * 0.04 * 2800.0 / 60.0 / 2.0, rel=1e-9)
     assert any("envelope" in s and "order 10" in s for s in rep.notes)
     far = _check(_twin_rpm(1.0), FS, [2.0, 8.0], window_revs=W)
@@ -299,14 +358,16 @@ def test_window_envelope_bound_is_0p36_of_the_separation():
 
 def test_envelope_wall_for_half_percent_twins():
     # 0.5 % twins at ~3000 rpm beat at 2.3 Hz or more; a Vold-Kalman filter narrow enough
-    # to separate them (<= 2.3 Hz) follows envelope changes up to 1.17 Hz only.
+    # to separate them (B <= 1.17 Hz, pass band 2.3 Hz) follows envelope changes up to
+    # its cut-off B = 1.17 Hz only.
     df_min = ORDER * 0.005 * 2800.0 / 60.0
-    ok = _twin(1.005, bandwidth=0.9 * df_min, envelope_rate=0.5)
+    b_sep = 0.9 * df_min / 2.0  # 90 % of the largest bandwidth that resolves the twins
+    ok = _twin(1.005, bandwidth=b_sep, envelope_rate=0.5)
     assert ok.ok and ok.recommended_bandwidth is not None
     with pytest.warns(ResolutionWarning, match="bias-variance wall"):
         wall = resolution_check(
             _twin_rpm(1.005), FS, [ORDER] * 2, shafts=[0, 1],
-            bandwidth=0.9 * df_min, envelope_rate=2.0,
+            bandwidth=b_sep, envelope_rate=2.0,
         )
     assert not wall.ok
     # The pair itself is resolved: the problem is the envelope, not the separation.
@@ -317,12 +378,14 @@ def test_envelope_wall_for_half_percent_twins():
 
 
 def test_setting_too_narrow_for_the_envelope_is_reported():
-    rep = _twin(1.04, bandwidth=1.0, envelope_rate=1.0)  # envelope cut-off 0.5 Hz < 1 Hz
+    rep = _twin(1.04, bandwidth=0.5, envelope_rate=1.0)  # envelope cut-off B = 0.5 Hz < 1 Hz
     assert not rep.ok
     assert any("0.5 Hz" in s and "bias" in s for s in rep.warnings)
     assert rep.pairs[0]["resolved"]
+    # B = 1 Hz follows an envelope rate of 1 Hz (the cut-off is B itself).
+    assert _twin(1.04, bandwidth=1.0, envelope_rate=1.0).ok
     # A wider setting that still resolves the pair is recommended and follows the envelope.
-    assert rep.recommended_bandwidth is not None and rep.recommended_bandwidth / 2 >= 1.0
+    assert rep.recommended_bandwidth is not None and rep.recommended_bandwidth >= 1.0
     assert _twin(1.04, bandwidth=rep.recommended_bandwidth, envelope_rate=1.0).ok
     # window_revs / time_window variants of the same message
     assert not _twin(1.04, time_window=5.0, envelope_rate=1.0).ok  # 0.72 / 5 = 0.14 Hz

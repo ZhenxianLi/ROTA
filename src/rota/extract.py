@@ -90,7 +90,8 @@ def residual(x, fs, rpm, orders, *, method="vold-kalman", shafts=None, **kwargs)
     Same computation as :func:`remove_orders`, intended for the complete set
     of orders (every shaft) so that the result is the order-free background,
     e.g. for order-plus-residual resynthesis. Returns ``(residual,
-    components)``; ``components.total + residual`` equals ``x`` exactly.
+    components)``; ``residual`` is exactly ``x - components.total``, so the
+    two add back to ``x`` up to floating-point rounding.
     Units and amplitude conventions as in :func:`remove_orders`.
 
     References
