@@ -311,7 +311,7 @@ def order_residual_energy(residual, reference, fs, rpm, order, *, order_resoluti
     :func:`rota.maps.rpm_order_map` (frames of ``1 / order_resolution``
     revolutions, Hann window, overlap 0.75) and the order is read with
     :func:`rota.slices.order_slice` in ``method="band"``, which sums the power
-    over a band of four bins (``4 * order_resolution`` orders) around ``order``
+    over the bins within ``2 * order_resolution`` orders of ``order``
     and is therefore independent of where the line falls between bins. With
     ``P_res`` and ``P_ref`` the band power summed over the selected frames (and
     over the channels), the result is ``10 log10(P_res / P_ref)``: the ratio
@@ -341,8 +341,8 @@ def order_residual_energy(residual, reference, fs, rpm, order, *, order_resoluti
     order : float
         Order to measure, in cycles per revolution (> 0).
     order_resolution : float, default 0.125
-        Bin spacing of the order map in orders; the analysis band is four bins
-        wide. Neighbouring orders closer than about ``3 * order_resolution``
+        Bin spacing of the order map in orders; the analysis band spans
+        ``4 * order_resolution`` orders. Neighbouring orders closer than about ``3 * order_resolution``
         leak into the band.
     rpm_range : (float or None, float or None), optional
         Keep only frames whose mean speed lies in ``lo <= rpm <= hi`` (rpm);

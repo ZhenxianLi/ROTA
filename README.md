@@ -77,6 +77,14 @@ s = rota.slices.order_slice(m, 2)
 
 The amplitude convention of every function is stated in its docstring.
 
+## Examples
+
+Four scripts in [examples/](examples/) cover order maps and slices, tachometer and tacholess speed, order extraction and removal, and order-table resynthesis. Each builds its signal with `rota.synth` and prints its results against the known truth.
+
+![Campbell diagram, order map and order slices against the synthetic truth](docs/images/01_order_map.png)
+
+*Campbell diagram and order map of a run-up from idle (half orders, a 180 Hz resonance, a fixed 250 Hz tone, noise), and two order slices against the amplitude put into the signal ([examples/01_order_map.py](examples/01_order_map.py)).*
+
 ## Conventions
 
 - **Units.** Time in s, sampling rate and frequency in Hz, rotational speed in rev/min (rpm), shaft angle in revolutions, order in cycles per revolution, vehicle speed in km/h.

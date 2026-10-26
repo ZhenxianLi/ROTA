@@ -123,7 +123,10 @@ def order_slice(m, order, *, bandwidth=None, method="band"):
         Order to extract, in cycles per revolution (> 0).
     bandwidth : float, optional
         Total band width in the map's axis unit (orders for an order map,
-        Hz for a frequency map). Default: four bins, ``4 * m.resolution``.
+        Hz for a frequency map). Default: ``4 * m.resolution``, i.e. the bins
+        within two bin spacings of the centre (five bins when the order falls
+        on a bin, four when it falls midway). Neighbouring orders closer than
+        about three bin spacings leak into the band; use a finer map.
     method : {"band", "peak"}, default "band"
         Power summation over the band, or maximum in the band.
 
