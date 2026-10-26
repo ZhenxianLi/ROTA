@@ -5,6 +5,8 @@ type: software
 authors:
   - family-names: Li
     given-names: Zhenxian
+version: 0.3.0
+date-released: 2026-10-26
 repository-code: "https://github.com/ZhenxianLi/ROTA"
 license: GPL-3.0-or-later
 abstract: >-

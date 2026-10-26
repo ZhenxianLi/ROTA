@@ -6,7 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-Version 0.3 (resynthesis) is in development.
+## [0.3.0] - 2026-10-26
+
+Order-based resynthesis.
+
+### Added
+
+- `rota.resynth`: `OrderTable` (orders × rpm complex amplitudes with an explicit peak/RMS convention and per-row frequency offsets; built from order slices or extracted components; magnitude and phase interpolated separately), `synthesize_orders` and the streaming `OrderSynth` (identical output for any block split; components outside (0, fs/2) muted), `synthesize_broadband` (random-phase grains with power-complementary windows, no frame-rate pumping), `modify_orders`, `remap_rpm`, `resynthesize`, `stationary_excerpt`, `provenance`, `stable_seed`.
+- `rota.angle`: `angular_to_time`, `stationarize`, `destationarize`.
+- `rota.speed`: `virtual_rpm`; `WhiteningWarning`.
+- `rota.synth`: `synth_tone_noise` (tone-plus-noise stimuli with an exact broadband power split).
+- `rota.metrics`: `window_checks`, `modulation_peak`, `envelope_stats`.
+- Validation cases T9 (order-table round trip) and T11 (broadband synthesis).
+- Four example scripts with figures (`examples/`).
+
+### Changed
+
+- `rpm_from_ridge`: whitening now adapts to the sweep of the lines by default (`whiten="auto"`, two passes). With the former fixed 15 Hz default an ordinary run-up at 750 rpm/s was tracked with 66 % median error and no warning; it is now within 3 % on 99 % of frames. Too narrow explicit widths raise `WhiteningWarning` and lower `confidence`.
 
 ## [0.2.0] - 2026-10-26
 
@@ -42,6 +58,7 @@ Core chain for the analysis of a run-up with a tachometer.
 - Package metadata, `README.md`, `CONTRIBUTING.md`, `CITATION.cff`, issue and pull request templates, and a GitHub Actions workflow that runs the tests on Python 3.10 to 3.13.
 - Licence: GPL-3.0-or-later.
 
-[Unreleased]: https://github.com/ZhenxianLi/ROTA/compare/v0.2.0...main
+[Unreleased]: https://github.com/ZhenxianLi/ROTA/compare/v0.3.0...main
+[0.3.0]: https://github.com/ZhenxianLi/ROTA/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/ZhenxianLi/ROTA/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ZhenxianLi/ROTA/releases/tag/v0.1.0
