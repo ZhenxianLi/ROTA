@@ -19,6 +19,7 @@ Order-based resynthesis.
 - `rota.metrics`: `window_checks`, `modulation_peak`, `envelope_stats`.
 - Validation cases T9 (order-table round trip) and T11 (broadband synthesis).
 - Four example scripts with figures (`examples/`).
+- CI job testing the oldest supported dependencies (Python 3.10, NumPy 1.23, SciPy 1.9).
 
 ### Changed
 
