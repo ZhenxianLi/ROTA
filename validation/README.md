@@ -133,4 +133,4 @@ Acceptable speed error. A relative speed error d moves an order of frequency f o
 
 ## Not yet
 
-The black-box reference comparison (ROADMAP section 5.5, steps 2 and 3: running an external implementation on these signals, storing its output in `reference/`, and the `compare.py` report) is not part of v0.1 or v0.2. Only the comparison with analytic truth exists, and it is what continuous integration runs.
+The black-box reference comparison (ROADMAP section 5.5, steps 2 and 3: running an external implementation on these signals, storing its output in `reference/`, and the `compare.py` report) has not been run for any release so far (0.1 to 0.3). Only the comparison with analytic truth exists, and it is what continuous integration runs.

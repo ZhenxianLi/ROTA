@@ -9,7 +9,7 @@
 
 ROTA is a lightweight, open-source Python library for order analysis of noise and vibration signals from rotating machinery (engines, electric motors, gearboxes), with tools for order-based sound resynthesis. It depends only on NumPy and SciPy. The project rule is that each function is implemented independently from the published literature and tested on synthetic signals with known analytic ground truth.
 
-The design document is [ROADMAP.md](ROADMAP.md) (written in Chinese).
+The design document is [ROADMAP.md](ROADMAP.md).
 
 ## Status
 
@@ -107,13 +107,13 @@ Four scripts in [examples/](examples/) cover order maps and slices, tachometer a
 
 ## Validation
 
-Analytic ground truth from `rota.synth` is the first reference: every test signal comes with its true speed, shaft angle, and amplitude and phase of each order. Where a public implementation elsewhere exists, a black-box comparison with explicit parameters is a second reference, and it compares physical quantities (speed curves, order amplitudes along a ridge), not map cells. When the two disagree, the analytic truth decides. Resynthesis is tested by round trip: synthesise, analyse, compare with the input table. Continuous integration runs pytest only.
+Analytic ground truth from `rota.synth` is the first reference: every test signal comes with its true speed, shaft angle, and amplitude and phase of each order. Where a public implementation elsewhere exists, a black-box comparison with explicit parameters is planned as a second reference, comparing physical quantities (speed curves, order amplitudes along a ridge), not map cells; when the two disagree, the analytic truth decides. **This comparison has not been run yet: every result reported so far is against the analytic truth only.** Resynthesis is tested by round trip: synthesise, analyse, compare with the input table. Continuous integration runs pytest only.
 
 The design document defines 14 validation signals (T1 to T14). Version 0.1 covers T1 (single order, constant amplitude, linear run-up), T2 (several orders, a fixed-frequency resonance, noise), T5 (multi-pulse tachometer with jitter and dropped pulses) and T14 (low-speed start from idle with orders half an order apart). Version 0.2 adds T3 (exponential run-down), T4 (crossing orders on two shafts), T6 (fast run-up), T8 (twin shafts 0.5–4 % apart), T10 (true speed outside the search range), T12 (order removal) and T13 (extraction error versus speed-reference error). Version 0.3 adds T9 (order table → synthesis → analysis → table round trip, `tests/test_ordertable.py`) and T11 (broadband synthesis: PSD accuracy and no frame-rate pumping, `tests/test_broadband.py`). Cases and measured results: [validation/README.md](validation/README.md).
 
-Initial tolerances, to be adjusted after measurement:
+Tolerances (the analytic column is enforced by the test suite; the black-box column is the target for the planned comparison):
 
-| Quantity | Against analytic truth | Against black-box reference |
+| Quantity | Against analytic truth | Against black-box reference (planned) |
 |---|---|---|
 | Speed, median relative error | <= 0.1 % | <= 0.1 % |
 | Tacholess speed, fraction of frames within 3 % (steady or slowly rising) | >= 90 % | within 5 percentage points |
@@ -125,7 +125,7 @@ Initial tolerances, to be adjusted after measurement:
 | Remaining energy of a removed order in the residual (T12) | <= -20 dB | not compared |
 | Frame-rate pumping of broadband synthesis (T11) | <= 1 dB | not compared |
 
-Only the rows for speed and order amplitude concern the v0.1 modules; the others apply as the corresponding modules are added.
+All rows of the analytic column are met by the current release; measured values are in [validation/README.md](validation/README.md).
 
 ## Independence statement
 
@@ -143,4 +143,4 @@ See [CITATION.cff](CITATION.cff) (GitHub shows it as "Cite this repository"). A 
 
 ## Acknowledgements
 
-ROTA is designed, implemented and maintained by Zhenxian Li. Claude (Anthropic) was used as an assistant for literature review, code review and documentation; all algorithmic choices, implementation and validation are the author's responsibility.
+ROTA is designed, implemented and maintained by Zhenxian Li. Claude (Anthropic) was used as an assistant during development.
