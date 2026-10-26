@@ -526,7 +526,6 @@ def virtual_rpm(speed_kmh, rpm_per_kmh, *, idle, redline, smooth=None, fs=None):
         raise ValueError("smooth needs a time series, not a scalar speed")
     alpha = float(np.exp(-1.0 / (smooth * fs)))
     b, a = [1.0 - alpha], [1.0, -alpha]
-    zi = signal.lfilter_zi(b, a)
     cols = rpm[:, None] if rpm.ndim == 1 else rpm
     out = np.full(cols.shape, np.nan)
     idx = np.arange(cols.shape[0])
@@ -537,7 +536,9 @@ def virtual_rpm(speed_kmh, rpm_per_kmh, *, idle, redline, smooth=None, fs=None):
             continue
         if not ok.all():
             r = np.interp(idx, idx[ok], r[ok])
-        y, _ = signal.lfilter(b, a, r, zi=zi * r[0])
+        # Filter the deviation from the first value with zero initial state: a
+        # constant input then passes exactly, whatever the SciPy version.
+        y = r[0] + signal.lfilter(b, a, r - r[0])
         y[~ok] = np.nan
         out[:, c] = y
     return out[:, 0] if rpm.ndim == 1 else out
