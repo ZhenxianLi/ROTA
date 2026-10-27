@@ -14,7 +14,7 @@ The design document is [ROADMAP.md](https://github.com/ZhenxianLi/ROTA/blob/main
 
 ## Status
 
-Pre-alpha. The current release is 0.4.0; functions and signatures may still change before 1.0.
+Pre-alpha. The current release is 0.5.0; functions and signatures may still change before 1.0.
 
 | Module | Contents | Since |
 |---|---|---|
@@ -26,7 +26,7 @@ Pre-alpha. The current release is 0.4.0; functions and signatures may still chan
 | `rota.resynth` | Order tables (explicit peak/RMS), additive order synthesis offline and in blocks, broadband synthesis without frame-rate pumping, order editing, speed remapping, order-plus-residual recombination, steady listening excerpts, provenance sidecars | 0.3 |
 | `rota.synth` | Speed profiles and run-up signals with analytic ground truth; tone-plus-noise listening stimuli; realistic scenarios (engine run-up, electric drive, cruise) with transfer paths, background noise and recorder impairments | 0.1, 0.3, 0.4 |
 | `rota.metrics` | Speed-track error, waveform similarity (energy-weighted), residual order energy, window and pumping checks, envelope statistics | 0.1–0.3 |
-| `rota.tonal` | Bridge to open-source psychoacoustic tools: A/C weighting (IEC 61672-1), calibrated levels and resampling to 48 kHz, octave and 1/3-octave bands (IEC 61260-1) and band levels along rpm, tone-to-noise ratio and prominence ratio of orders (ECMA-418-1, 3rd edition) | 0.5 (unreleased) |
+| `rota.tonal` | Bridge to open-source psychoacoustic tools: A/C weighting (IEC 61672-1), calibrated levels and resampling to 48 kHz, octave and 1/3-octave bands (IEC 61260-1) and band levels along rpm, tone-to-noise ratio and prominence ratio of orders (ECMA-418-1, 3rd edition) | 0.5 |
 | `rota.plot` | Plotting helpers, kept separate from computation | v0.6 (planned) |
 
 Planned for v1.0: full validation report, complete documentation, Zenodo DOI.

@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-27
+
 Application layer and bridges to psychoacoustic toolboxes.
 
 ### Added
@@ -96,7 +98,8 @@ Core chain for the analysis of a run-up with a tachometer. Development milestone
 - Package metadata, `README.md`, `CONTRIBUTING.md`, `CITATION.cff`, issue and pull request templates, and a GitHub Actions workflow that runs the tests on Python 3.10 to 3.13.
 - Licence: GPL-3.0-or-later.
 
-[Unreleased]: https://github.com/ZhenxianLi/ROTA/compare/v0.4.0...main
+[Unreleased]: https://github.com/ZhenxianLi/ROTA/compare/v0.5.0...main
+[0.5.0]: https://github.com/ZhenxianLi/ROTA/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/ZhenxianLi/ROTA/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/ZhenxianLi/ROTA/releases/tag/v0.3.0
 [0.2.0]: https://github.com/ZhenxianLi/ROTA/commit/767093c

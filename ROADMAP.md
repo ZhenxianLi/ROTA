@@ -154,7 +154,7 @@ All of `rota.resynth`, `angular_to_time`, `stationarize`, `virtual_rpm`, `synth_
 **v0.4 Realistic test signals and black-box reference** (released 2026-10-27):
 `synth_scenario` (engine run-up, electric drive, steady cruise) with speed and source models (gear shifts, angular speed ripple, angle-locked impulses, sidebands, inverter carriers), transfer paths (modal resonances, cabin impulse responses), speed-dependent background noise and recorder impairments; stress tests on these scenarios (`validation/stress.md`); a more robust `rpm_from_ridge` (automatic window, recalibrated confidence and warnings); the black-box MATLAB comparison in CI (section 5.5); audio examples.
 
-**v0.5 Application layer and psychoacoustic bridges** (moved from v0.4):
+**v0.5 Application layer and psychoacoustic bridges** (released 2026-10-27):
 `frequency_slice`, `overall_level`, `metric_vs_rpm`, `frequency_to_order`, `order_share`, Δrpm binning, `align_signals`, `rota.tonal` (A/C weighting, levels, calibrated 48 kHz resampling, octave and 1/3-octave band levels, `order_prominence`). Examples linking ROTA to three open-source psychoacoustic toolboxes as optional, external dependencies (never vendored): MoSQITo (Python), the Sottek hearing model implementation of ECMA-418-2 (Python) and SQAT (MATLAB, run in CI like the black-box reference) — for example how loudness, tonality or roughness vary with rpm after an order is removed or boosted. A complete worked analysis example: preparation, order analysis, extraction, psychoacoustics along rpm, order contributions with audio, and an engineering conclusion.
 
 **v0.6 Plotting**:
