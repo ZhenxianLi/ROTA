@@ -207,7 +207,7 @@ def test_mosqito_resampling_path(mq):
     assert loud.values.size > 0 and np.all(np.isfinite(loud.values))
 
 
-def test_mosqito_calibration_scales_loudness(x48):
+def test_mosqito_calibration_scales_loudness(mq, x48):  # mq: skip without MoSQITo
     a = mosqito.loudness(0.5 * x48, FS)
     b = mosqito.loudness(x48, FS)
     c = mosqito.loudness(x48, FS, calibration=0.5)
