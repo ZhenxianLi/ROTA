@@ -132,10 +132,11 @@ ROTA does not implement metrics that already have open-source implementations, s
 | `to_calibrated_48k` | Calibration-preserving polyphase resampling, outputting a 48 kHz signal in Pa, for use with SQAT, MoSQITo and open-source ECMA-418-2 implementations | — | v0.5 |
 | `order_prominence` | Computes the ECMA-74 Annex D tone-to-noise ratio TNR and prominence ratio PR on the order-tracked spectrum (angle domain): per-tone detection, prominence flag, frequency-dependent threshold; the window is long enough to resolve low-frequency tones (e.g. a 140 Hz tone lies within a critical band about 100 Hz wide); yields an "order prominence versus rpm" curve | ECMA-74; ISO 7779; ECMA-418-1 | v0.5 |
 | `components` | Description structure for order components (order, rpm range, level, bandwidth, harmonicity index), to ease comparison with the component output of tonality tools | Becker & Sottek 2019 (to be verified) | v0.5 |
+| `octave_levels`, `band_levels_vs_rpm` | Octave and fractional-octave (e.g. 1/3-octave) band filter bank per IEC 61260-1 (base-10 mid-band frequencies, IIR band-pass filters, multirate for low bands); band levels over time and binned along rpm, next to the order map | IEC 61260-1; ANSI S1.11 | v0.5 |
 
 ### 2.10 Plotting (`rota.plot`)
 
-Plotting helpers, separate from computation: Campbell diagram, order map, slices, rpm track and confidence, before/after comparison of resynthesis. v0.5.
+Plotting helpers, separate from computation: Campbell diagram, order map, slices, rpm track and confidence, before/after comparison of resynthesis. v0.6 (moved from v0.5).
 
 ---
 
@@ -153,8 +154,11 @@ All of `rota.resynth`, `angular_to_time`, `stationarize`, `virtual_rpm`, `synth_
 **v0.4 Realistic test signals and black-box reference** (released 2026-10-27):
 `synth_scenario` (engine run-up, electric drive, steady cruise) with speed and source models (gear shifts, angular speed ripple, angle-locked impulses, sidebands, inverter carriers), transfer paths (modal resonances, cabin impulse responses), speed-dependent background noise and recorder impairments; stress tests on these scenarios (`validation/stress.md`); a more robust `rpm_from_ridge` (automatic window, recalibrated confidence and warnings); the black-box MATLAB comparison in CI (section 5.5); audio examples.
 
-**v0.5 Application layer and bridges** (moved from v0.4):
-`frequency_slice`, `overall_level`, `metric_vs_rpm`, `order_share`, Δrpm binning, `align_signals`, `rota.tonal`, `rota.plot`. Provides examples linking to SQAT, MoSQITo and open-source ECMA-418-2 implementations, for example "how loudness or tonality varies with rpm after an order is removed".
+**v0.5 Application layer and psychoacoustic bridges** (moved from v0.4):
+`frequency_slice`, `overall_level`, `metric_vs_rpm`, `frequency_to_order`, `order_share`, Δrpm binning, `align_signals`, `rota.tonal` (A/C weighting, levels, calibrated 48 kHz resampling, octave and 1/3-octave band levels, `order_prominence`). Examples linking ROTA to three open-source psychoacoustic toolboxes as optional, external dependencies (never vendored): MoSQITo (Python), the Sottek hearing model implementation of ECMA-418-2 (Python) and SQAT (MATLAB, run in CI like the black-box reference) — for example how loudness, tonality or roughness vary with rpm after an order is removed or boosted. A complete worked analysis example: preparation, order analysis, extraction, psychoacoustics along rpm, order contributions with audio, and an engineering conclusion.
+
+**v0.6 Plotting**:
+`rota.plot` (moved from v0.5).
 
 **v1.0 Official release**:
 Full validation report, English documentation, PyPI release, Zenodo DOI. Submit a validation paper (JOSS or an acoustics conference).

@@ -26,8 +26,8 @@ Pre-alpha. The current release is 0.4.0; functions and signatures may still chan
 | `rota.resynth` | Order tables (explicit peak/RMS), additive order synthesis offline and in blocks, broadband synthesis without frame-rate pumping, order editing, speed remapping, order-plus-residual recombination, steady listening excerpts, provenance sidecars | 0.3 |
 | `rota.synth` | Speed profiles and run-up signals with analytic ground truth; tone-plus-noise listening stimuli; realistic scenarios (engine run-up, electric drive, cruise) with transfer paths, background noise and recorder impairments | 0.1, 0.3, 0.4 |
 | `rota.metrics` | Speed-track error, waveform similarity (energy-weighted), residual order energy, window and pumping checks, envelope statistics | 0.1–0.3 |
-| `rota.tonal` | Thin bridge to open-source psychoacoustic tools: calibrated level, resampling, order prominence | v0.5 (planned) |
-| `rota.plot` | Plotting helpers, kept separate from computation | v0.5 (planned) |
+| `rota.tonal` | Thin bridge to open-source psychoacoustic tools: A/C weighting, calibrated levels and resampling, octave and 1/3-octave bands, order prominence | v0.5 (planned) |
+| `rota.plot` | Plotting helpers, kept separate from computation | v0.6 (planned) |
 
 Planned for v1.0: full validation report, complete documentation, Zenodo DOI.
 
