@@ -1,0 +1,105 @@
+name: sqat-bridge
+
+# SQAT bridge example (examples/09_sqat_bridge, ROADMAP v0.5): two rota.synth run-ups are
+# analysed with SQAT, the open-source MATLAB Sound Quality Analysis Toolbox
+# (github.com/ggrecow/SQAT, GPL-3.0), and the SQAT time series are binned along rpm with
+# rota.slices.metric_vs_rpm. Run it by hand from Actions -> sqat-bridge -> Run workflow, or by
+# pushing a change to the files below.
+#
+# SQAT is cloned at a pinned commit and never vendored in ROTA; only its documented public
+# functions are called (examples/09_sqat_bridge/run_sqat.m). As for the MATLAB reference
+# (validation/README.md), the output stays in the workflow artifact `sqat-bridge` and is not
+# committed.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "examples/09_sqat_bridge/**"
+      - ".github/workflows/sqat-bridge.yml"
+
+permissions:
+  contents: read
+
+env:
+  SQAT_REPO: https://github.com/ggrecow/SQAT
+  SQAT_REF: v2.0
+  SQAT_COMMIT: 94f489c053d1366da05d5e62838c3f54ac7715c3
+
+jobs:
+  sqat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ROTA
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[plot]"
+
+      - name: Export the signals (48 kHz, Pa, .mat)
+        run: python examples/09_sqat_bridge/export_signals.py
+
+      # Fetch exactly the pinned commit (the tag is recorded for information only).
+      - name: Clone SQAT at the pinned commit
+        run: |
+          mkdir -p build/sqat_bridge/SQAT
+          cd build/sqat_bridge/SQAT
+          git init -q
+          git remote add origin "$SQAT_REPO"
+          git fetch -q --depth 1 origin "$SQAT_COMMIT"
+          git checkout -q FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$SQAT_COMMIT"
+          git log -1 --format='SQAT %H %ci'
+          head -3 LICENSE
+
+      # For a public repository MathWorks licenses MATLAB automatically on a GitHub-hosted runner.
+      # SQAT's ECMA-418-2 functions require the Signal Processing Toolbox.
+      - name: Set up MATLAB
+        uses: matlab-actions/setup-matlab@v2
+        with:
+          products: Signal_Processing_Toolbox
+
+      - name: Run SQAT
+        uses: matlab-actions/run-command@v2
+        env:
+          SQAT_DIR: ${{ github.workspace }}/build/sqat_bridge/SQAT
+        with:
+          command: run('examples/09_sqat_bridge/run_sqat.m')
+
+      - name: Bin the SQAT metrics along rpm and draw them
+        if: ${{ !cancelled() }}
+        run: python examples/09_sqat_bridge/import_results.py --strict
+
+      - name: Collect the output
+        if: ${{ !cancelled() }}
+        run: |
+          mkdir -p build/sqat_bridge/results
+          cp build/sqat_bridge/signals/*.json build/sqat_bridge/results/ 2>/dev/null || true
+          cp docs/images/09_sqat_bridge.png build/sqat_bridge/results/ 2>/dev/null || true
+          ls -l build/sqat_bridge/results
+
+      - name: Upload the output
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: sqat-bridge
+          path: build/sqat_bridge/results/
+          if-no-files-found: warn
+
+      - name: Add the binned values to the job summary
+        if: ${{ !cancelled() }}
+        run: |
+          if [ -f build/sqat_bridge/results/binned.md ]; then
+            cat build/sqat_bridge/results/binned.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No binned values were written (see the log of the previous steps)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -f build/sqat_bridge/results/log.txt ]; then
+            { echo; echo '## run_sqat.m log'; echo '```'; head -c 200000 build/sqat_bridge/results/log.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi
