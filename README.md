@@ -94,6 +94,10 @@ Four scripts in [examples/](https://github.com/ZhenxianLi/ROTA/tree/main/example
 
 *Campbell diagram and order map of a run-up from idle (half orders, a 180 Hz resonance, a fixed 250 Hz tone, noise), and two order slices against the amplitude put into the signal ([examples/01_order_map.py](https://github.com/ZhenxianLi/ROTA/blob/main/examples/01_order_map.py)).*
 
+## Tacholess speed
+
+`rota.speed.rpm_from_ridge` estimates the speed from the signal alone with a comb of orders and a dynamic-programming ridge. Give it the orders the machine shows: the comb, not the data, decides between a speed and its octaves. For a four-stroke engine with N cylinders the firing order N/2 and its harmonics dominate, so use `orders=(2, 4, 6)` for four cylinders (the default `(1, 2, 3, 4)` then reads twice the crankshaft speed), `(1.5, 3, 4.5)` for three and `(3, 6, 9)` for six. Set `rpm_range` from a priori knowledge (idle speed to redline). The window adapts to the sweep by default (`window="auto"`: 0.4 s, shorter for fast run-ups), and several channels are combined by averaging their power spectra. Each result carries a per-frame `confidence` (near 1 on a clean correct track, near 0 in noise) and a `quality` summary (median confidence, fraction of frames at a search bound, fraction of jumping frames, octave scores); a `RidgeQualityWarning` is issued when the track as a whole is likely wrong.
+
 ## Conventions
 
 - **Units.** Time in s, sampling rate and frequency in Hz, rotational speed in rev/min (rpm), shaft angle in revolutions, order in cycles per revolution, vehicle speed in km/h.

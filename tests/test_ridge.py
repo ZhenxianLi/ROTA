@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 
 from rota._ridge import (
+    RidgeQualityWarning,
     RidgeResult,
     WhiteningWarning,
     _auto_slope,
@@ -238,7 +239,11 @@ def test_moving_suppresses_strong_fixed_tone():
     assert _err(auto_moved, s)["within"][0.03] >= 0.95  # measured: 0.99
     assert auto_moved.bound_fraction < 0.1
     assert not auto_moved.whiten_violated.any()
-    assert auto_plain.score[far, g].mean() > 2.0 * auto_moved.score[far, g].mean()  # measured: 2.6
+    # (window="auto" may choose different windows, hence frames, for the two runs)
+    far_m, far_p = _truth(auto_moved, s) < 2000.0, _truth(auto_plain, s) < 2000.0
+    g_m = int(np.argmin(np.abs(auto_moved.rpm_grid - 3000.0)))
+    g_p = int(np.argmin(np.abs(auto_plain.rpm_grid - 3000.0)))
+    assert auto_plain.score[far_p, g_p].mean() > 2.0 * auto_moved.score[far_m, g_m].mean()
 
 
 # --------------------------------------------------------------------------
@@ -449,19 +454,29 @@ def test_t_out_interpolates_onto_signal_samples():
     assert _quiet(s.x, FS, (1000.0, 6000.0)).rpm_out is None
 
 
-def test_multichannel_is_the_channel_mean():
-    chans = [_runup(1500.0, 3000.0, noise=10.0, seed=k, phase=0.0) for k in (1, 2, 3)]
+def test_multichannel_averages_the_power_spectra():
+    # The channels' power spectra are averaged, not the signals: identical
+    # channels give the single-channel result, and so do channels in opposite
+    # phase (whose signal mean is zero).
+    s = _runup(1500.0, 3000.0, dur=6.0)
+    one = _quiet(s.x, FS, (1000.0, 6000.0))
+    two = _quiet(np.column_stack([s.x, s.x]), FS, (1000.0, 6000.0))
+    anti = _quiet(np.column_stack([s.x, -s.x]), FS, (1000.0, 6000.0))
+    assert np.allclose(two.rpm, one.rpm, rtol=1e-9) and np.allclose(anti.rpm, one.rpm, rtol=1e-9)
+    # Channels whose orders have unrelated phases (two microphones some way
+    # apart) and independent noise: power averaging beats one channel and the
+    # signal mean, in which the orders partly cancel.
+    chans = [_runup(1500.0, 3000.0, noise=10.0, seed=k) for k in (1, 2, 3)]
     X = np.column_stack([c.x for c in chans])
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         multi = rpm_from_ridge(X, FS, (1000.0, 6000.0))
         mean = rpm_from_ridge(X.mean(axis=1), FS, (1000.0, 6000.0))
         single = rpm_from_ridge(chans[0].x, FS, (1000.0, 6000.0))
-    assert np.allclose(multi.rpm, mean.rpm)
-    # independent noise averages down: sqrt(3) less noise
     w_multi = _err(multi, chans[0])["within"][0.03]
+    w_mean = _err(mean, chans[0])["within"][0.03]
     w_single = _err(single, chans[0])["within"][0.03]
-    assert w_multi >= 0.97 and w_multi >= w_single  # measured: 1.0 vs 0.93
+    assert w_multi >= 0.97 and w_multi >= w_single and w_multi >= w_mean
 
 
 def test_axes_grid_and_result_shapes():
@@ -705,7 +720,7 @@ def test_default_whitening_follows_ordinary_runups(dur):
     assert e["within"][0.03] >= 0.95  # measured: 0.97 (1500 rpm/s), 0.99 (750), 1.0 (333, 158)
     assert e["median_rel_error"] < 0.005  # measured: 0.00014 (158 rpm/s) to 0.0034 (1500 rpm/s)
     assert res.bound_fraction == 0.0 and not res.beyond.any()
-    assert not res.whiten_violated.any()
+    assert res.whiten_violated.mean() < 0.05  # at most a frame or two where a ramp ends
 
 
 @pytest.mark.parametrize("dur", [6.0, 12.0], ids=["750rpm/s", "333rpm/s"])
@@ -736,8 +751,9 @@ def test_default_whitening_at_steady_speed_and_comb_to_order_ten():
 
 
 def test_auto_width_follows_the_documented_rule():
+    # At the former default window of 0.4 s (window="auto" would shorten it).
     s = _half_runup(6.0)
-    res = _quiet(s.x, FS, HALF_RANGE, orders=HALF_COMB)
+    res = _quiet(s.x, FS, HALF_RANGE, orders=HALF_COMB, window=0.4)
     # idle, no sweep: the static 6 / window = 15 Hz (the sweep estimate reaches
     # about 0.5 s ahead of the start of the ramp at 1.2 s)
     hold = res.t < 0.7
@@ -751,8 +767,10 @@ def test_auto_width_follows_the_documented_rule():
     assert extent == pytest.approx(truth_extent, rel=0.03)  # measured: 40.0
     assert np.median(res.whiten_width[ramp]) > truth_extent
     # an explicit number is reported as given, None as infinite
-    assert np.all(_quiet(s.x, FS, HALF_RANGE, orders=HALF_COMB, whiten=60.0).whiten_width == 60.0)
-    none = _quiet(s.x, FS, HALF_RANGE, orders=HALF_COMB, whiten=None)
+    assert np.all(
+        _quiet(s.x, FS, HALF_RANGE, orders=HALF_COMB, whiten=60.0, window=0.4).whiten_width == 60.0
+    )
+    none = _quiet(s.x, FS, HALF_RANGE, orders=HALF_COMB, whiten=None, window=0.4)
     assert np.all(np.isinf(none.whiten_width)) and not none.whiten_violated.any()
     assert _err(none, s)["within"][0.03] >= 0.98  # the frame median is robust against any sweep
 
@@ -789,8 +807,8 @@ def test_too_narrow_explicit_whiten_warns_and_lowers_confidence():
     # The former default on the 6 s run: the median (15 Hz) is narrower than the
     # 40 Hz a line occupies. The result is wrong; it must not be silent.
     s = _half_runup(6.0)
-    good = _quiet(s.x, FS, HALF_RANGE, orders=HALF_COMB)
-    bad, rec = _record(s.x, FS, HALF_RANGE, orders=HALF_COMB, whiten=15.0)
+    good = _quiet(s.x, FS, HALF_RANGE, orders=HALF_COMB, window=0.4)
+    bad, rec = _record(s.x, FS, HALF_RANGE, orders=HALF_COMB, whiten=15.0, window=0.4)
     assert _err(bad, s)["within"][0.03] < 0.5  # measured: 0.19; the warning is right
     assert issubclass(WhiteningWarning, RuntimeWarning)
     specific = [str(w.message) for w in rec if issubclass(w.category, WhiteningWarning)]
@@ -815,7 +833,7 @@ def test_a_width_slightly_too_narrow_is_not_silent():
     # slope (it shows 19 Hz); the sweep taken from the first pass, which does not
     # depend on the width, is what catches it.
     s = _half_runup(6.0)
-    res, rec = _record(s.x, FS, HALF_RANGE, orders=HALF_COMB, whiten=30.0)
+    res, rec = _record(s.x, FS, HALF_RANGE, orders=HALF_COMB, whiten=30.0, window=0.4)
     assert _err(res, s)["within"][0.03] < 0.5  # measured: 0.19
     assert any(issubclass(w.category, WhiteningWarning) for w in rec)
     assert np.median(res.line_width[(res.t > 2.0) & (res.t < 5.0)]) > 35.0  # measured: 40
@@ -831,17 +849,21 @@ def test_a_sufficient_explicit_whiten_is_quiet_and_right(whiten, dur):
 
 
 def test_a_run_beyond_the_sweep_limit_is_not_silent():
-    # 2000 rpm/s: order 6 sweeps 80 Hz per window and the lines blur into each
-    # other; no width helps (the median is wide enough here) and the estimate
-    # fails (0.0 within 3 % in the ramp, 25 % of the frames in at_bound). It must
-    # not do so silently. A shorter window cures it (0.25 s: 1.0).
+    # 2000 rpm/s at a 0.4 s window: order 6 sweeps 80 Hz per window and the
+    # lines blur into each other; no width helps and the track falls to a third
+    # of the speed in the ramp (0.40 within 3 %). It must not do so silently.
     s = _half_runup(3.0)
-    res, rec = _record(s.x, FS, HALF_RANGE, orders=HALF_COMB)
+    res, rec = _record(s.x, FS, HALF_RANGE, orders=HALF_COMB, window=0.4)
     assert _err(res, s)["within"][0.03] < 0.9  # measured: 0.40 (all frames)
-    assert any(issubclass(w.category, RuntimeWarning) for w in rec)
-    assert res.bound_fraction > 0.1  # measured: 0.25
+    assert any(issubclass(w.category, RidgeQualityWarning) for w in rec)
+    assert not res.quality["reliable"]
+    assert res.quality["low_confidence_fraction"] > 0.4  # measured: 0.47
+    # A shorter window cures it (0.25 s: 1.0), and window="auto" finds one.
     short, rec = _record(s.x, FS, HALF_RANGE, orders=HALF_COMB, window=0.25)
     assert _err(short, s)["within"][0.03] >= 0.95  # measured: 1.0
+    auto = _quiet(s.x, FS, HALF_RANGE, orders=HALF_COMB)
+    assert _err(auto, s)["within"][0.03] >= 0.95  # measured: 1.0
+    assert 0.15 < auto.window < 0.3 and auto.quality["reliable"]  # measured: 0.22 s
 
 
 def test_warnings_are_separate_when_the_speed_really_leaves_the_range():
@@ -911,3 +933,138 @@ def test_warped_median_widens_with_frequency():
     assert np.allclose(flat, 3.0)
     narrow = _running_median_warped(P, df, w0, w1, 1e-9)[0]
     assert narrow[round(300.0 / df)] > 50.0
+
+
+# --------------------------------------------------------------------------
+# interior-noise-like signals: four-stroke four-cylinder-like orders (2, 4, 6,
+# 8; no distinct odd or half orders) through a low-frequency boom, plus
+# speed-dependent road noise falling steeply with frequency
+# --------------------------------------------------------------------------
+
+FOUR_CYL = ((2.0, 0.0), (4.0, -15.0), (6.0, -24.0), (8.0, -30.0))  # order, dB re order 2
+BOOM = dict(freq=45.0, q=3.0, gain=4.0)  # modal boom, linear peak gain
+EVEN_COMB = (2, 4, 6)  # the comb for a four-stroke four-cylinder engine
+CAR_RANGE = (600.0, 7000.0)
+
+
+def _interior(rpm, *, onr_db=5.0, tilt=-8.5, seed=0):
+    """Four-cylinder-like orders and road noise; truth in the returned SynthSignal.
+
+    The orders (peak amplitudes from FOUR_CYL) pass the 45 Hz boom (Q = 3). The
+    noise has a PSD tilt of ``tilt`` dB/octave, grows by 6 dB per doubling of a
+    road speed of rpm / 40 km/h, passes the same boom and is scaled to an
+    orders-to-noise RMS ratio of ``onr_db``.
+    """
+    from scipy import signal as sps
+
+    from rota._channel import speed_noise
+    from rota.synth import _resonance_sos
+
+    specs = [dict(order=o, amplitude=10 ** (a / 20)) for o, a in FOUR_CYL]
+    s = synth_runup(FS, rpm, specs, resonances=[BOOM], seed=seed)
+    noise, _ = speed_noise(
+        FS, rpm.size, rpm / 40.0, level_db_at_ref=0.0, ref_speed_kmh=60.0,
+        level_slope_db_per_doubling=6.0, tilt_db_per_octave=tilt, highpass=4.0, grain=0.25,
+        seed=seed + 100,
+    )
+    noise = sps.sosfilt(_resonance_sos([BOOM], FS), noise)
+    noise *= np.sqrt(np.mean(s.x**2) / np.mean(noise**2)) / 10 ** (onr_db / 20)
+    return s, s.x + noise
+
+
+def _ramp(r0, r1, rate, hold=0.5, tail=0.3):
+    """Hold ``r0`` for ``hold`` s, ramp to ``r1`` at ``rate`` rpm/s, hold ``tail`` s."""
+    t_ramp = abs(r1 - r0) / rate
+    t = np.arange(round((hold + t_ramp + tail) * FS)) / FS
+    return rpm_profiles(t, "linear", start=r0, stop=r1, t_start=hold, t_stop=hold + t_ramp)
+
+
+def test_interior_fast_full_load_runup_needs_and_gets_a_short_window():
+    # 850 rpm/s from 1200 rpm under strong low-frequency road noise. The order 6
+    # sweeps 85 Hz/s, so a 0.4 s window smears it over 34 Hz: the former default
+    # tracked it with a confidence near 0 and false search-range and whitening
+    # warnings. window="auto" picks the window of the least line extent,
+    # 2 / sqrt(85 Hz/s) = 0.22 s.
+    s, x = _interior(_ramp(1200.0, 6000.0, 850.0), onr_db=-10.0)
+    res = _quiet(x, FS, CAR_RANGE, orders=EVEN_COMB)
+    e = _err(res, s)
+    assert e["within"][0.03] >= 0.9  # measured: 1.0
+    assert 0.18 < res.window < 0.26  # measured: 0.217 s
+    assert res.quality["reliable"] and res.quality["median_confidence"] > 0.5  # measured: 1.0
+    old, rec = _record(x, FS, CAR_RANGE, orders=EVEN_COMB, window=0.4)
+    assert old.quality["median_confidence"] < 0.2  # measured: 0.03 (99 % within 3 %)
+    assert any(issubclass(w.category, RidgeQualityWarning) for w in rec)
+
+
+@pytest.mark.parametrize(
+    "r0, r1, rate",
+    [(1200.0, 6000.0, 500.0), (1500.0, 3000.0, 130.0), (3500.0, 1700.0, 180.0), (2200.0, 2200.0, 1.0)],
+    ids=["runup500", "partload130", "coast180", "cruise"],
+)
+def test_interior_manoeuvres_are_tracked_quietly_with_the_even_comb(r0, r1, rate):
+    # Correct tracks of a clean signal must not warn and must read a high
+    # confidence (the former confidence read 0.1 to 0.45 here).
+    rpm = _ramp(r0, r1, rate) if r0 != r1 else np.full(round(6.0 * FS), r0)
+    s, x = _interior(rpm, seed=3)
+    res = _quiet(x, FS, CAR_RANGE, orders=EVEN_COMB)
+    assert _err(res, s)["within"][0.03] >= 0.9  # measured: 1.0
+    q = res.quality
+    assert q["reliable"] and q["median_confidence"] > 0.7  # measured: 0.85 to 1.0
+    assert q["bound_fraction"] == 0.0 and q["jump_fraction"] < 0.05
+    assert np.isfinite(q["octave_ratio"]).all() and not q["octave_ambiguous"]
+
+
+def test_interior_default_comb_reads_twice_the_speed_of_a_four_cylinder():
+    # Orders 2, 4, 6, 8 at speed r are the orders 1, 2, 3, 4 at speed 2r: the
+    # spectra are identical and no test on the data can tell them apart (the
+    # octave ratios read alike). The comb must come from the machine (Notes:
+    # orders=(2, 4, 6) for four cylinders). Where twice the speed leaves the
+    # range, the guard bands report it.
+    s, x = _interior(np.full(round(6.0 * FS), 2200.0), seed=3)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        default = rpm_from_ridge(x, FS, CAR_RANGE)
+    assert np.median(default.rpm / _truth(default, s)) == pytest.approx(2.0, abs=0.02)
+    s, x = _interior(_ramp(1200.0, 6000.0, 500.0), seed=3)
+    with pytest.warns(RuntimeWarning, match="search range"):
+        fast = rpm_from_ridge(x, FS, CAR_RANGE)
+    over = 2.0 * _truth(fast, s) > CAR_RANGE[1] * 1.03
+    assert over.sum() > 20 and fast.at_bound[over].mean() >= 0.9
+
+
+def test_interior_weak_cruise_and_noise_only_are_flagged():
+    # Weak orders under strong low-frequency noise cannot be tracked; that must
+    # read clearly: median confidence near 0 and a RidgeQualityWarning.
+    s, x = _interior(np.full(round(6.0 * FS), 2000.0), onr_db=-30.0, tilt=-9.0)
+    res, rec = _record(x, FS, CAR_RANGE, orders=EVEN_COMB)
+    assert any(issubclass(w.category, RidgeQualityWarning) for w in rec)
+    assert not res.quality["reliable"] and res.quality["median_confidence"] < 0.05  # measured: 0
+    noise, rec = _record(x - s.x, FS, CAR_RANGE, orders=EVEN_COMB)
+    assert any(issubclass(w.category, RidgeQualityWarning) for w in rec)
+    assert noise.quality["median_confidence"] < 0.05  # measured: 0
+
+
+def test_single_line_comb_locked_on_a_rational_neighbour_has_low_confidence():
+    # A line of order 6 about 8 dB below a noise floor falling at 9 dB/octave
+    # (RMS), a line at 7/6 of it (order 7, -2 dB) and a fixed tone 10 dB above
+    # order 6 that it crosses. With the comb (6,) and moving=True (which removes
+    # the tone) the track falls onto the order 7 line, 7/6 of the speed; the
+    # rival at the true speed is counted, so the confidence of those frames is
+    # low and the track is reported as unreliable.
+    from rota._channel import speed_noise
+
+    t = np.arange(round(8.0 * FS)) / FS
+    rpm = rpm_profiles(t, "linear", start=2000.0, stop=8000.0, t_start=0.5, t_stop=7.5)
+    s = synth_runup(FS, rpm, [dict(order=6.0, amplitude=1.0), dict(order=7.0, amplitude=0.8)],
+                    tones=[dict(freq=500.0, amplitude=3.16)], seed=0)
+    noise, _ = speed_noise(FS, t.size, 50.0, level_db_at_ref=0.0, ref_speed_kmh=50.0,
+                           level_slope_db_per_doubling=0.0, tilt_db_per_octave=-9.0,
+                           highpass=10.0, grain=0.1, seed=7)
+    noise *= np.sqrt(0.5 / np.mean(noise**2)) * 10 ** (8.0 / 20)
+    res, rec = _record(s.x + noise, FS, (1500.0, 10000.0), orders=(6,), moving=True)
+    ratio = res.rpm / _truth(res, s)
+    wrong = np.abs(ratio - 1.0) > 0.03
+    assert np.mean(np.abs(ratio - 7 / 6) < 0.03) > 0.5  # measured: 0.92
+    assert np.median(res.confidence[wrong]) < 0.2  # measured: 0.08
+    assert not res.quality["reliable"]
+    assert any(issubclass(w.category, RidgeQualityWarning) for w in rec)
