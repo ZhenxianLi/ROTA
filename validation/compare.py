@@ -1262,7 +1262,10 @@ def probe_table(cases):
         "between the two offsets that bracket the gain 1/sqrt(2) (exact for any response 1 / (1 + c d^p)). "
         "Set value: ROTA's `bandwidth` (-3 dB offset from the carrier). MATLAB `Bandwidth` = "
         "`par.vk_bandwidth_matlab` (twice the set value: the full width between the -3 dB points). "
-        "Offsets in percent of the set value; ROTA-MATLAB in percent of the MATLAB offset.",
+        "Offsets in percent of the set value; ROTA-MATLAB in percent of the MATLAB offset. The informational rows "
+        "give the offset MATLAB reaches with `Bandwidth` twice and once the set value, with the second-order "
+        "structure of the comparison and with a first-order structure (`FilterOrder` 1, better conditioned "
+        "equations), which shows what `Bandwidth` means even where the second-order solve does not converge.",
     )
     for case in cases:
         if not case.flag("do_vkprobe"):
@@ -1279,7 +1282,7 @@ def probe_table(cases):
         offs, g0_r, g_r = _probe_gains(case, comp.waveforms[:, 0], sl)
         ref = case.ref
         res_m = {}
-        for cid in ("vkprobe", "vkprobe_same"):
+        for cid in ("vkprobe", "vkprobe_same", "vkprobe_fo1", "vkprobe_same_fo1"):
             if ref.ok(cid):
                 w = np.asarray(ref.get(cid, "xrec"), dtype=float)
                 w = _orient(w, case.t.size, 1)
@@ -1313,17 +1316,25 @@ def probe_table(cases):
                 note=(f"Set {B:g} Hz; ROTA {f_r:.4g} Hz" + ("" if f_m is None else f", MATLAB {f_m:.4g} Hz")
                       + f" (MATLAB `Bandwidth` {bw_m:g} Hz)." + g2 + (" " + note_m if note_m else "")).strip(),
             ))
-        s = res_m["vkprobe_same"]
-        if isinstance(s, str):
-            tab.rows.append(Row(case.name, f"MATLAB with `Bandwidth` {B:g} Hz: -3 dB offset above the carrier",
-                                "n/a (MATLAB only)", s, s, " %", note=ref.detail("vkprobe_same")))
-        else:
+        # Informational: the -3 dB offset MATLAB reaches, as a fraction of the number given to
+        # `Bandwidth` (0.5: full width between the -3 dB points; 1: offset from the carrier).
+        for cid, fo, given in (("vkprobe", 2, bw_m), ("vkprobe_same", 2, B), ("vkprobe_fo1", 1, bw_m),
+                               ("vkprobe_same_fo1", 1, B)):
+            if not ref.ran(cid) and ref.present and cid.endswith("fo1"):
+                continue  # older reference files have no first-order probe
+            s = res_m[cid]
+            label = f"MATLAB `FilterOrder` {fo}, `Bandwidth` {given:g} Hz: -3 dB offset above the carrier"
+            if isinstance(s, str):
+                tab.rows.append(Row(case.name, label, "n/a (MATLAB only)", s, "n/a (MATLAB only)", " %",
+                                    note=ref.detail(cid)))
+                continue
             f_s = _offset_3db(offs, s[2], 1)
+            w = ref.warning(cid)
             tab.rows.append(Row(
-                case.name, f"MATLAB with `Bandwidth` {B:g} Hz: -3 dB offset above the carrier", "n/a (MATLAB only)",
-                100.0 * (f_s / B - 1.0), "n/a (MATLAB only)", " %", digits=3,
-                note=(f"Informational: MATLAB reaches {f_s:.4g} Hz, i.e. {f_s / B:.3f} times the number given; "
-                      "a ratio of 0.5 means that `Bandwidth` is the full -3 dB width."),
+                case.name, label, "n/a (MATLAB only)", 100.0 * (f_s / B - 1.0), "n/a (MATLAB only)", " %", digits=3,
+                note=(f"Informational, relative to the set {B:g} Hz: MATLAB reaches {f_s:.4g} Hz, {f_s / given:.3f} times "
+                      f"the number given (0.5: `Bandwidth` is the full -3 dB width); gain at the carrier "
+                      f"{db(s[1]):.2f} dB." + (f" {w}." if w else "")),
             ))
     return tab
 
