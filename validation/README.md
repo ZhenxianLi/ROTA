@@ -134,3 +134,70 @@ Acceptable speed error. A relative speed error d moves an order of frequency f o
 ## Not yet
 
 The black-box reference comparison (ROADMAP section 5.5, steps 2 and 3: running an external implementation on these signals, storing its output in `reference/`, and the `compare.py` report) has not been run for any release so far (0.1 to 0.3). Only the comparison with analytic truth exists, and it is what continuous integration runs.
+
+## Black-box reference (MATLAB)
+
+ROADMAP section 5.5 describes a second reference besides the analytic truth: the same signals analysed by an external implementation, used as a black box. This section describes the set-up; no result has been published yet (the first run is pending), so the statement under "Not yet" above still holds.
+
+**Rules (ROADMAP section 4).** `validation/matlab/run_reference.m` only calls documented public functions of the Signal Processing Toolbox, with every parameter given explicitly, on the signals of `make_signals.py`, and saves what they return. No toolbox code is read or reused, no other data is processed and nothing is evaluated in that script. The comparison is done by `compare.py`. When ROTA and MATLAB disagree, the analytic truth decides (ROADMAP section 5.1): every row of the report also says how far MATLAB is from the truth.
+
+### Running it in CI
+
+Actions, then `matlab-reference`, then Run workflow. The workflow also runs on pushes that change `validation/matlab/**`, `validation/export_mat.py` or `validation/compare.py`. It installs ROTA, runs `python validation/export_mat.py`, sets up MATLAB with the Signal Processing Toolbox (`matlab-actions/setup-matlab`, which licenses MATLAB itself for a public repository on a GitHub-hosted runner), runs `run('validation/matlab/run_reference.m')`, then `python validation/compare.py --out validation/reference/report.md`. The report is appended to the job summary, and `validation/reference/` (report, `<case>_ref.mat`, `versions.txt` with the MATLAB release and toolbox versions, and `log.txt` with every call, warning and error) is uploaded as the artifact `matlab-reference`. Every call is wrapped in `try`/`catch`: a failing call is logged and the others continue; the report then shows `MATLAB call failed` for it.
+
+**The MATLAB output is not committed.** It stays in the CI artifact (and `validation/reference/` and `validation/signals/` are git-ignored) until the licence terms of the institution concerned have been confirmed (ROADMAP section 5.5).
+
+### Without MATLAB
+
+```
+python validation/export_mat.py
+python validation/compare.py --out report.md
+```
+
+writes `validation/signals/<case>.mat` and a report in which ROTA is compared with the truth and every MATLAB cell reads `MATLAB output missing`. The same two commands, with `run('validation/matlab/run_reference.m')` in MATLAB between them (started from anywhere; the script finds the repository from its own location), reproduce the CI run on a workstation. `compare.py --cases T1 T5` restricts the cases, `--strict` returns a non-zero exit status if a row fails.
+
+### Cases and parameters
+
+`export_mat.py` writes T1, T2, T3, T5 (60 pulses per revolution), T6 and T14 as MATLAB v5 files with `x`, `fs`, `t`, `rpm` (the exact speed, column), `tacho` (T5), `orders`, `order_amplitude` (peak truth), `order_stems` (truth waveforms) and the struct `par` of analysis parameters that both sides use; `compare.py` reads the same table, so they cannot drift apart.
+
+| Case | Order resolution | Frequency map | Vold-Kalman bandwidth | Tacholess speed (MATLAB order; ROTA comb = all orders) |
+|---|---|---|---|---|
+| T1 | 0.25 | 8 Hz | 2 Hz | order 2, 4 Hz; ROTA range 800 to 4500 rpm |
+| T2 | 0.25 | none | 2 Hz | order 2, 4 Hz; 800 to 5500 rpm |
+| T3 | 0.25 | none | 2 Hz | order 2, 6 Hz; 800 to 4500 rpm |
+| T5 | none | none | none | tachometer: 60 pulses per revolution, state levels from the signal |
+| T6 | 0.25 | none | 16 Hz | none (1 s record) |
+| T14 | 0.125 | none | 2 Hz | order 1, 3 Hz; 600 to 3500 rpm |
+
+Order maps use a Hann window and 75 % overlap, the frequency map a flat-top window (no scalloping) and 75 % overlap; amplitudes are RMS. The frequency map is run for T1 only, the one case whose single line is further from its neighbours than the flat-top main lobe. The Vold-Kalman filter is joint over several orders (decoupled) with a second-order structure.
+
+### Calls made (MATLAB)
+
+| Function | Arguments |
+|---|---|
+| `tachorpm` | `(tacho, fs, 'PulsesPerRev', 60, 'StateLevels', [low high], 'OutputFs', 1000, 'FitType', 'smooth', 'FitPoints', 60)`; and with `'FitType', 'linear'` (no `FitPoints`) |
+| `rpmordermap` | `(x, fs, rpm, res, 'Window', 'hann', 'OverlapPercent', 75, 'Amplitude', 'rms', 'Scale', 'linear')`, `res` in orders |
+| `rpmfreqmap` | `(x, fs, rpm, res, 'Window', 'flattopwin', 'OverlapPercent', 75, 'Amplitude', 'rms', 'Scale', 'linear')`, `res` in Hz |
+| `orderspectrum` | `(map, order, 'Amplitude', 'rms')`, with the map and order axis of `rpmordermap` |
+| `ordertrack` (order map) | `(map, order, rpm, time, orders, 'Amplitude', 'rms', 'Scale', 'linear')`, from `rpmordermap` |
+| `ordertrack` (Vold-Kalman) | `(x, fs, rpm, orders, ones(1, K), 'Amplitude', 'peak', 'Scale', 'linear', 'Bandwidth', bw, 'Decouple', dec)` |
+| `orderwaveform` | `(x, fs, rpm, orders, ones(1, K), 'FilterOrder', 2, 'Bandwidth', bw, 'Decouple', dec)` |
+| `rpmtrack` | `(x, fs, order, [t0 f0], 'Method', 'stft', 'FrequencyResolution', res, 'PowerPenalty', Inf, 'FrequencyPenalty', 0, 'StartTime', t(1), 'EndTime', t(end))`, with `[t0 f0]` a point on the ridge read off the exact speed at mid-record |
+
+The script keeps a short list of fallbacks for each call (the same call without the optional arguments that a given release might not accept, or with the speed repeated in two columns). The variant that ran is saved with the output, listed under "MATLAB calls recorded" in the report, and marked in the notes of the rows whenever it was not the first.
+
+### What the report compares
+
+One table per comparison, with the columns ROTA to truth, MATLAB to truth, ROTA to MATLAB, the tolerance (ROADMAP section 5.4) and the result. Physical quantities are compared on common grids, never map cells:
+
+1. Tachometer speed, `tacho_to_rpm` against `tachorpm` (T5): median relative error, tolerance 0.1 %.
+2. Tacholess speed, `rpm_from_ridge` against `rpmtrack`: share of frames within 3 % (90 % against the truth; the two trackers within 5 percentage points), and the boundary-hit flag of ROTA.
+3. Amplitude of an order along its ridge in an order map, `rpm_order_map` with `order_slice` against `rpmordermap` (largest dB difference over interior frames where the truth amplitude varies by at most 2 % over a frame; 0.2 dB against the truth, 0.5 dB against MATLAB).
+4. The same against `ordertrack` applied to the MATLAB order map.
+5. The same for the frequency map (T1).
+6. Spacing of the order and frequency axes against the requested resolution (5 %).
+7. Average order spectrum, `order_spectrum` against `orderspectrum`: peak order (within half a bin) and, where the truth amplitude is constant, peak amplitude.
+8. Vold-Kalman waveforms, `order_waveform` against `orderwaveform`: correlation (0.99) and least-squares gain of the waveform on the true waveform (0.2 dB, 0.5 dB).
+9. Vold-Kalman envelope amplitude, `order_waveform` against `ordertrack` in its Vold-Kalman form (0.2 dB, 0.5 dB).
+
+Not covered: the -3 dB bandwidth of the Vold-Kalman filter (ROADMAP section 5.4), which needs a dedicated test signal, and the cases T4, T8, T10 and T13. `rpmtrack` has no argument for a frequency range, so the tacholess comparison is anchored by the initial ridge point and the frequency resolution instead. The meaning of the bandwidth and resolution arguments of the MATLAB functions is taken as documented (Hz and orders); where the two sides define them differently the rows show a systematic offset, not noise, and the report is the place to read it.

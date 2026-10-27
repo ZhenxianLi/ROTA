@@ -1,0 +1,71 @@
+name: matlab-reference
+
+# Black-box reference comparison (ROADMAP sections 5.2 and 5.5). Run it by hand from
+# Actions -> matlab-reference -> Run workflow, or by pushing a change to the files below.
+# MATLAB is used only through documented public functions with explicit parameters
+# (validation/matlab/run_reference.m). Its output stays in the workflow artifact and is not
+# committed: the licence terms must be confirmed before it is published (ROADMAP 5.5).
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "validation/matlab/**"
+      - "validation/export_mat.py"
+      - "validation/compare.py"
+
+permissions:
+  contents: read
+
+jobs:
+  matlab-reference:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ROTA
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Export the validation signals (.mat)
+        run: python validation/export_mat.py
+
+      # For a public repository MathWorks licenses MATLAB automatically on a GitHub-hosted runner.
+      - name: Set up MATLAB
+        uses: matlab-actions/setup-matlab@v2
+        with:
+          products: Signal_Processing_Toolbox
+
+      # The working directory is the repository root. The script finds its folders from its own
+      # location, and catches the error of every call, so a failing call does not stop the run.
+      - name: Run the reference calls
+        uses: matlab-actions/run-command@v2
+        with:
+          command: run('validation/matlab/run_reference.m')
+
+      - name: Compare ROTA, truth and MATLAB
+        if: ${{ !cancelled() }}
+        run: python validation/compare.py --out validation/reference/report.md
+
+      - name: Upload the reference output
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: matlab-reference
+          path: validation/reference/
+          if-no-files-found: warn
+
+      - name: Add the report to the job summary
+        if: ${{ !cancelled() }}
+        run: |
+          if [ -f validation/reference/report.md ]; then
+            head -c 900000 validation/reference/report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No report was written (see the log of the previous steps)." >> "$GITHUB_STEP_SUMMARY"
+          fi
