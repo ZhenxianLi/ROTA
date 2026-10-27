@@ -1,6 +1,6 @@
 # Examples
 
-Four runnable scripts that show the main parts of ROTA on synthetic signals. All data come from `rota.synth`, so every result can be compared with the analytic truth that went into the signal, and each script prints those comparisons as numbers before it saves one figure.
+Six runnable scripts that show the main parts of ROTA on synthetic signals. All data come from `rota.synth`, so every result can be compared with the analytic truth that went into the signal, and each script prints those comparisons as numbers before it saves one figure. Scripts 5 and 6 also write WAV files that you can listen to.
 
 ## Running
 
@@ -12,9 +12,11 @@ python examples/01_order_map.py
 python examples/02_tacho_and_tacholess_speed.py
 python examples/03_order_extraction.py
 python examples/04_order_table_resynthesis.py
+python examples/05_realistic_engine_audio.py
+python examples/06_electric_drive_audio.py
 ```
 
-The scripts can be started from any directory. Each runs in a few seconds (about 2 s, 2 s, 8 s and 5 s) and writes its figure to `docs/images/`, 8 inches wide at 150 dpi. Random elements use fixed seeds, so the numbers and figures are reproducible.
+The scripts can be started from any directory. Each runs in a few seconds (about 2 s, 2 s, 8 s, 5 s, 11 s and 25 s) and writes its figure to `docs/images/`, 8 inches wide at 150 dpi; scripts 5 and 6 also write their WAV files to `docs/audio/` (`scipy.io.wavfile`). Random elements use fixed seeds, so the numbers, figures and audio files are reproducible.
 
 ## The signal
 
@@ -30,7 +32,7 @@ Figure: `docs/images/01_order_map.png`.
 
 ## 02_tacho_and_tacholess_speed.py
 
-Compares two speed estimates with the true speed. The signal gets a 12-pulse tachometer with timing jitter and dropped pulses, which `tacho_to_rpm` converts to rpm. `rpm_from_ridge` estimates the speed from the signal alone, with a comb of the half-order family (1.5, 3, 4.5, 6) and without spectral whitening, because the fixed tone would otherwise briefly outscore the orders at a speed above the search range (the comments in the script explain both). The figure shows the speed curves, their relative errors, and a second tacholess run whose search range is deliberately too narrow: above the upper limit the estimate does not sit on the bound but jumps to a wrong value, and only `at_bound` and the collapse of `confidence` reveal it. The script prints the speed errors, the number of pulses filled in, and how many frames of the narrow run were flagged.
+Compares two speed estimates with the true speed. The signal gets a 12-pulse tachometer with timing jitter and dropped pulses, which `tacho_to_rpm` converts to rpm. `rpm_from_ridge` estimates the speed from the signal alone, with a comb of the half-order family (1.5, 3, 4.5, 6) and without spectral whitening, because the fixed tone would otherwise briefly outscore the orders at a speed above the search range (the comments in the script explain both). The figure shows the speed curves, their relative errors, and a second tacholess run whose search range is deliberately too narrow: above the upper limit the estimate does not sit on the bound but jumps to a wrong value, and `at_bound` flags every one of those frames. The script prints the speed errors, the number of pulses filled in, and how many frames of the narrow run were flagged.
 
 ![Tacho and tacholess speed](../docs/images/02_tacho_and_tacholess_speed.png)
 
@@ -51,3 +53,29 @@ Analyses a run-up and builds a different signal from the analysis alone. The ord
 ![Order table resynthesis](../docs/images/04_order_table_resynthesis.png)
 
 Figure: `docs/images/04_order_table_resynthesis.png`.
+
+## Audio: one scaling for every file
+
+Scripts 5 and 6 write 16-bit PCM WAV files at 32 kHz. The only digital scaling is the constant `FULL_SCALE_PA = 4.0` in both scripts: a sound pressure of 4 Pa maps to digital full scale, and every file (recording, residual, extracted orders, resynthesis) uses it, so the levels of all files can be compared directly. A raised-cosine fade of 20 ms at both ends is the only other change; there is no normalisation or limiter, and a script stops with an error instead of writing a file that would clip. The recordings are synthetic: every parameter is a default of `rota.synth.synth_scenario` or an override stated in the script.
+
+## 05_realistic_engine_audio.py
+
+A complete synthetic recording, `synth_scenario("ice_runup")` with two receiver channels: a four-stroke four-cylinder engine (firing order 2) pulls away from idle with clutch slip and accelerates at full load through two upshifts in 8.5 s. The default record starts in second gear; the launch comes from the overrides in the script (`speed`: 0.8 s hold from 0 km/h at 4 m/s², `drive`: start in first gear). Order 2 dominates, orders 4, 6 and 8 follow at -15, -24 and -30 dB, the odd and half orders are weaker. The scenario adds an angle-locked speed ripple, combustion bursts ringing a 1.9 kHz structural resonance, engine broadband noise, road noise and a low-frequency rumble, a road-joint thump and a click, a modal transfer path (humps at 45 and 175 Hz, a dip near 80 Hz) and a cabin impulse response. The script reads the speed from the tachometer channel (`tacho_to_rpm`, with the conditioning delay compensated), draws the Campbell diagram and the order map, and compares the slice of the firing order with the quasi-static truth at each receiver. It removes 27 engine orders with tracked harmonics (the source orders of the scenario and the harmonics of the firing order up to order 40, which carry the periodic part of the combustion bursts), compares the extracted orders and the residual with the true stems, and renders the extracted orders along a speed 15 % higher (`remap_rpm`, envelopes keep their time course) before recombining them with the residual (`resynthesize`). The residual is quieter than the true non-engine content, because the order bands also take the broadband noise inside them; the script prints both levels. Printed results: tacho speed error median 0.015 %, firing-order slice within 0.23 dB of the truth (median, both channels), extracted orders against the true engine stems corr 0.98, residual 80 dB against 82 dB of true non-engine content.
+
+Audio: `docs/audio/engine_runup.wav` (the recording), `engine_runup_orders_removed.wav` (the residual), `engine_runup_orders_only.wav` (the extracted orders) and `engine_runup_faster.wav` (the faster engine), all stereo.
+
+![Realistic engine run-up](../docs/images/realistic_runup.png)
+
+Figure: `docs/images/realistic_runup.png`.
+
+## 06_electric_drive_audio.py
+
+A synthetic electric drive, `synth_scenario("ev_runup")` shortened to 8 s: a motor with four pole pairs behind a single-speed 12:1 reduction accelerates at full load from walking pace (200 to about 10900 rpm). The source orders are the motor order family 2, 4, 8, 10, 12 and 14 (order 4 is the electrical frequency), a gear-mesh order 6.7 and the gear whine at order 40 with a slow amplitude modulation. The inverter carrier at 10 kHz is dithered by up to ±0.8 kHz in hops, with sidebands at plus and minus 2 and 4 times the electrical frequency only 2 to 4 dB above the local floor; two fixed tones sit at 6.3 and 14.2 kHz. The tonal lines are weak against the road noise and the low-frequency rumble, as in a quiet electric vehicle. The only overrides are the duration and a 24-pulse tachometer (the default 48 pulses would be shorter than 2 samples at 32 kHz above 10000 rpm).
+
+The figure shows the Campbell diagram before and after order removal, the order map with the motor order family and the whine, and the inverter region with its own colour scale, where the carrier hops and the sideband fan are visible. The script compares every order slice with the quasi-static truth where the line stands at least 6 dB above the true noise in its order band: the whine does so in about two thirds of the frames, most motor orders rarely (their bands are dominated by road noise, which the script prints per order). It reads the carrier and its sidebands from the Campbell diagram along their true dithered tracks with the local floor subtracted (median per hop: carrier within 0.9 dB of the truth, ±2 f_el sidebands within 1.4 to 2.1 dB, ±4 f_el within 3 to 4 dB). Order removal uses tracked harmonics in two passes: the whine with 4 revolutions, which follow it through the 2.1 and 3.3 kHz path modes (corr 0.89 with its true stem), then the motor and gear-mesh orders with 16 revolutions, whose narrow bands take less road noise along. The inverter sidebands are not orders (their frequency is not proportional to the speed), so they stay in the residual. The sampling rate is checked to be at least 2.2 times the highest carrier frequency.
+
+Audio: `docs/audio/electric_runup.wav` (the recording), `electric_runup_motor_orders_removed.wav` (inverter, tones, road noise and rumble) and `electric_runup_whine_only.wav` (the extracted motor and gear orders, about 28 dB below the recording), all mono.
+
+![Electric drive](../docs/images/electric_drive.png)
+
+Figure: `docs/images/electric_drive.png`.

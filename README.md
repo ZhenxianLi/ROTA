@@ -88,11 +88,23 @@ The amplitude convention of every function is stated in its docstring.
 
 ## Examples
 
-Four scripts in [examples/](https://github.com/ZhenxianLi/ROTA/tree/main/examples) cover order maps and slices, tachometer and tacholess speed, order extraction and removal, and order-table resynthesis. Each builds its signal with `rota.synth` and prints its results against the known truth.
+Six scripts in [examples/](https://github.com/ZhenxianLi/ROTA/tree/main/examples) cover order maps and slices, tachometer and tacholess speed, order extraction and removal, order-table resynthesis, and two complete synthetic recordings that you can listen to, an engine run-up and an electric drive. Each builds its signal with `rota.synth` and prints its results against the known truth.
 
-![Campbell diagram, order map and order slices against the synthetic truth](https://raw.githubusercontent.com/ZhenxianLi/ROTA/main/docs/images/01_order_map.png)
+![Campbell diagram, order map, engine speed and firing-order level of a synthetic engine run-up](https://raw.githubusercontent.com/ZhenxianLi/ROTA/main/docs/images/realistic_runup.png)
 
-*Campbell diagram and order map of a run-up from idle (half orders, a 180 Hz resonance, a fixed 250 Hz tone, noise), and two order slices against the amplitude put into the signal ([examples/01_order_map.py](https://github.com/ZhenxianLi/ROTA/blob/main/examples/01_order_map.py)).*
+*A synthetic four-cylinder engine run-up from `rota.synth.synth_scenario("ice_runup")`: launch from idle with clutch slip, two upshifts, combustion bursts, a modal transfer path, engine broadband, road noise and rumble, two receiver channels. Campbell diagram and order map, the speed from the tachometer against the truth, and the level of the firing order against the truth at the receiver, before and after `remove_orders` ([examples/05_realistic_engine_audio.py](https://github.com/ZhenxianLi/ROTA/blob/main/examples/05_realistic_engine_audio.py)).*
+
+### Listen
+
+The recordings below are synthetic (no measured data) and are written by [examples/05_realistic_engine_audio.py](https://github.com/ZhenxianLi/ROTA/blob/main/examples/05_realistic_engine_audio.py) and [examples/06_electric_drive_audio.py](https://github.com/ZhenxianLi/ROTA/blob/main/examples/06_electric_drive_audio.py): 16-bit WAV at 32 kHz, all with the same scaling (4 Pa is digital full scale), so levels can be compared between files.
+
+- [engine_runup.wav](https://github.com/ZhenxianLi/ROTA/blob/main/docs/audio/engine_runup.wav): the engine run-up as recorded (two channels).
+- [engine_runup_orders_removed.wav](https://github.com/ZhenxianLi/ROTA/blob/main/docs/audio/engine_runup_orders_removed.wav): the residual after `remove_orders`: engine broadband, road noise, rumble and what is not periodic in the combustion bursts.
+- [engine_runup_orders_only.wav](https://github.com/ZhenxianLi/ROTA/blob/main/docs/audio/engine_runup_orders_only.wav): the extracted engine orders.
+- [engine_runup_faster.wav](https://github.com/ZhenxianLi/ROTA/blob/main/docs/audio/engine_runup_faster.wav): the same recording with the apparent engine speed raised by 15 % (`remap_rpm`, then `resynthesize` with the residual kept).
+- [electric_runup.wav](https://github.com/ZhenxianLi/ROTA/blob/main/docs/audio/electric_runup.wav): an electric drive run-up: motor orders and gear whine, a dithered 10 kHz inverter carrier with sidebands, two fixed tones, road noise and rumble. The tonal lines are weak against the broadband.
+- [electric_runup_motor_orders_removed.wav](https://github.com/ZhenxianLi/ROTA/blob/main/docs/audio/electric_runup_motor_orders_removed.wav): after removing the motor and gear orders; the inverter sidebands are not orders and remain.
+- [electric_runup_whine_only.wav](https://github.com/ZhenxianLi/ROTA/blob/main/docs/audio/electric_runup_whine_only.wav): the extracted motor and gear orders.
 
 ## Tacholess speed
 

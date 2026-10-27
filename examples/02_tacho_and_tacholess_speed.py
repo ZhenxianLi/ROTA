@@ -10,7 +10,8 @@ estimates are compared with the speed that went into the signal:
 Figure: (a) the speed curves, (b) their relative errors, (c, d) the tacholess
 estimator run again with a search range that is deliberately too narrow (600 to
 3500 rpm): above the limit the estimate does not sit on the bound but jumps to a
-wrong value, and only ``at_bound`` and the collapse of ``confidence`` tell it.
+wrong value, and only ``at_bound`` tells it reliably (``confidence`` falls in some
+of those frames, not in all).
 
 Settings that the data call for (see the docstring of ``rpm_from_ridge``):
 ``orders=(1.5, 3, 4.5, 6)``, because with the default integer comb the half-order
@@ -169,9 +170,9 @@ def main():
     shade(ax_d, narrow.t, narrow.at_bound)
     ax_d.set_title("(d) Confidence of the tacholess estimate (0 to 1)", loc="left")
     ax_d.set_ylabel("Confidence")
-    ax_d.set_ylim(0.0, 1.0)
+    ax_d.set_ylim(-0.04, 1.08)  # a clean track sits at 1: keep it off the frame
     ax_d.set_xlabel("Time (s)")
-    ax_d.legend(loc="upper left", ncol=2)
+    ax_d.legend(loc="lower left", ncol=2)
     for ax in (ax_a, ax_b, ax_c, ax_d):
         ax.grid(alpha=0.3)
         ax.set_xlim(0.0, DURATION)
