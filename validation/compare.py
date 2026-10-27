@@ -30,7 +30,13 @@ truth being the peak amplitude over sqrt(2); Vold-Kalman amplitudes are peak):
 * Vold-Kalman: correlation and least-squares gain of the order waveforms
   (``order_waveform`` vs ``orderwaveform``) and the envelope amplitude
   (``order_waveform`` vs ``ordertrack`` in its Vold-Kalman form), away from the record ends
-  (3 / bandwidth seconds);
+  (3 / bandwidth seconds). The gain of a waveform is fitted onto the true waveform (the stem).
+  The ROTA-MATLAB column of a gain row is the difference of the two gains, each measured
+  against the truth: ``gain(ROTA on truth) - gain(MATLAB on truth)`` in dB. ROTA is never fitted
+  onto MATLAB's waveform, because a fit onto an estimate that has not converged (an iterative
+  solver stopped early) would carry that estimate's own error into the column. The correlation
+  rows keep the Pearson coefficient of the two waveforms: it is a symmetric measure of
+  agreement without a fitted gain, so the problem does not arise;
 * the -3 dB bandwidth of the Vold-Kalman filter on the probe signal VKBW (constant speed, one
   order and tones at known offsets): the offset at which each filter attenuates a tone by 3 dB.
 
@@ -1089,7 +1095,8 @@ def vk_tables(cases):
     """Tables 8 and 9: Vold-Kalman waveforms and envelopes.
 
     ``order_waveform`` against ``orderwaveform`` (waveform correlation and least-squares gain in
-    dB) and against ``ordertrack`` in its Vold-Kalman form (envelope amplitude, PEAK convention,
+    dB; the ROTA-MATLAB gain is the difference of the two gains against the truth stem, in dB)
+    and against ``ordertrack`` in its Vold-Kalman form (envelope amplitude, PEAK convention,
     differences in dB).
 
     Returns
@@ -1108,7 +1115,9 @@ def vk_tables(cases):
         "Order waveforms against the truth stems (`order_amplitude * cos(phase)`), away from the record ends "
         f"({VK_EDGE_BANDWIDTHS:g} / bandwidth seconds). Correlation: Pearson coefficient. Gain: least-squares "
         "gain of the waveform on the stem in dB (amplitude of the waveform, independent of any envelope "
-        "definition). ROTA: bandwidth `par.vk_bandwidth` (-3 dB offset from the carrier), joint solution when "
+        "definition). ROTA-MATLAB for the gain rows is the difference of the two gains, each measured against "
+        "the truth stem (ROTA gain minus MATLAB gain, dB); ROTA is not fitted onto MATLAB's waveform. "
+        "ROTA-MATLAB for the correlation rows is the Pearson coefficient of the two waveforms. ROTA: bandwidth `par.vk_bandwidth` (-3 dB offset from the carrier), joint solution when "
         "there are several orders. MATLAB: `FilterOrder` `par.vk_filter_order` (1: the response of ROTA's "
         "second-difference structure, measured in table 10), `Bandwidth` `par.vk_bandwidth_matlab` = 2 x "
         "`par.vk_bandwidth` (full width between the -3 dB points, so that both filters have the same pass band; "
@@ -1172,7 +1181,10 @@ def vk_tables(cases):
             else:
                 w_m = xrec[sl, k]
                 c_m, c_rm = _corr(w_m, s), _corr(w_r, w_m)
-                g_m, g_rm = _gain_db(w_m, s), _gain_db(w_r, w_m)
+                # ROTA-MATLAB gain: each gain is measured on the truth first, then the two are
+                # compared (not ROTA fitted onto MATLAB, which would carry MATLAB's own error).
+                g_m = _gain_db(w_m, s)
+                g_rm = _gain_db(w_r, s) - g_m
             wave.rows.append(Row(case.name, f"{qty} waveform correlation", _corr(w_r, s), c_m, c_rm, "",
                                  (">=", TOL_CORR), (">=", TOL_CORR), digits=6, note=f"{base} {note_w}".strip()))
             wave.rows.append(Row(case.name, f"{qty} waveform gain", _gain_db(w_r, s), g_m, g_rm, " dB",
