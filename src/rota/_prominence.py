@@ -1,9 +1,51 @@
 """Prominent discrete tones: tone-to-noise ratio and prominence ratio.
 
-Implemented from the text of ECMA-418-1 (2nd edition, 2022), *Psychoacoustic
-metrics for ITT equipment - Part 1: prominent discrete tones*, which holds the
-technical content formerly in ECMA-74 Annex D (ECMA-74 from its 18th edition
-refers to ECMA-418-1; ISO 7779 Annex D describes the same two methods).
+Implemented from the text of ECMA-418-1 (3rd edition, December 2024),
+*Psychoacoustic metrics for ITT equipment - Part 1 (prominent discrete
+tones)*, which holds the technical content of ECMA-74 Annex D (17th edition,
+2019; from its 18th edition ECMA-74 refers to ECMA-418-1, and ISO 7779 Annex D
+describes the same two methods). Other open-source implementations of these
+metrics are listed in: Li, Z. LISQM - A List of Open-Source Implementations
+of Psychoacoustic and Sound Quality Metrics,
+https://zhenxianli.github.io/LISQM/.
+
+Changes of the 3rd edition implemented here (clause 11 and Annex A; the
+critical bands, the prominence ratio and both criteria are unchanged from the
+2nd edition, 2022):
+
+* Tone band (11.2, A.2). Its end points are the minimal points on either
+  side of the tone peak within a window of 15 % of the critical bandwidth
+  centred on the peak; an end point on the window edge is moved outwards to
+  the nearest local minimum. The 2nd edition's fallback of a fixed band of
+  15 % of the critical band was withdrawn.
+* Tone power (Formula (A.1)): the power above the straight line joining the
+  two end points, ``X_t = X_t' - (x_1 + x_2) N / 2`` over the ``N`` lines of
+  the tone band.
+* Masking noise (Formula (A.2)): ``X_n = (X_tot - X_t) delta_fc /
+  delta_f_tot``. The 2nd edition divided by ``delta_f_tot - delta_f_t``; the
+  noise under the tone now stays in ``X_n``.
+
+Reading of the text of the 3rd edition where it is inconsistent:
+
+* Formulae (A.7) and (A.8) still read ``X_t,p - X_t,s`` (as in the 2nd
+  edition); the text of A.6 and Formulae (15) and (16) of clause 11 add the
+  secondary tone: the sum is used.
+* The tone spacing is still printed ``|delta_f_s - delta_f_p|``; it is read
+  as ``|f_s - f_p|``. Formula (14) is used below 1 kHz and every tone in the
+  band is proximate from 1 kHz up (the new NOTE of 11.6 accepts the small
+  discontinuity at 1 kHz).
+* Clause 10 still leaves ``f0 = 500 Hz`` between its two ranges; 12.2 (``f <=
+  500 Hz``: arithmetic centring) is followed. The new NOTE of clause 10 calls
+  the band-edge discontinuity near 500 Hz negligible.
+* The discrete tone range is 89.1 Hz to 11 220 Hz in 4.1.1 NOTE 2 (the outer
+  edges of the 100 Hz and 10 kHz one-third-octave bands) but 11 200 Hz in
+  clause 10, Formulae (13) and (26) and Tables 2 and 3: the criteria are
+  given for 89.1 Hz <= f < 11 200 Hz, as in the formulae.
+* Formula (20) now reads ``f_2,M = f_1,M + delta_f_M`` (corrected from
+  ``f_t + delta_f_M``, Formula (19) of the 2nd edition), as implemented.
+* New misprints, resolved with the Annex B counterparts: Formula (21) reads
+  ``C_L,0 f_t`` for ``C_L,1 f_t`` (B.5), and the condition of Formula (23)
+  reads ``f_t <= 171.4 Hz`` for ``> 171.4 Hz`` (B.7 and the text).
 
 Two layers:
 
@@ -46,15 +88,17 @@ __all__ = [
 _METHODS = ("tnr", "pr")
 _SCALINGS = ("psd", "power")
 
-# Discrete tone frequency range of interest (ECMA-418-1 clause 1) and the
-# range in which the criteria of 11.5 / 12.6 are defined.
+# Range in which the criteria of 11.5 / 12.6 are defined (ECMA-418-1:2024,
+# Formulae (12), (13), (25), (26); 4.1.1 NOTE 2 gives 11 220 Hz, see the
+# module notes).
 _F_LO = 89.1
 _F_HI = 11200.0
 # Frequency at and below which the lower critical band is truncated at 20 Hz
 # (ECMA-418-1, 12.3 and 12.5).
 _F_TRUNC = 171.4
-# Largest tone bandwidth, as a fraction of the critical bandwidth, for which
-# the tone is regarded as resolved (ECMA-418-1, 11.2).
+# Width of the window, as a fraction of the critical bandwidth centred on the
+# tone peak, in which the end points of the tone band are sought; a wider
+# tone band means the tone is not resolved (ECMA-418-1:2024, 11.2 and A.2).
 _TONE_FRACTION = 0.15
 
 
@@ -83,12 +127,12 @@ def critical_bandwidth(f):
 
     References
     ----------
-    Ecma International (2022). ECMA-418-1, Psychoacoustic metrics for ITT
-    equipment - Part 1 (prominent discrete tones), 2nd edition. Clauses 10
+    Ecma International (2024). ECMA-418-1, Psychoacoustic metrics for ITT
+    equipment - Part 1 (prominent discrete tones), 3rd edition. Clauses 10
     (critical bands), 11 and Annex A (tone-to-noise ratio), 12 and Annex B
     (prominence ratio).
-    Ecma International (2021). ECMA-74, Measurement of airborne noise emitted
-    by information technology and telecommunications equipment, 19th
+    Ecma International (2019). ECMA-74, Measurement of airborne noise emitted
+    by information technology and telecommunications equipment, 17th
     edition, Annex D.
     ISO 7779:2018. Acoustics - Measurement of airborne noise emitted by
     information technology and telecommunications equipment, Annex D.
@@ -106,13 +150,13 @@ def critical_band_edges(f, *, adjacent=False):
     centred, ``f -+ delta_fc / 2``; above 500 Hz it is geometrically centred,
     ``f1 f2 = f**2`` with ``f2 - f1 = delta_fc``, i.e.
     ``f1 = -delta_fc / 2 + sqrt(delta_fc**2 + 4 f**2) / 2`` (ECMA-418-1,
-    Formulae (3) to (8) and (16) to (19); at exactly 500 Hz the arithmetic
+    Formulae (3) to (8) and (17) to (20); at exactly 500 Hz the arithmetic
     form is used, as in 12.2).
 
     The adjacent bands of the prominence ratio method are contiguous with
     the middle band: the lower band spans ``[f1_L, f1]`` and the upper band
     ``[f2, f2_U]``, with ``f1_L`` and ``f2_U`` from the quadratic fits of
-    ECMA-418-1, Formulae (20) and (21) with Tables 2 and 3 (for
+    ECMA-418-1, Formulae (21) and (22) (B.5 and B.6) with Tables 2 and 3 (for
     ``f <= 171.4`` Hz the lower band starts at 20 Hz). Outside 89.1 Hz to
     11 200 Hz the end rows of the tables are extrapolated.
 
@@ -132,12 +176,12 @@ def critical_band_edges(f, *, adjacent=False):
 
     References
     ----------
-    Ecma International (2022). ECMA-418-1, Psychoacoustic metrics for ITT
-    equipment - Part 1 (prominent discrete tones), 2nd edition. Clauses 10
+    Ecma International (2024). ECMA-418-1, Psychoacoustic metrics for ITT
+    equipment - Part 1 (prominent discrete tones), 3rd edition. Clauses 10
     (critical bands), 11 and Annex A (tone-to-noise ratio), 12 and Annex B
     (prominence ratio).
-    Ecma International (2021). ECMA-74, Measurement of airborne noise emitted
-    by information technology and telecommunications equipment, 19th
+    Ecma International (2019). ECMA-74, Measurement of airborne noise emitted
+    by information technology and telecommunications equipment, 17th
     edition, Annex D.
     ISO 7779:2018. Acoustics - Measurement of airborne noise emitted by
     information technology and telecommunications equipment, Annex D.
@@ -170,13 +214,14 @@ def critical_band_edges(f, *, adjacent=False):
 def prominence_criterion(f, method="tnr"):
     """Frequency-dependent prominence criterion in dB.
 
-    Tone-to-noise ratio (ECMA-418-1, 11.5, Formulae (11) and (12)):
+    Tone-to-noise ratio (ECMA-418-1:2024, 11.5, Formulae (12) and (13)):
     ``8 + 8.33 lg(1000 / f)`` dB for 89.1 Hz <= f < 1000 Hz and 8 dB for
-    1000 Hz <= f < 11 200 Hz. Prominence ratio (12.6, Formulae (24) and
-    (25)): ``9 + 10 lg(1000 / f)`` dB below 1 kHz and 9 dB from 1 kHz to
+    1000 Hz <= f < 11 200 Hz. Prominence ratio (12.6, Formulae (25) and
+    (26)): ``9 + 10 lg(1000 / f)`` dB below 1 kHz and 9 dB from 1 kHz to
     11 200 Hz. A tone is prominent when its ratio is equal to or greater than
-    the criterion (and it is audible, which is not assessed here). Outside
-    89.1 Hz to 11 200 Hz the standard gives no criterion and NaN is returned.
+    the criterion and it is audible (11.8, 12.8: an aural examination, not
+    assessed here). Outside 89.1 Hz to 11 200 Hz the standard gives no
+    criterion and NaN is returned.
 
     Parameters
     ----------
@@ -194,12 +239,12 @@ def prominence_criterion(f, method="tnr"):
 
     References
     ----------
-    Ecma International (2022). ECMA-418-1, Psychoacoustic metrics for ITT
-    equipment - Part 1 (prominent discrete tones), 2nd edition. Clauses 10
+    Ecma International (2024). ECMA-418-1, Psychoacoustic metrics for ITT
+    equipment - Part 1 (prominent discrete tones), 3rd edition. Clauses 10
     (critical bands), 11 and Annex A (tone-to-noise ratio), 12 and Annex B
     (prominence ratio).
-    Ecma International (2021). ECMA-74, Measurement of airborne noise emitted
-    by information technology and telecommunications equipment, 19th
+    Ecma International (2019). ECMA-74, Measurement of airborne noise emitted
+    by information technology and telecommunications equipment, 17th
     edition, Annex D.
     ISO 7779:2018. Acoustics - Measurement of airborne noise emitted by
     information technology and telecommunications equipment, Annex D.
@@ -219,7 +264,7 @@ def _check_method(method):
 
 
 def _proximity_spacing(fp):
-    """Proximity spacing of two tones in Hz (ECMA-418-1, Formula (13)).
+    """Proximity spacing of two tones in Hz (ECMA-418-1:2024, Formula (14)).
 
     Infinite from 1 kHz up: there the two tones are always combined.
     """
@@ -258,35 +303,82 @@ _KEYS = (
 )
 
 
-def _find_tone(f, S, centre, band_idx, taken, half_lobe, thr, search, guard):
-    """Lines of the tone near ``centre`` inside ``band_idx``.
+def _peak_line(f, S, centre, band_idx, taken, search):
+    """Highest free line within ``centre +- search`` inside ``band_idx``.
 
-    Returns ``(lo, hi, p, level_ok)``: inclusive line indices, the peak line
-    and whether the peak exceeds the threshold over the local noise.
+    Falls back to the free line nearest ``centre``; None if none is free.
     """
-    b0, b1 = band_idx[0], band_idx[-1]
     cand = band_idx[(np.abs(f[band_idx] - centre) <= search) & ~taken[band_idx]]
     if cand.size == 0:
         near = band_idx[~taken[band_idx]]
         if near.size == 0:
             return None
         cand = near[[np.argmin(np.abs(f[near] - centre))]]
-    p = int(cand[np.argmax(S[cand])])
+    return int(cand[np.argmax(S[cand])])
+
+
+def _stands_out(S, p, band_idx, taken, guard, thr):
+    """Whether line ``p`` exceeds the median of the other free band lines by ``thr``."""
     ref_idx = band_idx[(np.abs(band_idx - p) > guard) & ~taken[band_idx]]
     if ref_idx.size < 3:
         ref_idx = band_idx[~taken[band_idx]]
-    level = np.median(S[ref_idx]) * thr
-    lo = p
-    while lo - 1 >= b0 and not taken[lo - 1] and (p - lo + 1 <= half_lobe or S[lo - 1] > level):
-        lo -= 1
-    hi = p
-    while hi + 1 <= b1 and not taken[hi + 1] and (hi + 1 - p <= half_lobe or S[hi + 1] > level):
-        hi += 1
-    return lo, hi, p, bool(S[p] > level)
+    return bool(S[p] > np.median(S[ref_idx]) * thr)
 
 
-def _analyse(f, S, df, ft, others, *, half_lobe, threshold_db, search_hz,
-             max_tone_fraction):
+def _tone_band(S, p, m, b0, b1, taken):
+    """End points of the tone band around the peak line ``p``.
+
+    ECMA-418-1:2024, 11.2 and A.2: on each side of the peak, the lowest line
+    within the window of ``m`` lines (15 % of the critical bandwidth centred
+    on the peak; on ties the line nearest the peak, so the end points are the
+    minimal points bracketing the peak). If it lies on the window edge, the
+    nearest local minimum beyond the edge is used: the search moves outwards
+    while the next line is lower. Lines outside ``[b0, b1]`` (the critical
+    band) or already ``taken`` by another tone are never used.
+
+    Returns ``(lo, hi)``, the inclusive end lines.
+    """
+    ends = []
+    for step in (-1, 1):
+        lines = []
+        k = p + step
+        while abs(k - p) <= m and b0 <= k <= b1 and not taken[k]:
+            lines.append(k)
+            k += step
+        if lines:
+            e = lines[int(np.argmin(S[lines]))]
+            at_edge = abs(e - p) == m
+        elif m == 0 and b0 <= p + step <= b1 and not taken[p + step]:
+            # Window narrower than one line: its edge is the peak itself.
+            e, at_edge = p + step, True
+        else:
+            e, at_edge = p, False
+        if at_edge:
+            while b0 <= e + step <= b1 and not taken[e + step] and S[e + step] < S[e]:
+                e += step
+        ends.append(e)
+    return ends[0], ends[1]
+
+
+def _tone(f, S, df, p, b0, b1, taken):
+    """Tone band and tone power above the line joining its end points.
+
+    ``X_t = X_t' - (x_1 + x_2) N / 2`` (ECMA-418-1:2024, Formula (A.1)),
+    with ``X_t'`` the power of the ``N`` lines of the tone band and ``x_1``,
+    ``x_2`` the powers of its end lines; negative values are set to zero.
+    Also returns whether ``delta_f_t = N df`` exceeds 15 % of the critical
+    bandwidth centred on the peak (11.2).
+    """
+    dfc = critical_bandwidth(f[p])
+    m = int(np.floor(0.5 * _TONE_FRACTION * dfc / df + 1e-9))
+    lo, hi = _tone_band(S, p, m, b0, b1, taken)
+    n = hi - lo + 1
+    xt = (S[lo:hi + 1].sum() - 0.5 * n * (S[lo] + S[hi])) * df
+    exceeded = n * df > _TONE_FRACTION * dfc * (1 + 1e-9)
+    return lo, hi, max(float(xt), 0.0), bool(exceeded)
+
+
+def _analyse(f, S, df, ft, others, *, half_lobe, threshold_db, search_hz):
     """TNR and PR quantities of the tone at ``ft`` on the PSD ``S`` (1-D)."""
     out = dict.fromkeys(_KEYS, np.nan)
     out["tone_band_exceeded"] = False
@@ -300,42 +392,34 @@ def _analyse(f, S, df, ft, others, *, half_lobe, threshold_db, search_hz,
     # Tone-to-noise ratio (clause 11 / Annex A).
     band_idx = np.flatnonzero((f >= f1) & (f < f2))
     if f1 >= lo_edge and f2 <= hi_edge and band_idx.size >= 2 * half_lobe + 3:
+        b0, b1 = int(band_idx[0]), int(band_idx[-1])
         taken = np.zeros(f.size, bool)
         guard = max(half_lobe + 1, int(np.ceil(0.5 * _TONE_FRACTION * dfc / df)))
-        lo, hi, p, _ = _find_tone(f, S, ft, band_idx, taken, half_lobe, thr,
-                                  search, guard)
-        width = (hi - lo + 1) * df
-        out["tone_band_exceeded"] = bool(width > _TONE_FRACTION * dfc * (1 + 1e-9))
-        if max_tone_fraction is not None and width > max_tone_fraction * dfc:
-            # Fallback of 11.2: a band of the given fraction of the critical
-            # band centred at the peak.
-            h = 0.5 * max_tone_fraction * dfc
-            sel = band_idx[np.abs(f[band_idx] - f[p]) <= h]
-            lo, hi = int(sel[0]), int(sel[-1])
+        p = _peak_line(f, S, ft, band_idx, taken, search)
+        lo, hi, xt, exceeded = _tone(f, S, df, p, b0, b1, taken)
+        out["tone_band_exceeded"] = exceeded
         taken[lo:hi + 1] = True
-        xt = S[lo:hi + 1].sum() * df
         dft = (hi - lo + 1) * df
-        xrem, dfrem = 0.0, 0.0
+        xrem = 0.0
         combined = []
         fprox = _proximity_spacing(ft)
         for fo in others:
             if not (f1 <= fo < f2) or taken[np.argmin(np.abs(f - fo))]:
                 continue
-            r = _find_tone(f, S, fo, band_idx, taken, half_lobe, thr, search, guard)
-            if r is None or not r[3]:
+            q = _peak_line(f, S, fo, band_idx, taken, search)
+            if q is None or not _stands_out(S, q, band_idx, taken, guard, thr):
                 continue
-            slo, shi = r[0], r[1]
-            xs, dfs = S[slo:shi + 1].sum() * df, (shi - slo + 1) * df
+            slo, shi, xs, _ = _tone(f, S, df, q, b0, b1, taken)
             taken[slo:shi + 1] = True
             if abs(fo - ft) < fprox:  # proximate: perceived as one tone (11.6)
-                xt, dft = xt + xs, dft + dfs
+                xt, dft = xt + xs, dft + (shi - slo + 1) * df
                 combined.append(float(fo))
             else:  # separate tone: removed from the masking noise only
-                xrem, dfrem = xrem + xs, dfrem + dfs
+                xrem += xs
         xtot = S[band_idx].sum() * df
         dftot = band_idx.size * df
-        rest = dftot - dft - dfrem
-        xn = (xtot - xt - xrem) * dfc / rest if rest > 0 else np.nan
+        # Formulae (A.2) and (16): the noise under the tone bands stays in X_n.
+        xn = (xtot - xt - xrem) * dfc / dftot
         with np.errstate(divide="ignore", invalid="ignore"):
             tnr = 10.0 * np.log10(xt / xn)
         out.update(
@@ -392,15 +476,18 @@ class ToneProminence:
         ``(lo, hi)``: outer edges in Hz of the lines assigned to the tone
         (per channel).
     tone_bandwidth : float or ndarray
-        ``delta_ft``: number of tone lines times the line spacing, Hz
-        (including combined proximate tones; per channel).
+        ``delta_ft``: number of lines in the tone band times the line
+        spacing, Hz (including combined proximate tones; per channel).
     tone_band_exceeded : bool or ndarray
-        True where ``delta_ft`` exceeds 15 % of ``delta_fc``: the tone is
-        not resolved (ECMA-418-1, 11.2 asks for a finer resolution).
+        True where the tone band of the tone under investigation is wider
+        than 15 % of the critical bandwidth centred on its peak: the tone is
+        not resolved (ECMA-418-1:2024, 11.2 asks for a finer resolution, and
+        its CAUTION advises using the prominence ratio as well).
     tone_power, total_power, noise_power : float or ndarray
-        ``X_t`` (tone), ``X_tot`` (all lines of the critical band) and
-        ``X_n`` (masking noise scaled to the critical bandwidth), per
-        channel.
+        ``X_t`` (tone power above the line joining the end points of the
+        tone band), ``X_tot`` (all lines of the critical band) and ``X_n``
+        (masking noise ``(X_tot - X_t)`` scaled to the critical bandwidth),
+        per channel.
     tone_level, noise_level : float or ndarray
         ``10 lg(X / ref**2)`` in dB for the tone and the masking noise.
     tnr : float or ndarray
@@ -483,23 +570,28 @@ def tone_prominence(
     other_tones=(),
     threshold_db=6.0,
     search_hz=None,
-    max_tone_fraction=None,
     ref=1.0,
 ):
     """Tone-to-noise ratio and prominence ratio of one tone (ECMA-418-1).
 
     Implements, on a one-sided spectrum with uniformly spaced lines, both
-    methods of ECMA-418-1 (formerly ECMA-74 Annex D), in the mean-square
-    form of its Annexes A and B:
+    methods of ECMA-418-1:2024 (3rd edition; formerly ECMA-74 Annex D), in
+    the mean-square form of its Annexes A and B:
 
     * **Tone-to-noise ratio** (clause 11). The critical band of the tone
       ``[f1, f2)`` follows :func:`critical_band_edges`. ``X_tot`` is the sum
       of the power of the ``N_tot`` lines in the band (``delta_f_tot = N_tot
-      df``). The tone power ``X_t`` is the power of the ``N_t`` contiguous
-      lines that "define" the tone (``delta_f_t = N_t df``). The masking noise
-      is the remaining band power rescaled to the critical bandwidth,
-      ``X_n = (X_tot - X_t) delta_fc / (delta_f_tot - delta_f_t)``, and
-      ``TNR = 10 lg(X_t / X_n)`` dB.
+      df``). The peak line of the tone is the highest line near
+      ``tone_freq``. The tone band runs between the minimal points on either
+      side of the peak within a window of 15 % of the critical bandwidth
+      centred on the peak; a minimal point on the window edge is moved
+      outwards to the nearest local minimum (11.2, A.2). The tone power is
+      the power above the straight line joining the end points,
+      ``X_t = X_t' - (x_1 + x_2) N / 2`` with ``X_t'`` the power of the
+      ``N`` lines of the tone band and ``x_1``, ``x_2`` that of its end lines
+      (Formula (A.1)). The masking noise is the rest of the band power
+      rescaled to the critical bandwidth, ``X_n = (X_tot - X_t) delta_fc /
+      delta_f_tot`` (Formula (A.2)), and ``TNR = 10 lg(X_t / X_n)`` dB.
     * **Prominence ratio** (clause 12). ``X_M``, ``X_L`` and ``X_U`` are the
       powers of the lines in the middle band and in the contiguous lower and
       upper bands; for tones at or below 171.4 Hz the lower band starts at
@@ -509,11 +601,12 @@ def tone_prominence(
       ``ratio >= criterion``.
 
     Lines are assigned to bands by their centre frequency on half-open
-    intervals ``[lo, hi)``, so adjacent bands never share a line. The
-    standard leaves the selection of the tone lines to the analyst (11.2);
-    here they are the peak line nearest ``tone_freq``, every line within the
-    window's main-lobe half-width of it, and further contiguous lines while
-    they exceed the median of the other band lines by ``threshold_db``.
+    intervals ``[lo, hi)``, so adjacent bands never share a line. The window
+    of the tone band is ``+- floor(0.075 delta_fc / df)`` lines around the
+    peak, with ``delta_fc`` at the peak frequency. The tone power is not the
+    power of the tone lines: the noise under the line joining the end points
+    stays in the masking noise, so for a tone on a locally flat or linear
+    noise floor ``X_t`` is the power of the sinusoid alone.
 
     Window and ENBW. The standard prescribes a Hanning window and a power
     spectral density. With ``scaling="psd"`` the spectrum is a density
@@ -523,14 +616,20 @@ def tone_prominence(
     per line (an autospectrum: a sinusoid of RMS ``a`` on a line reads
     ``a**2``; e.g. ``|values|**2`` of an RMS :class:`rota.maps.Map`), which
     is converted to a density by dividing by ``enbw * df``. ``window`` sets
-    the default ENBW and the main-lobe half-width used for the tone lines.
+    the default ENBW and the main-lobe half-width used to search the peak.
+    The 15 % window holds the whole main lobe of a stationary tone when the
+    critical band spans at least ``(half-width + 1) / 0.075`` lines (40 for
+    Hann).
 
-    Multiple tones (11.6, Annex A.6). Other tones listed in ``other_tones``
-    that lie in the critical band and stand above the noise are removed from
-    the masking noise (power and bandwidth). Those closer to ``tone_freq``
-    than the proximity spacing ``21 * 10**(1.2 |lg(f / 212)|**1.8)`` Hz
-    (always, from 1 kHz up) are combined with the tone. The band always
-    stays centred on ``tone_freq``.
+    Multiple tones (11.6, A.6). Other tones listed in ``other_tones`` that
+    lie in the critical band and whose peak line exceeds the median of the
+    other band lines by ``threshold_db`` get their own tone band and tone
+    power by the same rule; that power is removed from the masking noise
+    (Formula (16): ``X_n = [X_tot - (X_t,p + X_t,s)] delta_fc /
+    delta_f_tot``). Those closer to ``tone_freq`` than the proximity spacing
+    ``21 * 10**(1.2 |lg(f / 212)|**1.8)`` Hz (always, from 1 kHz up) are
+    also added to the tone (Formula (15)). The band always stays centred on
+    ``tone_freq``.
 
     Parameters
     ----------
@@ -554,15 +653,11 @@ def tone_prominence(
     other_tones : sequence of float, default ()
         Frequencies in Hz of other discrete tones (see Multiple tones).
     threshold_db : float, default 6
-        Lines beyond the main lobe belong to the tone while they exceed the
-        median of the other band lines by this much.
+        An other tone is treated only if its peak line exceeds the median of
+        the other band lines by this much (dB).
     search_hz : float, optional
-        The tone's peak line is searched within ``tone_freq +- search_hz``
+        The peak line of a tone is searched within ``frequency +- search_hz``
         (default: the main-lobe half-width).
-    max_tone_fraction : float, optional
-        If given (the standard's fallback in 11.2 uses 0.15), a tone whose
-        lines span more than this fraction of the critical band is replaced
-        by a band of that width centred at its peak.
     ref : float, default 1
         Reference for the levels in the signal unit (20e-6 Pa: dB SPL).
 
@@ -574,12 +669,12 @@ def tone_prominence(
 
     References
     ----------
-    Ecma International (2022). ECMA-418-1, Psychoacoustic metrics for ITT
-    equipment - Part 1 (prominent discrete tones), 2nd edition. Clauses 10
+    Ecma International (2024). ECMA-418-1, Psychoacoustic metrics for ITT
+    equipment - Part 1 (prominent discrete tones), 3rd edition. Clauses 10
     (critical bands), 11 and Annex A (tone-to-noise ratio), 12 and Annex B
     (prominence ratio).
-    Ecma International (2021). ECMA-74, Measurement of airborne noise emitted
-    by information technology and telecommunications equipment, 19th
+    Ecma International (2019). ECMA-74, Measurement of airborne noise emitted
+    by information technology and telecommunications equipment, 17th
     edition, Annex D.
     ISO 7779:2018. Acoustics - Measurement of airborne noise emitted by
     information technology and telecommunications equipment, Annex D.
@@ -607,8 +702,7 @@ def tone_prominence(
     others = [float(o) for o in np.atleast_1d(np.asarray(other_tones, dtype=float))]
     res = [
         _analyse(f, S[:, c], df, ft, others, half_lobe=half,
-                 threshold_db=threshold_db, search_hz=search_hz,
-                 max_tone_fraction=max_tone_fraction)
+                 threshold_db=threshold_db, search_hz=search_hz)
         for c in range(S.shape[1])
     ]
 
@@ -782,7 +876,6 @@ def order_prominence(
     rpm_bins=None,
     multiple_tones=True,
     threshold_db=6.0,
-    max_tone_fraction=None,
     ref=1.0,
     max_order=None,
     samples_per_rev=None,
@@ -813,12 +906,14 @@ def order_prominence(
        / order``, does not depend on speed.
     2. ``min_lines * r / delta_fc(order r)`` revolutions at the highest
        ``r / delta_fc`` of the run: at least ``min_lines`` lines across the
-       critical band at every speed. The default, ``main-lobe width / 0.15``
-       lines (27 for Hann, 67 for a flat-top), keeps an order's main lobe
-       within 15 % of the critical band (11.2). Example: a 140 Hz tone
-       (critical band about 101 Hz) as order 2 at 4200 rpm needs a line
-       spacing of 3.7 Hz with Hann, i.e. 19 revolutions (0.27 s), and the
-       1 % rule asks for 50 revolutions (0.71 s).
+       critical band at every speed. The default, ``(main-lobe half-width +
+       2) / 0.075`` lines (54 for Hann, 94 for a flat-top), makes the window
+       of 15 % of the critical band in which ECMA-418-1:2024, 11.2 seeks the
+       end points of the tone band hold an order's main lobe and two noise
+       lines on each side. Example: a 140 Hz tone (critical band about
+       101 Hz) as order 2 at 4200 rpm needs a line spacing of 1.9 Hz with
+       Hann, i.e. 38 revolutions (0.54 s), and the 1 % rule asks for 50
+       revolutions (0.71 s).
 
     Averaging. With ``rpm_bins`` the PSDs (per Hz, on the order axis) of all
     frames whose mean speed falls in a bin are averaged linearly, as the
@@ -858,7 +953,7 @@ def order_prominence(
         Bin width in rpm (float) or bin edges (array) for averaging.
     multiple_tones : bool, default True
         Treat the other orders as other tones (see Multiple orders).
-    threshold_db, max_tone_fraction, ref
+    threshold_db, ref
         As in :func:`tone_prominence`.
     max_order, samples_per_rev, min_rpm, delay
         Passed to :func:`rota.angle.angular_resample`. The order axis must
@@ -873,12 +968,12 @@ def order_prominence(
 
     References
     ----------
-    Ecma International (2022). ECMA-418-1, Psychoacoustic metrics for ITT
-    equipment - Part 1 (prominent discrete tones), 2nd edition. Clauses 10
+    Ecma International (2024). ECMA-418-1, Psychoacoustic metrics for ITT
+    equipment - Part 1 (prominent discrete tones), 3rd edition. Clauses 10
     (critical bands), 11 and Annex A (tone-to-noise ratio), 12 and Annex B
     (prominence ratio).
-    Ecma International (2021). ECMA-74, Measurement of airborne noise emitted
-    by information technology and telecommunications equipment, 19th
+    Ecma International (2019). ECMA-74, Measurement of airborne noise emitted
+    by information technology and telecommunications equipment, 17th
     edition, Annex D.
     ISO 7779:2018. Acoustics - Measurement of airborne noise emitted by
     information technology and telecommunications equipment, Annex D.
@@ -895,7 +990,7 @@ def order_prominence(
         raise ValueError("resolution_fraction must be in (0, 1)")
     half = _main_lobe_half(window)
     if min_lines is None:
-        min_lines = float(np.ceil(2 * half / _TONE_FRACTION))
+        min_lines = float(np.ceil((half + 2) / (0.5 * _TONE_FRACTION) - 1e-9))
     if order_resolution is not None:
         if not order_resolution > 0:
             raise ValueError("order_resolution must be positive")
@@ -962,8 +1057,7 @@ def order_prominence(
                 if not ok[c]:
                     continue
                 res = _analyse(f, S[:, c], df, ft, others, half_lobe=half,
-                               threshold_db=threshold_db, search_hz=None,
-                               max_tone_fraction=max_tone_fraction)
+                               threshold_db=threshold_db, search_hz=None)
                 for key, arr in out.items():
                     arr[j, i, c] = res[key]
                 exceeded[j, i, c] = res["tone_band_exceeded"]
@@ -1011,7 +1105,6 @@ def order_prominence(
             "overlap": float(overlap),
             "multiple_tones": bool(multiple_tones),
             "threshold_db": float(threshold_db),
-            "max_tone_fraction": None if max_tone_fraction is None else float(max_tone_fraction),
             "samples_per_rev": round(m.nperseg / frame_revs),
         },
     )
@@ -1105,12 +1198,12 @@ def components(result, *, fundamental=None, channel=0):
 
     References
     ----------
-    Ecma International (2022). ECMA-418-1, Psychoacoustic metrics for ITT
-    equipment - Part 1 (prominent discrete tones), 2nd edition. Clauses 10
+    Ecma International (2024). ECMA-418-1, Psychoacoustic metrics for ITT
+    equipment - Part 1 (prominent discrete tones), 3rd edition. Clauses 10
     (critical bands), 11 and Annex A (tone-to-noise ratio), 12 and Annex B
     (prominence ratio).
-    Ecma International (2021). ECMA-74, Measurement of airborne noise emitted
-    by information technology and telecommunications equipment, 19th
+    Ecma International (2019). ECMA-74, Measurement of airborne noise emitted
+    by information technology and telecommunications equipment, 17th
     edition, Annex D.
     ISO 7779:2018. Acoustics - Measurement of airborne noise emitted by
     information technology and telecommunications equipment, Annex D.

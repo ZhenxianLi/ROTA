@@ -1,8 +1,9 @@
-"""Tests of the ECMA-418-1 (ECMA-74 Annex D) tone prominence functions.
+"""Tests of the ECMA-418-1:2024 (ECMA-74 Annex D) tone prominence functions.
 
 Analytic truth: white noise of known one-sided PSD ``N0`` and sinusoids of
 known mean square from rota.synth, or deterministic spectra built here line
-by line, for which the standard's formulas give the TNR and PR exactly.
+by line, for which the standard's formulas (3rd edition) give the TNR and PR
+exactly.
 """
 
 import numpy as np
@@ -13,6 +14,7 @@ from rota._prominence import (
     OrderComponent,
     OrderProminence,
     ToneProminence,
+    _proximity_spacing,
     components,
     critical_band_edges,
     critical_bandwidth,
@@ -80,6 +82,32 @@ def test_criteria():
         prominence_criterion(1000.0, "aures")
 
 
+def test_proximity_spacing_worked_values():
+    # Examples of 11.6 / A.6 (3rd edition): 23 Hz at 150 Hz, 63.8 Hz at 850 Hz.
+    assert _proximity_spacing(150.0) == pytest.approx(23.0, abs=0.05)
+    assert _proximity_spacing(850.0) == pytest.approx(63.8, abs=0.05)
+    # From 1 kHz up every tone of the band is proximate (NOTE of 11.6: small
+    # discontinuity, 81.5 Hz just below 1 kHz).
+    assert _proximity_spacing(999.9) == pytest.approx(81.5, abs=0.1)
+    assert _proximity_spacing(1000.0) == np.inf
+
+
+def test_band_edges_3rd_edition_corrections():
+    # Formula (20) of the 3rd edition: f2,M = f1,M + delta_fM (the 2nd
+    # edition printed ft + delta_fM); geometric centring above 500 Hz.
+    for ft in (600.0, 1600.0, 8000.0):
+        f1, f2 = critical_band_edges(ft)
+        assert f2 - f1 == pytest.approx(critical_bandwidth(ft))
+        assert f2 < ft + critical_bandwidth(ft)
+    # f1,L by Formula (21) / (B.5) with C_L,1 (Formula (21) misprints C_L,0):
+    # contiguous with the 20 Hz truncation at 171.4 Hz.
+    assert critical_band_edges(171.4, adjacent=True)[0] == pytest.approx(
+        -149.5 + 1.001 * 171.4 - 6.9e-5 * 171.4**2)
+    # 500 Hz itself: arithmetic centring (12.2, f <= 500 Hz).
+    f1, f2 = critical_band_edges(500.0)
+    assert (f1 + f2) / 2 == pytest.approx(500.0)
+
+
 # ---------------------------------------------------------------------------
 # tone_prominence on synthetic spectra
 # ---------------------------------------------------------------------------
@@ -126,15 +154,100 @@ def test_deterministic_exact_tnr_and_pr():
         pt = 0.05
         f, S = _deterministic(ft, pt, n0, df)
         r = tone_prominence(f, S, ft)
-        # Tone lines: the Hann main lobe, +-2 lines, holding 5 lines of noise.
+        # Tone band: the minimal points bracketing the peak are the first
+        # noise lines, +-2 lines (the Hann main lobe), 5 lines in all.
         assert r.tone_bandwidth == pytest.approx(5 * df)
+        assert r.tone_band == pytest.approx((ft - 2.5 * df, ft + 2.5 * df))
+        assert not r.tone_band_exceeded
+        # Power above the line joining the end points: the sinusoid alone;
+        # the noise under it stays in X_n = (X_tot - X_t) dfc / df_tot.
         dfc = critical_bandwidth(ft)
+        assert r.tone_power == pytest.approx(pt, rel=1e-9)
         assert r.noise_power == pytest.approx(n0 * dfc, rel=1e-9)
-        assert r.tnr == pytest.approx(_db((pt + 5 * df * n0) / (n0 * dfc)), abs=1e-9)
+        assert r.tnr == pytest.approx(_db(pt / (n0 * dfc)), abs=1e-9)
         f1l, f1, f2, f2u = critical_band_edges(ft, adjacent=True)
         xm = pt + n0 * (f2 - f1)
         xl = n0 * (f1 - f1l) * (100.0 / (f1 - f1l) if ft <= 171.4 else 1.0)
         assert r.pr == pytest.approx(_db(xm / (0.5 * (xl + n0 * (f2u - f2)))), abs=0.03)
+
+
+def _band_lines(f, ft):
+    f1, f2 = critical_band_edges(ft)
+    return np.flatnonzero((f >= f1) & (f < f2))
+
+
+def test_tone_band_end_points_inside_window():
+    """ECMA-418-1:2024, 11.2 / A.2 and Formulae (A.1), (A.2), exact.
+
+    Dips of the noise floor at +-3 lines, inside the 15 % window, are the
+    minimal points: the tone band has 7 lines and the tone power is the
+    power above the line joining the dips.
+    """
+    n0, df, ft, pt = 1e-4, 0.5, 1000.0, 0.05
+    f, S = _deterministic(ft, pt, n0, df)
+    k = round(ft / df)
+    dfc = critical_bandwidth(ft)
+    m = int(np.floor(0.075 * dfc / df))  # 24 lines: 12 Hz on either side
+    assert m == 24
+    S[[k - 3, k + 3]] = 0.5 * n0
+    # Deeper dips outside the window are not end points.
+    S[[k - m - 2, k + m + 2]] = 0.2 * n0
+    r = tone_prominence(f, S, ft)
+    assert r.tone_band == pytest.approx((f[k - 3] - df / 2, f[k + 3] + df / 2))
+    assert r.tone_bandwidth == pytest.approx(7 * df)
+    assert not r.tone_band_exceeded
+    xt_prime = pt + (5 * n0 + 2 * 0.5 * n0) * df
+    xt = xt_prime - (0.5 * n0 + 0.5 * n0) * df * 7 / 2
+    assert r.tone_power == pytest.approx(xt, rel=1e-12)
+    band = _band_lines(f, ft)
+    xtot = S[band].sum() * df
+    assert r.total_power == pytest.approx(xtot, rel=1e-12)
+    xn = (xtot - xt) * dfc / (band.size * df)
+    assert r.noise_power == pytest.approx(xn, rel=1e-12)
+    assert r.tnr == pytest.approx(_db(xt / xn), abs=1e-9)
+
+
+def test_tone_band_end_point_beyond_window_edge():
+    """A minimal point on the window edge moves to the nearest local minimum.
+
+    The floor falls linearly beyond the main lobe on the upper side down to a
+    minimum ``m`` lines past the window edge, then rises: the upper end point
+    is that minimum and the tone band is wider than 15 % of the critical
+    band. A linear floor under the tone band is removed exactly by the line
+    joining the end points, so the tone power is still the sinusoid's.
+    """
+    n0, df, ft, pt = 1e-4, 0.5, 1000.0, 0.05
+    f = np.arange(0.0, 6000.0, df)
+    k = round(ft / df)
+    m = int(np.floor(0.075 * critical_bandwidth(ft) / df))
+    lo_end, hi_end = k - 2, k + 2 * m
+    j = np.arange(f.size)
+    # Linear from n0 at lo_end to 0.3 n0 at hi_end, then rising again; flat
+    # n0 below lo_end (the lower end point is the first line off the lobe).
+    slope = (0.3 * n0 - n0) / (hi_end - lo_end)
+    S = n0 + slope * (j - lo_end)
+    S[j < lo_end] = n0
+    S[j > hi_end] = 0.3 * n0 + 0.5 * n0 * (j[j > hi_end] - hi_end) / 10.0
+    S = np.minimum(S, 2 * n0)
+    S[k - 1:k + 2] += pt / df * np.array([0.25, 1.0, 0.25]) / 1.5
+    r = tone_prominence(f, S, ft)
+    assert r.tone_band == pytest.approx((f[lo_end] - df / 2, f[hi_end] + df / 2))
+    assert r.tone_band_exceeded
+    assert r.tone_bandwidth > 0.15 * critical_bandwidth(ft)
+    assert r.tone_power == pytest.approx(pt, rel=1e-9)
+    band = _band_lines(f, ft)
+    xn = (S[band].sum() * df - pt) * critical_bandwidth(ft) / (band.size * df)
+    assert r.noise_power == pytest.approx(xn, rel=1e-9)
+
+
+def test_no_tone_has_no_power_above_the_line():
+    # Flat noise only: (almost) no power above the line, not prominent.
+    n0 = 1e-4
+    f, S = _deterministic(1000.0, 0.0, n0)
+    r = tone_prominence(f, S, 1000.0)
+    assert r.tone_power <= 1e-12 * n0
+    assert r.tnr < -100.0 and not r.prominent
+    assert r.noise_power == pytest.approx(n0 * critical_bandwidth(1000.0))
 
 
 def test_low_frequency_pr_normalises_lower_band():
@@ -199,22 +312,42 @@ def test_window_and_scaling_enbw():
 
 def test_multiple_tones_in_band():
     n0 = 1e-4
-    # Above 1 kHz a second tone in the band is always combined (11.6).
+    # Above 1 kHz a second tone in the band is always combined (11.6):
+    # Formulae (15) and (16), X_t = X_t,p + X_t,s (A.7 misprints a minus)
+    # and X_n = [X_tot - (X_t,p + X_t,s)] dfc / df_tot.
     f, S = _deterministic(1000.0, 0.05, n0, extra=[(1050.0, 0.02)])
     r = tone_prominence(f, S, 1000.0, other_tones=[1050.0])
     dfc = critical_bandwidth(1000.0)
     assert r.combined_freqs == (1050.0,)
-    assert r.tnr == pytest.approx(_db((0.07 + 10 * 0.5 * n0) / (n0 * dfc)), abs=1e-6)
+    assert r.tone_power == pytest.approx(0.07, rel=1e-9)
+    assert r.tone_bandwidth == pytest.approx(10 * 0.5)
+    assert r.noise_power == pytest.approx(n0 * dfc, rel=1e-9)
+    assert r.tnr == pytest.approx(_db(0.07 / (n0 * dfc)), abs=1e-9)
     # At 300 Hz, 40 Hz apart exceeds the 23 Hz proximity spacing: the second
     # tone is removed from the masking noise but not added to the tone.
     f, S = _deterministic(300.0, 0.05, n0, extra=[(340.0, 0.02)])
     r = tone_prominence(f, S, 300.0, other_tones=[340.0])
     dfc = critical_bandwidth(300.0)
     assert r.combined_freqs == ()
-    assert r.tnr == pytest.approx(_db((0.05 + 5 * 0.5 * n0) / (n0 * dfc)), abs=1e-6)
+    assert r.tone_power == pytest.approx(0.05, rel=1e-9)
+    assert r.noise_power == pytest.approx(n0 * dfc, rel=1e-9)
+    assert r.tnr == pytest.approx(_db(0.05 / (n0 * dfc)), abs=1e-9)
     # Not declared, the second tone counts as masking noise.
     plain = tone_prominence(f, S, 300.0)
     assert plain.tnr < r.tnr - 3.0
+    assert plain.noise_power == pytest.approx(n0 * dfc + 0.02 * dfc / (_band_lines(f, 300.0).size * 0.5))
+    # A declared tone that is absent (no line above the noise) is ignored.
+    f, S = _deterministic(300.0, 0.05, n0)
+    r = tone_prominence(f, S, 300.0, other_tones=[340.0])
+    assert r.noise_power == pytest.approx(n0 * dfc, rel=1e-9)
+    # Two proximate tones 6 Hz apart at 1 kHz, inside one 15 % window: the
+    # primary's band stops at the noise line between them, nothing is
+    # counted twice.
+    f, S = _deterministic(1000.0, 0.05, n0, extra=[(1006.0, 0.02)])
+    r = tone_prominence(f, S, 1000.0, other_tones=[1006.0])
+    assert r.combined_freqs == (1006.0,)
+    assert r.tone_power == pytest.approx(0.07, rel=1e-9)
+    assert r.noise_power == pytest.approx(n0 * critical_bandwidth(1000.0), rel=1e-9)
 
 
 def test_multichannel_spectrum_and_validation():
@@ -292,11 +425,14 @@ def test_order_prominence_runup_matches_analytic(runup):
     assert abs(np.mean(err)) < 0.4
     np.testing.assert_allclose(res.freq[:, 0], ORDER * res.rpm / 60.0)
     np.testing.assert_allclose(res.tone_level[:, 0], _db(AMP**2 / 2), atol=0.5)
-    # Frame rule: the 1 % rule gives 100/6 -> 17 rev; 27 Hann lines across
-    # the critical band at 6000 rpm (600 Hz) give 27 * 100 / 124.6 -> 22 rev.
-    assert res.frame_revs == 22.0
-    assert np.all(res.critical_bandwidth / res.line_spacing[:, None] >= 27.0)
+    # Frame rule: the 1 % rule gives 100/6 -> 17 rev; 54 Hann lines across
+    # the critical band at 6000 rpm (600 Hz), so that the 15 % window of
+    # 11.2 spans +-4 lines, give 54 * 100 / 124.6 -> 44 rev.
+    assert res.frame_revs == 44.0
+    assert res.params["min_lines"] == 54.0
+    assert np.all(res.critical_bandwidth / res.line_spacing[:, None] >= 54.0)
     assert np.all(res.line_spacing <= 0.01 * res.freq[:, 0])
+    assert not np.any(res.tone_band_exceeded)
     # The flag follows the frequency-dependent criterion: not prominent near
     # 190 Hz (TNR 13.0 dB < 14.1 dB), prominent near 540 Hz (12.3 > 10.2 dB).
     clear = np.abs(truth - res.criterion[:, 0]) > 0.8
@@ -306,7 +442,7 @@ def test_order_prominence_runup_matches_analytic(runup):
     assert not res.prominent[0, 0] and res.prominent[-1, 0]
     # Per frame (no averaging): a median error near zero.
     fr = order_prominence(s.x, FS, rpm, [ORDER])
-    assert np.all(fr.n_frames == 1) and fr.rpm.size > 50
+    assert np.all(fr.n_frames == 1) and fr.rpm.size > 30
     assert abs(np.median(fr.tnr[:, 0] - _tnr_truth(fr.rpm))) < 0.5
     np.testing.assert_allclose(fr.t, np.sort(fr.t))
     # PR: middle band holds tone + noise, adjacent bands noise only.
@@ -317,35 +453,30 @@ def test_fixed_time_window_is_biased(fast_runup):
     """A fixed window meeting the 1 % resolution near 100 Hz smears the order.
 
     The order sweeps at 60 Hz/s; a 1 s window (1 Hz lines) sees it spread
-    over about 60 Hz, more than 15 % of the critical band, in every frame.
-    With the standard's fallback for such tones (a tone band of 15 % of the
-    critical band, 11.2) the TNR is biased by about -10 dB; with the tone
-    lines left free the smeared skirts count as masking noise and the TNR is
-    still biased low by about 1.5 dB. In the angle domain the order stays a
+    over about 60 Hz, about half the critical band, in every frame. The tone
+    band of ECMA-418-1:2024 (11.2) is confined to about 15 % of the critical
+    band around the peak, and the line joining its end points lies on the
+    smeared plateau: most of the order's power counts as masking noise and
+    the TNR is biased by about -19 dB. In the angle domain the order stays a
     line and the estimate is unbiased.
     """
     s, rpm = fast_runup
     m = rpm_frequency_map(s.x, FS, rpm, nperseg=int(FS), overlap=0.5)
-    capped, free, exceeded = [], [], []
+    td = []
     for j in range(m.t.size):
         P = np.abs(m.values[:, j]) ** 2
         ft = ORDER * m.rpm[j] / 60.0
         r = tone_prominence(m.axis, P, ft, scaling="power")
-        free.append(r.tnr)
-        exceeded.append(r.tone_band_exceeded)
-        capped.append(tone_prominence(m.axis, P, ft, scaling="power",
-                                      max_tone_fraction=0.15).tnr)
+        td.append(r.tnr)
+        assert r.tone_bandwidth < 0.25 * r.critical_bandwidth
     truth = _tnr_truth(m.rpm)
-    assert all(exceeded)
-    assert np.max(np.array(capped) - truth) < -5.0
-    td_bias = np.mean(np.array(free) - truth)
-    assert td_bias < -0.8
-    ang = order_prominence(s.x, FS, rpm, [ORDER], rpm_bins=1200.0,
-                           max_tone_fraction=0.15)
+    td_err = np.array(td) - truth
+    assert np.max(td_err) < -10.0
+    ang = order_prominence(s.x, FS, rpm, [ORDER], rpm_bins=1200.0)
     ang_err = ang.tnr[:, 0] - _tnr_truth(ang.rpm)
     assert np.all(np.abs(ang_err) < 1.5)
-    assert abs(np.mean(ang_err)) < 0.5
-    assert np.mean(ang_err) - td_bias > 1.0
+    assert abs(np.mean(ang_err)) < 0.6
+    assert np.mean(ang_err) - np.mean(td_err) > 10.0
 
 
 def test_window_robustness(runup):
