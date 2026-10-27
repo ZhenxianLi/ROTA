@@ -42,7 +42,7 @@ Steps (the printed output follows them):
 5. Psychoacoustics, with optional toolboxes. MoSQITo (Apache-2.0, ``pip install mosqito``): ISO 532-1
    loudness (``loudness_zwtv``) and DIN 45692 sharpness (``sharpness_din_from_loudness``). The Sottek
    hearing model (``pip install sottek-hearing-model``, AGPL-3.0-only, Python 3.11 or later):
-   ECMA-418-2 tonality (``shm_tonality_ecma``). ``metric_vs_rpm`` puts them on the speed axis (loudness
+   ECMA-418-2 tonality (``shm_tonality_ecma``). ``metric_vs_rpm`` bins them along rpm (loudness
    N5, the 95th percentile; sharpness, the median; tonality, the mean of the frames above 0.02
    tu_HMS) and the values are compared for the original and the two reduced signals. ROTA does not import
    either package; the script calls only documented public functions, and without a package the
@@ -556,7 +556,7 @@ def analyse(duration=DURATION, log=print, reference=True):
     log("\n== 3. Diagnosis ==")
     screen = {}
     log(f"order_prominence of each candidate ({BIN_SCREEN:g} rpm bins; frames of the length the standard's line "
-        f"spacing needs, so the speed axis of the lowest orders is coarse) -- maximum of TNR and PR over the criterion:")
+        f"spacing needs, so the lowest orders have a coarse resolution in rpm) -- maximum of TNR and PR over the criterion:")
     for o in cand:
         pr = prominence(x, FS, rpm, float(o), BIN_SCREEN)
         e_t, r_t = max_of(pr["rpm"], pr["tnr_excess"])
@@ -726,7 +726,7 @@ def toolbox_metrics(R, log=print, parallel=True):
     """Step 5: loudness and sharpness (MoSQITo) and tonality (Sottek hearing model) along rpm, if installed.
 
     ROTA prepares the three signals (calibrated Pa at 48 kHz); the toolboxes compute; ``metric_vs_rpm``
-    puts the result on the speed axis. A toolbox that is not installed is skipped with a message.
+    bins the results along rpm. A toolbox that is not installed is skipped with a message.
     Returns ``{"mosqito": {variant: binned}, "sottek": {variant: binned}}`` (empty if skipped).
     """
     sc, rpm, problem = R["sc"], R["rpm"], R["problem"]

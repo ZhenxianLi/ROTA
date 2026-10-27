@@ -3,7 +3,7 @@
 ROTA does not compute loudness, sharpness or roughness (they are out of scope); the open-source
 toolbox MoSQITo (Apache-2.0, ``pip install mosqito``, https://github.com/Eomys/MoSQITo) does. This
 script shows the hand-over: ROTA prepares the signal and the speed, MoSQITo computes the metrics, ROTA
-puts the metrics back on a speed axis and attributes them to an order. MoSQITo stays an optional,
+bins the time-varying metrics along rpm and attributes them to an order. MoSQITo stays an optional,
 external dependency: nothing in ``src/rota`` imports it, and only its documented public functions
 are called here.
 

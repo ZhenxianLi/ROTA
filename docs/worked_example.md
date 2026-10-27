@@ -62,7 +62,7 @@ Order map (0.125 order bins, RMS): peaks of the average order spectrum 2500 to 1
 
 `order_prominence` evaluates the tone-to-noise ratio (TNR) and the prominence ratio (PR) of an order along the run-up, following ECMA-418-1, 3rd edition (2024). It resamples to uniform shaft angle, so the order is one stationary line in every frame although the speed rises by up to 1500 rpm/s, and it evaluates the critical band at the mean speed of each frame. `prominence_criterion` gives the criterion, which is 8 dB for the TNR and 9 dB for the PR above 1 kHz.
 
-The frame length follows the line spacing the standard requires for each order, so the low orders get long frames and a coarse speed axis. The five candidates, screened in 250 rpm bins:
+The frame length follows the line spacing the standard requires for each order, so the low orders get long frames and a coarse resolution in rpm. The five candidates, screened in 250 rpm bins:
 
 | Order | Frame (revolutions) | Largest TNR minus criterion | Largest PR minus criterion | Slice maximum (dB re 20 µPa) |
 |---|---|---|---|---|
@@ -132,7 +132,7 @@ The order slice drops by 14.89 and 9.95 dB, as applied. Ten dB is not enough: th
 
 ## 5. Psychoacoustics
 
-ROTA computes none of the psychoacoustic metrics; it prepares the signal and puts the answer back on the speed axis. This step uses two optional, open-source packages through their documented public functions. ROTA does not import or copy them; without a package the script prints which part it skipped (`pip install mosqito`, `pip install sottek-hearing-model`) and the tests for that part are skipped. Other open-source implementations are catalogued at [zhenxianli.github.io/LISQM](https://zhenxianli.github.io/LISQM/); [examples 07](https://github.com/ZhenxianLi/ROTA/blob/main/examples/07_mosqito_bridge.py) and [08](https://github.com/ZhenxianLi/ROTA/blob/main/examples/08_sottek_hearing_model_bridge.py) describe the two bridges in detail.
+ROTA computes none of the psychoacoustic metrics; it prepares the signal and the speed, and bins the time-varying results of the toolboxes along rpm (`metric_vs_rpm`). This step uses two optional, open-source packages through their documented public functions. ROTA does not import or copy them; without a package the script prints which part it skipped (`pip install mosqito`, `pip install sottek-hearing-model`) and the tests for that part are skipped. Other open-source implementations are catalogued at [zhenxianli.github.io/LISQM](https://zhenxianli.github.io/LISQM/); [examples 07](https://github.com/ZhenxianLi/ROTA/blob/main/examples/07_mosqito_bridge.py) and [08](https://github.com/ZhenxianLi/ROTA/blob/main/examples/08_sottek_hearing_model_bridge.py) describe the two bridges in detail.
 
 * MoSQITo 1.2.1 (Apache-2.0): `loudness_zwtv` (ISO 532-1:2017, time-varying, free field) and `sharpness_din_from_loudness` (DIN 45692).
 * The Sottek hearing model, `sottek-hearing-model` 0.1.14 (AGPL-3.0-only, Python 3.11 or later; install it only if you accept the licence): `shm_tonality_ecma`, the ECMA-418-2:2025 (4th edition) tonality. Its dominant tonal frequencies are attributed to order 40 with `frequency_to_order` (10 % window), as in example 08.

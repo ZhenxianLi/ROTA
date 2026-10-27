@@ -1,7 +1,7 @@
 """ROTA and the Sottek hearing model: ECMA-418-2 metrics along rpm, attributed to orders.
 
 ROTA computes no psychoacoustic metric (it is out of scope); it prepares the signal for
-one, and it puts the answer back on the speed axis. This script links it to the Python
+one, and it bins the time-varying result along rpm. This script links it to the Python
 implementation of the Sottek hearing model of ECMA-418-2, ``sottek-hearing-model``
 (import name ``sottek_hearing_model``, PyPI 0.1.14, repository
 github.com/mlotinga/sottek-hearing-model). The package implements ECMA-418-2:2025 (4th
