@@ -14,7 +14,7 @@ The design document is [ROADMAP.md](https://github.com/ZhenxianLi/rota-order/blo
 
 ## Status
 
-Pre-alpha. The current release is 0.5.0; functions and signatures may still change before 1.0.
+Pre-alpha. The current release is 0.6.0; functions and signatures may still change before 1.0.
 
 | Module | Contents | Since |
 |---|---|---|

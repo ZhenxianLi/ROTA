@@ -157,7 +157,7 @@ All of `rota.resynth`, `angular_to_time`, `stationarize`, `virtual_rpm`, `synth_
 **v0.5 Application layer and psychoacoustic bridges** (released 2026-10-27):
 `frequency_slice`, `overall_level`, `metric_vs_rpm`, `frequency_to_order`, `order_share`, Δrpm binning, `align_signals`, `rota.tonal` (A/C weighting, levels, calibrated 48 kHz resampling, octave and 1/3-octave band levels, `order_prominence`). Examples linking ROTA to three open-source psychoacoustic toolboxes as optional, external dependencies (never vendored; from 0.6 `rota.bridges` offers thin wrappers, imported lazily): MoSQITo (Python), the Sottek hearing model implementation of ECMA-418-2 (Python) and SQAT (MATLAB, run in CI like the black-box reference) — for example how loudness, tonality or roughness vary with rpm after an order is removed or boosted. A complete worked analysis example: preparation, order analysis, extraction, psychoacoustics along rpm, order contributions with audio, and an engineering conclusion.
 
-**v0.6 Optional toolbox bridges**:
+**v0.6 Optional toolbox bridges** (released 2026-10-27):
 `rota.bridges`: thin wrappers that call the documented public functions of MoSQITo (ISO 532-1 loudness, DIN 45692 sharpness, Daniel and Weber roughness), the Sottek hearing model (ECMA-418-2:2025 tonality, loudness, roughness) and SQAT via the MATLAB Engine on ROTA's conventions (Pa, calibration factor, 48 kHz), and `along_rpm` to bin the results along rpm. The toolboxes are imported lazily inside the functions, are never vendored and never required (extras `mosqito` and `shm`); without them the wrappers raise `ImportError` with the install command.
 
 **v0.7 Plotting**:

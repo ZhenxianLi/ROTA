@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-27
+
+Optional bridges to psychoacoustic toolboxes.
+
 ### Added
 
 - `rota.bridges`: optional thin wrappers for open-source psychoacoustic toolboxes, imported lazily inside the functions (never vendored, never required; `ImportError` with the install command when missing). `rota.bridges.mosqito`: ISO 532-1:2017 time-varying loudness, DIN 45692:2009 sharpness (optionally from a loudness result) and Daniel and Weber roughness. `rota.bridges.shm`: ECMA-418-2:2025 (4th edition) tonality, loudness (optionally from a tonality result) and roughness of the Sottek hearing model, with the Matplotlib `rcParams` it changes on import restored. `TimeMetric` result container and `along_rpm`, which bins a result along rpm with `metric_vs_rpm` using the recommended start-up exclusion and aggregation and holds the speed for a last frame one sample past the end of the record.
@@ -110,7 +114,8 @@ Core chain for the analysis of a run-up with a tachometer. Development milestone
 - Package metadata, `README.md`, `CONTRIBUTING.md`, `CITATION.cff`, issue and pull request templates, and a GitHub Actions workflow that runs the tests on Python 3.10 to 3.13.
 - Licence: GPL-3.0-or-later.
 
-[Unreleased]: https://github.com/ZhenxianLi/rota-order/compare/v0.5.0...main
+[Unreleased]: https://github.com/ZhenxianLi/rota-order/compare/v0.6.0...main
+[0.6.0]: https://github.com/ZhenxianLi/rota-order/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/ZhenxianLi/rota-order/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/ZhenxianLi/rota-order/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/ZhenxianLi/rota-order/releases/tag/v0.3.0
