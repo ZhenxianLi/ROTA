@@ -5,12 +5,14 @@ signals that ROTA is validated on, through public functions with every
 parameter given explicitly (section 5.1). This script writes one
 ``validation/signals/<case>.mat`` per case (the directory is git-ignored):
 
-    python validation/export_mat.py             # T1 T2 T3 T5 T6 T14
+    python validation/export_mat.py             # T1 T2 T3 T5 T6 T14 VKBW
     python validation/export_mat.py T1 T14      # selected cases
     python validation/export_mat.py --out DIR   # another output directory
 
 Cases (``validation/make_signals.py``): T1, T2, T3, T5 (60 pulses per
-revolution), T6 and T14.
+revolution), T6 and T14; and VKBW, a probe of the Vold-Kalman -3 dB
+bandwidth built here with ``rota.synth.synth_runup`` (constant speed, one
+order and fixed tones at known offsets from it, see :func:`vk_probe`).
 
 Variables in each file (units: time s, frequency Hz, speed rpm, order in
 cycles per revolution; amplitudes are PEAK values in Pa, as in the truth of
@@ -49,14 +51,33 @@ from pathlib import Path
 import numpy as np
 from scipy.io import savemat
 
-__all__ = ["CASE_NAMES", "SIGNALS_DIR", "analysis_parameters", "build_case", "main"]
+from rota.synth import synth_runup
+
+__all__ = ["CASE_NAMES", "SIGNALS_DIR", "VK_PROBE", "analysis_parameters", "build_case", "main", "vk_probe"]
 
 HERE = Path(__file__).resolve().parent
 SIGNALS_DIR = HERE / "signals"
 
-# Cases of the black-box comparison. All are keys of make_signals.CASES; T5 is the
-# 60-pulse-per-revolution variant (the default of make_signals.t5).
-CASE_NAMES = ("T1", "T2", "T3", "T5", "T6", "T14")
+# Cases of the black-box comparison. All but VKBW are keys of make_signals.CASES; T5 is the
+# 60-pulse-per-revolution variant (the default of make_signals.t5). VKBW is the bandwidth probe.
+CASE_NAMES = ("T1", "T2", "T3", "T5", "T6", "T14", "VKBW")
+
+# Vold-Kalman bandwidth probe (ROADMAP 5.4, "Vold-Kalman -3 dB bandwidth"): constant speed, so
+# that the carrier of the order is a fixed line, and unit tones at known offsets (Hz) from it.
+# The filters are linear: the gain at each offset is read off a least-squares fit of the output
+# on the known frequencies (compare.py). Offsets are dense around the set -3 dB offset (2 Hz).
+VK_PROBE = {
+    "fs": 2000.0, "duration": 30.0, "rpm": 1500.0, "order": 4.0, "bandwidth": 2.0, "seed": 21,
+    "offsets": (-5.0, -4.0, -3.0, -2.5, -2.25, -2.0, -1.75, -1.5, -1.0, -0.5,
+                0.5, 1.0, 1.5, 1.75, 2.0, 2.25, 2.5, 3.0, 4.0, 5.0),
+}
+
+# Meaning of the bandwidth arguments. ROTA's ``bandwidth`` (``par.vk_bandwidth``) is the offset
+# from the carrier at which the single-order filter attenuates a tone by 3 dB; its pass band is
+# twice that wide. MATLAB's ``Bandwidth`` is taken as the full width of the pass band between the
+# two -3 dB points, so it is given ``par.vk_bandwidth_matlab = 2 * par.vk_bandwidth``. The probe
+# VKBW measures both (compare.py, table 10), with this value and with the same number as ROTA.
+MATLAB_BANDWIDTH_FACTOR = 2.0
 
 # Settings shared by all cases.
 #   window_order_map    Hann: the main lobe is two bins wide each side, so orders half an
@@ -110,6 +131,11 @@ _SPECS = {
         "order_resolution": 0.125, "freq_resolution": 0.0, "vk_bandwidth": 2.0,
         "rpmtrack_order": 1.0, "rpmtrack_resolution": 3.0, "rpm_range": (600.0, 3500.0),
     },
+    # Bandwidth probe only: none of the comparisons above.
+    "VKBW": {
+        "order_resolution": 0.0, "freq_resolution": 0.0, "vk_bandwidth": VK_PROBE["bandwidth"],
+        "rpmtrack_order": 0.0, "rpmtrack_resolution": 0.0, "rpm_range": (0.0, 0.0), "vk_probe": True,
+    },
 }
 
 # Tachometer settings of T5: 60 pulses per revolution, output of the speed curve at 1 kHz,
@@ -128,8 +154,36 @@ def _load_module(name):
     return mod
 
 
+def vk_probe():
+    """Probe of the Vold-Kalman -3 dB bandwidth (case VKBW).
+
+    Constant speed ``VK_PROBE["rpm"]`` (rpm), one order ``VK_PROBE["order"]`` of peak
+    amplitude 1 Pa (the carrier, 100 Hz) and one fixed tone of peak amplitude 1 Pa at every
+    offset of ``VK_PROBE["offsets"]`` (Hz) from the carrier, random phases from the seed; no
+    noise. A linear filter tracking the order passes each tone with its gain at that offset,
+    which ``compare.py`` reads off a least-squares fit on the known frequencies.
+
+    Returns
+    -------
+    rota.synth.SynthSignal
+        Signal and analytic truth. Amplitudes are peak, in Pa.
+
+    References
+    ----------
+    ROTA ROADMAP, section 5.4 (Vold-Kalman -3 dB bandwidth).
+    Vold, H., Mains, M., & Blough, J. (1997). Theoretical foundations for high performance
+    order tracking with the Vold-Kalman tracking filter. SAE Technical Paper 972007.
+    """
+    p = VK_PROBE
+    n = int(round(p["duration"] * p["fs"]))
+    f0 = p["order"] * p["rpm"] / 60.0
+    tones = [{"freq": f0 + d, "amplitude": 1.0} for d in p["offsets"]]
+    return synth_runup(p["fs"], np.full(n, p["rpm"]), [{"order": p["order"], "amplitude": 1.0}],
+                       tones=tones, seed=p["seed"])
+
+
 def build_case(name):
-    """Build one case with ``make_signals``.
+    """Build one case with ``make_signals`` (VKBW: :func:`vk_probe`).
 
     Parameters
     ----------
@@ -147,6 +201,8 @@ def build_case(name):
     """
     if name not in CASE_NAMES:
         raise KeyError(f"unknown case {name!r}; available: {list(CASE_NAMES)}")
+    if name == "VKBW":
+        return vk_probe()
     return _load_module("make_signals").CASES[name]()
 
 
@@ -173,14 +229,18 @@ def analysis_parameters(name, sig):
     dict
         Keys: ``order_resolution`` (orders), ``freq_resolution`` (Hz),
         ``window_order_map``, ``window_freq_map`` (MATLAB window names),
-        ``overlap_percent``, ``amplitude_map`` (``"rms"``), ``vk_bandwidth`` (Hz),
-        ``vk_filter_order``, ``vk_decouple`` (0 or 1), ``vk_amplitude`` (``"peak"``),
+        ``overlap_percent``, ``amplitude_map`` (``"rms"``), ``vk_bandwidth`` (Hz, ROTA:
+        -3 dB offset from the carrier), ``vk_bandwidth_matlab`` (Hz, MATLAB ``Bandwidth``:
+        full -3 dB width, twice ``vk_bandwidth``), ``vk_filter_order``, ``vk_decouple``
+        (0 or 1), ``vk_amplitude`` (``"peak"``), ``probe_order`` and ``probe_offsets``
+        (row, Hz; VKBW only, else 0 and empty),
         ``track_orders`` (row), ``rpmtrack_order``, ``rpmtrack_resolution`` (Hz),
         ``rpmtrack_t0`` (s), ``rpmtrack_f0`` (Hz, ``order * rpm / 60`` of the exact
         speed at ``t0``), ``rpm_range`` (row, rpm; ROTA search range), ``ppr``,
         ``state_levels`` (row, low and high level of the tachometer), ``tacho_output_fs``
         (Hz), ``fit_points``, and the flags ``do_tachorpm``, ``do_maps``, ``do_freqmap``,
-        ``do_vk``, ``do_rpmtrack``. Orders are cycles per revolution; speed in rpm.
+        ``do_vk``, ``do_rpmtrack``, ``do_vkprobe``. Orders are cycles per revolution; speed
+        in rpm.
 
     References
     ----------
@@ -191,12 +251,16 @@ def analysis_parameters(name, sig):
     spec = _SPECS[name]
     orders = np.asarray(sig.orders, dtype=float)
     has_tacho = sig.tacho is not None
+    probe = bool(spec.get("vk_probe", False))
     par = dict(_COMMON)
     par.update(
         order_resolution=float(spec["order_resolution"]),
         freq_resolution=float(spec["freq_resolution"]),
         vk_bandwidth=float(spec["vk_bandwidth"]),
+        vk_bandwidth_matlab=float(MATLAB_BANDWIDTH_FACTOR * spec["vk_bandwidth"]),
         vk_decouple=float(orders.size > 1),
+        probe_order=float(VK_PROBE["order"]) if probe else 0.0,
+        probe_offsets=_row(VK_PROBE["offsets"] if probe else []),
         track_orders=_row(orders),
         rpmtrack_order=float(spec["rpmtrack_order"]),
         rpmtrack_resolution=float(spec["rpmtrack_resolution"]),
@@ -208,8 +272,9 @@ def analysis_parameters(name, sig):
         do_tachorpm=float(has_tacho),
         do_maps=float(spec["order_resolution"] > 0),
         do_freqmap=float(spec["freq_resolution"] > 0),
-        do_vk=float(spec["vk_bandwidth"] > 0),
+        do_vk=float(spec["vk_bandwidth"] > 0 and not probe),
         do_rpmtrack=float(spec["rpmtrack_order"] > 0),
+        do_vkprobe=float(probe),
     )
     # Initial ridge point of the tacholess tracker: the middle sample, on the ridge of the
     # tracked order, taken from the exact speed.

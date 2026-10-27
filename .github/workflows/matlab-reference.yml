@@ -5,6 +5,9 @@ name: matlab-reference
 # MATLAB is used only through documented public functions with explicit parameters
 # (validation/matlab/run_reference.m). Its output stays in the workflow artifact and is not
 # committed: the licence terms must be confirmed before it is published (ROADMAP 5.5).
+#
+# One job per case runs the MATLAB calls in parallel; the report job collects their output and
+# runs compare.py once over all cases.
 
 on:
   workflow_dispatch:
@@ -13,14 +16,62 @@ on:
       - "validation/matlab/**"
       - "validation/export_mat.py"
       - "validation/compare.py"
+      - ".github/workflows/matlab-reference.yml"
 
 permissions:
   contents: read
 
 jobs:
-  matlab-reference:
+  reference:
+    name: reference (${{ matrix.case }})
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        case: [T1, T2, T3, T5, T6, T14, VKBW]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ROTA
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Export the validation signal (.mat)
+        run: python validation/export_mat.py ${{ matrix.case }}
+
+      # For a public repository MathWorks licenses MATLAB automatically on a GitHub-hosted runner.
+      - name: Set up MATLAB
+        uses: matlab-actions/setup-matlab@v2
+        with:
+          products: Signal_Processing_Toolbox
+
+      # The working directory is the repository root. The script finds its folders from its own
+      # location, processes every file in validation/signals (here the one case of this job) and
+      # catches the error of every call, so a failing call does not stop the run.
+      - name: Run the reference calls
+        uses: matlab-actions/run-command@v2
+        with:
+          command: run('validation/matlab/run_reference.m')
+
+      - name: Upload the reference output of this case
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: reference-${{ matrix.case }}
+          path: validation/reference/
+          if-no-files-found: warn
+
+  report:
+    needs: reference
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -36,21 +87,28 @@ jobs:
       - name: Export the validation signals (.mat)
         run: python validation/export_mat.py
 
-      # For a public repository MathWorks licenses MATLAB automatically on a GitHub-hosted runner.
-      - name: Set up MATLAB
-        uses: matlab-actions/setup-matlab@v2
+      - name: Download the reference output of every case
+        uses: actions/download-artifact@v4
         with:
-          products: Signal_Processing_Toolbox
+          pattern: reference-*
+          path: parts
 
-      # The working directory is the repository root. The script finds its folders from its own
-      # location, and catches the error of every call, so a failing call does not stop the run.
-      - name: Run the reference calls
-        uses: matlab-actions/run-command@v2
-        with:
-          command: run('validation/matlab/run_reference.m')
+      # <case>_ref.mat of every case, the logs one after the other, versions.txt of the first case.
+      - name: Collect the reference output
+        run: |
+          mkdir -p validation/reference
+          : > validation/reference/log.txt
+          for d in parts/reference-*; do
+            [ -d "$d" ] || continue
+            cp "$d"/*_ref.mat validation/reference/ 2>/dev/null || true
+            if [ -f "$d/log.txt" ]; then cat "$d/log.txt" >> validation/reference/log.txt; fi
+            if [ -f "$d/versions.txt" ] && [ ! -f validation/reference/versions.txt ]; then
+              cp "$d/versions.txt" validation/reference/
+            fi
+          done
+          ls -l validation/reference
 
       - name: Compare ROTA, truth and MATLAB
-        if: ${{ !cancelled() }}
         run: python validation/compare.py --out validation/reference/report.md
 
       - name: Upload the reference output

@@ -176,11 +176,15 @@ try
         R.rpmfreqmap_amplitude = par.amplitude_map;
     end
 
-    % -- Vold-Kalman: waveforms and tracked magnitudes, bandwidth and decoupling explicit
+    % -- Vold-Kalman: waveforms and tracked magnitudes, bandwidth and decoupling explicit.
+    %    'Bandwidth' is given as par.vk_bandwidth_matlab, the full width between the two -3 dB
+    %    points, which is twice ROTA's bandwidth (the -3 dB offset from the carrier); the probe
+    %    case VKBW below measures what the argument does (compare.py, table 10).
     if par.do_vk ~= 0
         refIdx = ones(1, K);                       % every order refers to the one speed column
-        bw = par.vk_bandwidth;
+        bw = par.vk_bandwidth_matlab;
         dec = par.vk_decouple ~= 0;
+        R.vk_bandwidth_matlab = bw;
         R = run_call(R, 'orderwaveform', {'xrec'}, { ...
             mkvariant('orderwaveform', {x, fs, rpm, orders, refIdx, 'FilterOrder', par.vk_filter_order, ...
                       'Bandwidth', bw, 'Decouple', dec}, ...
@@ -201,6 +205,23 @@ try
                       'Bandwidth', bw, 'Decouple', dec}, ...
                       'Vold-Kalman form without the scale argument')});
         R.ordertrack_vk_amplitude = par.vk_amplitude;
+    end
+
+    % -- Vold-Kalman bandwidth probe (VKBW): one order at constant speed and fixed tones at known
+    %    offsets from it. The single-order filter is run with 'Bandwidth' par.vk_bandwidth_matlab
+    %    (as in the comparisons above) and with the same number as ROTA's bandwidth; compare.py
+    %    reads the gain at every offset off the returned waveforms.
+    if isfield(par, 'do_vkprobe') && par.do_vkprobe ~= 0
+        R = run_call(R, 'vkprobe', {'xrec'}, { ...
+            mkvariant('orderwaveform', {x, fs, rpm, par.probe_order, 1, 'FilterOrder', par.vk_filter_order, ...
+                      'Bandwidth', par.vk_bandwidth_matlab, 'Decouple', false}, ...
+                      'one order, filter order, Bandwidth = par.vk_bandwidth_matlab, no decoupling')});
+        R.vkprobe_bandwidth = par.vk_bandwidth_matlab;
+        R = run_call(R, 'vkprobe_same', {'xrec'}, { ...
+            mkvariant('orderwaveform', {x, fs, rpm, par.probe_order, 1, 'FilterOrder', par.vk_filter_order, ...
+                      'Bandwidth', par.vk_bandwidth, 'Decouple', false}, ...
+                      'as above with Bandwidth = par.vk_bandwidth (the number given to ROTA)')});
+        R.vkprobe_same_bandwidth = par.vk_bandwidth;
     end
 
     % -- tacholess speed: order and one point (time, frequency) on its ridge, from the exact speed

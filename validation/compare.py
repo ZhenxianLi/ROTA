@@ -30,10 +30,21 @@ truth being the peak amplitude over sqrt(2); Vold-Kalman amplitudes are peak):
 * Vold-Kalman: correlation and least-squares gain of the order waveforms
   (``order_waveform`` vs ``orderwaveform``) and the envelope amplitude
   (``order_waveform`` vs ``ordertrack`` in its Vold-Kalman form), away from the record ends
-  (3 / bandwidth seconds).
+  (3 / bandwidth seconds);
+* the -3 dB bandwidth of the Vold-Kalman filter on the probe signal VKBW (constant speed, one
+  order and tones at known offsets): the offset at which each filter attenuates a tone by 3 dB.
 
-Not covered here: the -3 dB bandwidth of the Vold-Kalman filter (ROADMAP 5.4), which needs a
-dedicated test signal.
+Conventions that differ between the two sides (the parameters are mapped, never the results):
+
+* Vold-Kalman bandwidth: ROTA's ``bandwidth`` (``par.vk_bandwidth``) is the -3 dB offset from
+  the carrier (pass band twice as wide); MATLAB's ``Bandwidth`` is given as
+  ``par.vk_bandwidth_matlab`` = 2 x ``par.vk_bandwidth``, the full width between the -3 dB points.
+  Table 10 measures both filters, and MATLAB also with the same number as ROTA.
+* Amplitudes: map readings RMS (``Amplitude`` 'rms'), Vold-Kalman envelopes peak (``Amplitude``
+  'peak'); the truth is peak, divided by sqrt(2) for RMS rows.
+* Time axes: MATLAB's ``time`` / ``t`` / ``tout`` outputs are used as returned (s from the first
+  sample); MATLAB map readings are compared with the truth at the speed MATLAB returns for each
+  frame, and with ROTA by interpolation in time.
 
 References
 ----------
@@ -74,6 +85,7 @@ TOL_AMP_MATLAB = 0.5  # dB
 TOL_CORR = 0.99  # waveform correlation, ends removed
 TOL_WITHIN3_TRUTH = 90.0  # %, tacholess frames within 3 %
 TOL_WITHIN3_MATLAB = 5.0  # percentage points between the two trackers
+TOL_BW_PCT = 5.0  # %, Vold-Kalman -3 dB bandwidth, against the set value and against MATLAB
 # Not in 5.4: the order of the average-spectrum peak must agree to within half a bin, and the
 # axis spacing with the requested resolution to within 5 %.
 TOL_AXIS_PCT = 5.0
@@ -911,8 +923,24 @@ def axis_table(cases):
             tab.rows.append(Row(
                 case.name, name, 100.0 * (sp_r / req - 1.0), mt, rm, " %",
                 ("<=", TOL_AXIS_PCT), ("<=", TOL_AXIS_PCT),
-                note=f"requested {req:g}, ROTA {sp_r:g}.",
+                note=f"requested {req:g}, ROTA {sp_r:g}" + (
+                    f", MATLAB {sp_m:.6g} (its `res` output: {_text(case.ref.get(cid, 'res'))})"
+                    if case.ref.ok(cid) else "") + ".",
             ))
+            # Time axis of the MATLAB map: the exact speed at the returned frame times against the
+            # speed returned for the same frames (small if the times are the frame centres).
+            if case.ref.ok(cid):
+                t_m, rpm_m = case.ref.get(cid, "time"), case.ref.get(cid, "rpm")
+                if t_m is not None and rpm_m is not None and np.size(t_m) == np.size(rpm_m) and np.size(t_m) > 0:
+                    t_m = np.atleast_1d(t_m).astype(float).ravel()
+                    rpm_m = np.atleast_1d(rpm_m).astype(float).ravel()
+                    dev = _rel_pct(np.interp(t_m, case.t, case.rpm), rpm_m)
+                    tab.rows.append(Row(
+                        case.name, f"MATLAB {cid} time axis: exact rpm at `time` vs returned `rpm`",
+                        "n/a (MATLAB only)", _median(dev), "n/a (MATLAB only)", " %", digits=3,
+                        note=(f"Informational: median relative difference over {t_m.size} frames (95th percentile "
+                              f"{_percentile(dev, 95):.3g} %); `time` from {t_m[0]:.4g} s to {t_m[-1]:.4g} s."),
+                    ))
     return tab
 
 
@@ -1027,7 +1055,9 @@ def vk_tables(cases):
         f"({VK_EDGE_BANDWIDTHS:g} / bandwidth seconds). Correlation: Pearson coefficient. Gain: least-squares "
         "gain of the waveform on the stem in dB (amplitude of the waveform, independent of any envelope "
         "definition). ROTA: bandwidth `par.vk_bandwidth` (-3 dB offset from the carrier), joint solution when "
-        "there are several orders. MATLAB: `FilterOrder` 2, the same `Bandwidth`, `Decouple` as `par.vk_decouple`.",
+        "there are several orders. MATLAB: `FilterOrder` 2, `Bandwidth` `par.vk_bandwidth_matlab` = 2 x "
+        "`par.vk_bandwidth` (full width between the -3 dB points, so that both filters have the same pass band; "
+        "measured in table 10), `Decouple` as `par.vk_decouple`.",
     )
     env = Table(
         "9. Vold-Kalman envelope amplitude: `order_waveform` vs `ordertrack` (Vold-Kalman form)",
@@ -1107,6 +1137,155 @@ def vk_tables(cases):
 
 
 # --------------------------------------------------------------------------------------------
+# 10. Vold-Kalman -3 dB bandwidth (probe VKBW)
+# --------------------------------------------------------------------------------------------
+
+
+def _probe_gains(case, w, sl):
+    """Amplitude gains of a filter output ``w`` at the carrier and at every probe offset.
+
+    The input and the output are fitted (least squares, interior samples ``sl``) on cosines and
+    sines at the known frequencies: the carrier ``probe_order * rpm / 60`` (constant speed) and
+    the carrier plus each offset of ``par.probe_offsets`` (Hz). Gain = |output| / |input| of
+    each line; it does not depend on the amplitude convention of the filter.
+
+    Returns
+    -------
+    (ndarray, float, ndarray)
+        Offsets (Hz), gain at the carrier and gains at the offsets (linear).
+    """
+    offsets = np.atleast_1d(case.par["probe_offsets"]).astype(float)
+    f0 = case.par["probe_order"] * float(np.median(case.rpm)) / 60.0
+    freqs = np.concatenate(([f0], f0 + offsets))
+    t = case.t[sl]
+    arg = 2.0 * np.pi * t[:, None] * freqs[None, :]
+    A = np.hstack([np.cos(arg), np.sin(arg)])
+    F = freqs.size
+    cx = np.linalg.lstsq(A, case.x[sl], rcond=None)[0]
+    cw = np.linalg.lstsq(A, np.asarray(w, dtype=float)[sl], rcond=None)[0]
+    g = np.abs(cw[:F] + 1j * cw[F:]) / np.abs(cx[:F] + 1j * cx[F:])
+    return offsets, float(g[0]), g[1:]
+
+
+def _offset_3db(offsets, gains, side):
+    """Offset (Hz, positive) at which the gain falls to 1/sqrt(2), above (side +1) or below (-1).
+
+    Between the two offsets that bracket the crossing, ``log(1 / g - 1)`` is interpolated
+    linearly in ``log |offset|``; this is exact for any response ``1 / (1 + c |offset|^p)``,
+    whatever ``p`` (the structure order). NaN if the gain does not cross 1/sqrt(2) on the grid.
+    """
+    sel = offsets * side > 0
+    d, g = np.abs(offsets[sel]), gains[sel]
+    order = np.argsort(d)
+    d, g = d[order], g[order]
+    target = 1.0 / SQRT2
+    below = np.flatnonzero(g < target)
+    if below.size == 0 or below[0] == 0:
+        return float("nan")
+    j = int(below[0])
+    d0, d1, g0, g1 = d[j - 1], d[j], g[j - 1], g[j]
+    if 0.0 < g1 < g0 < 1.0:
+        y0, y1, yt = math.log(1.0 / g0 - 1.0), math.log(1.0 / g1 - 1.0), math.log(1.0 / target - 1.0)
+        return float(math.exp(math.log(d0) + (yt - y0) / (y1 - y0) * (math.log(d1) - math.log(d0))))
+    db0, db1, dbt = 20.0 * math.log10(g0), 20.0 * math.log10(g1), 20.0 * math.log10(target)
+    return float(d0 + (dbt - db0) / (db1 - db0) * (d1 - d0))
+
+
+def probe_table(cases):
+    """Table 10: -3 dB bandwidth of the Vold-Kalman filter on the probe signal VKBW.
+
+    The set value is ROTA's ``bandwidth`` (``par.vk_bandwidth``, Hz): the offset from the carrier
+    at which a tone is attenuated by 3 dB. ROTA is run with it, MATLAB ``orderwaveform`` with
+    ``Bandwidth`` = ``par.vk_bandwidth_matlab`` (twice the set value, taken as the full width
+    between the two -3 dB points); the measured offsets are compared in percent. An
+    informational row gives the offset MATLAB reaches when its ``Bandwidth`` is the same number
+    as ROTA's, which shows what the argument means. Gains are amplitude ratios (dB).
+
+    Returns
+    -------
+    Table
+
+    References
+    ----------
+    ROTA ROADMAP, sections 5.1, 5.2 and 5.4 (Vold-Kalman -3 dB bandwidth: within 5 % of the set
+    value and of MATLAB).
+    """
+    tab = Table(
+        "10. Vold-Kalman -3 dB bandwidth: `order_waveform` vs `orderwaveform` (probe VKBW)",
+        "Constant speed, one order (carrier 100 Hz) and unit tones at known offsets from it (`par.probe_offsets`). "
+        "Single-order filters, second-order structure. The gain at each offset is |output| / |input| of a "
+        "least-squares fit on the known frequencies over the interior "
+        f"({VK_EDGE_BANDWIDTHS:g} / bandwidth seconds dropped at each end); the -3 dB offset is interpolated "
+        "between the two offsets that bracket the gain 1/sqrt(2) (exact for any response 1 / (1 + c d^p)). "
+        "Set value: ROTA's `bandwidth` (-3 dB offset from the carrier). MATLAB `Bandwidth` = "
+        "`par.vk_bandwidth_matlab` (twice the set value: the full width between the -3 dB points). "
+        "Offsets in percent of the set value; ROTA-MATLAB in percent of the MATLAB offset.",
+    )
+    for case in cases:
+        if not case.flag("do_vkprobe"):
+            continue
+        B = float(case.par["vk_bandwidth"])
+        sl = _vk_slice(case)
+        comp = case._try(
+            "order_waveform (probe)",
+            lambda: order_waveform(case.x, case.fs, case.rpm, [case.par["probe_order"]], bandwidth=B, joint=False),
+        )
+        if comp is None:
+            tab.rows.append(Row(case.name, "-3 dB offset above the carrier", _rota_err(case)))
+            continue
+        offs, g0_r, g_r = _probe_gains(case, comp.waveforms[:, 0], sl)
+        ref = case.ref
+        res_m = {}
+        for cid in ("vkprobe", "vkprobe_same"):
+            if ref.ok(cid):
+                w = np.asarray(ref.get(cid, "xrec"), dtype=float)
+                w = _orient(w, case.t.size, 1)
+                res_m[cid] = (_probe_gains(case, w[:, 0], sl) if w is not None
+                              else "MATLAB output unusable (unexpected array shape)")
+            else:
+                res_m[cid] = ref.reason(cid)
+        m = res_m["vkprobe"]
+        bw_m = float(case.par["vk_bandwidth_matlab"])
+        note_m = "" if not isinstance(m, str) else ref.detail("vkprobe")
+        db = lambda g: 20.0 * math.log10(g) if g > 0 else float("nan")  # noqa: E731
+        tab.rows.append(Row(
+            case.name, "Gain at the carrier", db(g0_r), m if isinstance(m, str) else db(m[1]),
+            m if isinstance(m, str) else db(g0_r) - db(m[1]), " dB", ("<=", TOL_AMP_TRUTH), ("<=", TOL_AMP_MATLAB),
+            digits=3, note=note_m,
+        ))
+        for side, label in ((1, "above"), (-1, "below")):
+            f_r = _offset_3db(offs, g_r, side)
+            if isinstance(m, str):
+                f_m, mt, rm = None, m, m
+            else:
+                f_m = _offset_3db(offs, m[2], side)
+                mt, rm = 100.0 * (f_m / B - 1.0), 100.0 * (f_r / f_m - 1.0)
+            twice = np.flatnonzero(np.isclose(offs, 2.0 * side * B))
+            g2 = (f" Gain at {2 * side * B:+g} Hz: ROTA {db(g_r[twice[0]]):.2f} dB"
+                  + ("" if isinstance(m, str) else f", MATLAB {db(m[2][twice[0]]):.2f} dB") + "."
+                  ) if twice.size else ""
+            tab.rows.append(Row(
+                case.name, f"-3 dB offset {label} the carrier", 100.0 * (f_r / B - 1.0), mt, rm, " %",
+                ("<=", TOL_BW_PCT), ("<=", TOL_BW_PCT), digits=3,
+                note=(f"Set {B:g} Hz; ROTA {f_r:.4g} Hz" + ("" if f_m is None else f", MATLAB {f_m:.4g} Hz")
+                      + f" (MATLAB `Bandwidth` {bw_m:g} Hz)." + g2 + (" " + note_m if note_m else "")).strip(),
+            ))
+        s = res_m["vkprobe_same"]
+        if isinstance(s, str):
+            tab.rows.append(Row(case.name, f"MATLAB with `Bandwidth` {B:g} Hz: -3 dB offset above the carrier",
+                                "n/a (MATLAB only)", s, s, " %", note=ref.detail("vkprobe_same")))
+        else:
+            f_s = _offset_3db(offs, s[2], 1)
+            tab.rows.append(Row(
+                case.name, f"MATLAB with `Bandwidth` {B:g} Hz: -3 dB offset above the carrier", "n/a (MATLAB only)",
+                100.0 * (f_s / B - 1.0), "n/a (MATLAB only)", " %", digits=3,
+                note=(f"Informational: MATLAB reaches {f_s:.4g} Hz, i.e. {f_s / B:.3f} times the number given; "
+                      "a ratio of 0.5 means that `Bandwidth` is the full -3 dB width."),
+            ))
+    return tab
+
+
+# --------------------------------------------------------------------------------------------
 # Report
 # --------------------------------------------------------------------------------------------
 
@@ -1149,6 +1328,7 @@ def build_report(cases, reference_dir):
         freq_map_table(cases), axis_table(cases), spectrum_table(cases),
     ]
     tables.extend(vk_tables(cases))
+    tables.append(probe_table(cases))
 
     counts = {}
     for tab in tables:
@@ -1195,7 +1375,7 @@ def build_report(cases, reference_dir):
     lines += [
         "### Notes",
         "",
-        "- Not compared here: the -3 dB bandwidth of the Vold-Kalman filter (ROADMAP 5.4) and the cases T4, T8, T10.",
+        "- Not compared here: the cases T4, T8, T10 and T13. VKBW is a probe of the Vold-Kalman bandwidth only.",
         (
             "- Rows say `MATLAB output missing` when `validation/reference/<case>_ref.mat` does not exist or the "
             "call was not run for the case, and `MATLAB call failed` when the call raised an error in every "
