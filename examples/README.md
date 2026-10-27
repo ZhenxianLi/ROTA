@@ -1,6 +1,6 @@
 # Examples
 
-Runnable scripts that show the main parts of ROTA on synthetic signals: six on ROTA alone (01 to 06) and three bridges to open-source psychoacoustic toolboxes (07 to 09), which are optional, external dependencies. All data come from `rota.synth`, so every result can be compared with the analytic truth that went into the signal, and each script prints those comparisons as numbers before it saves one figure. Scripts 5 and 6 also write WAV files that you can listen to.
+Runnable scripts that show the main parts of ROTA on synthetic signals: six on ROTA alone (01 to 06) three bridges to open-source psychoacoustic toolboxes (07 to 09), which are optional, external dependencies, and a worked analysis from recording to engineering conclusion (10, narrated in [docs/worked_example.md](../docs/worked_example.md)). All data come from `rota.synth`, so every result can be compared with the analytic truth that went into the signal, and each script prints those comparisons as numbers before it saves one figure. Scripts 5 and 6 also write WAV files that you can listen to.
 
 ## Running
 
@@ -14,9 +14,12 @@ python examples/03_order_extraction.py
 python examples/04_order_table_resynthesis.py
 python examples/05_realistic_engine_audio.py
 python examples/06_electric_drive_audio.py
+python examples/07_mosqito_bridge.py
+python examples/08_sottek_hearing_model_bridge.py
+python examples/10_worked_analysis.py
 ```
 
-The bridges need their toolbox: `pip install mosqito` for script 7 and `pip install sottek-hearing-model` (Python 3.11 or later) for script 8; example 9 runs SQAT in MATLAB and is described in its own folder.
+The bridges need their toolbox: `pip install mosqito` for script 7 and `pip install sottek-hearing-model` (Python 3.11 or later) for script 8; example 9 runs SQAT in MATLAB and is described in its own folder. Script 10 uses both toolboxes when they are installed and skips those parts otherwise.
 
 The scripts can be started from any directory. Each runs in a few seconds (about 2 s, 2 s, 8 s, 5 s, 11 s and 25 s) and writes its figure to `docs/images/`, 8 inches wide at 150 dpi; scripts 5 and 6 also write their WAV files to `docs/audio/` (`scipy.io.wavfile`). Random elements use fixed seeds, so the numbers, figures and audio files are reproducible.
 
@@ -115,3 +118,15 @@ Figure: `docs/images/08_sottek_hearing_model_bridge.png`.
 ## 09_sqat_bridge/
 
 Links ROTA to SQAT (MATLAB, GPL-3.0 as a whole, github.com/ggrecow/SQAT, release v2.0 pinned to a commit). `export_signals.py` writes the two seeded run-ups (`ice_runup` and `ev_runup`) as calibrated pressure in Pa at 48 kHz with their speed; `run_sqat.m` computes ISO 532-1 loudness, DIN 45692 sharpness, Daniel & Weber roughness and ECMA-418-2 tonality with SQAT; `import_results.py` bins them along rpm with `metric_vs_rpm`. It runs in GitHub Actions (`.github/workflows/sqat-bridge.yml`), where SQAT is cloned at run time; its results stay in the workflow artifacts and are not committed. Details, the calls and their parameters: [09_sqat_bridge/README.md](09_sqat_bridge/README.md).
+
+## 10_worked_analysis.py
+
+One analysis from the raw signal to an engineering conclusion, written up step by step in [docs/worked_example.md](../docs/worked_example.md). The signal is `synth_scenario("ev_runup")` (8 s at 32 kHz, seeded) with one problem built in and stated in the script: a structural resonance at 2900 Hz in the transfer path, which the gear whine (order 40) passes at 4350 rpm, and a cabin without diffuse-field fading so that the resonance is not hidden. The script does not use that knowledge. It prepares the speed (`tacho_to_rpm`, checked against the tacholess `rpm_from_ridge`), gives the overview (`overall_level`, `band_levels_vs_rpm`, `rpm_order_map`), finds candidate orders in the order spectrum, and decides between them with `order_slice`, `order_share` and `order_prominence` (TNR and PR against `prominence_criterion`, ECMA-418-1 3rd edition). It extracts the culprit with the Vold-Kalman filter (bandwidth checked with `resolution_check`), lowers it with `modify_orders` and `resynthesize`, and analyses the new signals again. With the optional packages it adds ISO 532-1 loudness and DIN 45692 sharpness (MoSQITo, `pip install mosqito`) and ECMA-418-2 tonality (`sottek-hearing-model`, AGPL-3.0-only, Python 3.11 or later) along rpm with `metric_vs_rpm`; without a package the script runs and says which part it skipped.
+
+Printed results, each next to the truth: order 40 is the only candidate above its criterion; its TNR exceeds the criterion between 3034 and 4685 rpm and by more than 6 dB between 3846 and 4530 rpm (truth from the stems: 3365 to 4664 and 3856 to 4505 rpm), with a maximum of +14.0 dB at 4304 rpm (truth +13.5 dB at the same bin; the resonance is at 4350 rpm); a reduction of 15 dB brings it under the criterion and 10 dB does not. In the range that lowers the A-weighted level by 1.05 dB, the loudness N5 by 8.6 % and the tonality by 69 %. Run time about 75 s on four cores with both packages, about 20 s without. `tests/test_worked_example.py` runs the analysis chain on the first 3.6 s of the same signal.
+
+Audio (48 kHz, mono, 8 s, the same `FULL_SCALE_PA` as scripts 5 and 6): `docs/audio/worked_original.wav`, `worked_order40_minus15db.wav` and `worked_order40_minus10db.wav`.
+
+![Order 40 slice, tone prominence, A-weighted level, loudness, sharpness and tonality before and after](../docs/images/10_worked_whatif.png)
+
+Figures: `docs/images/10_worked_overview.png`, `10_worked_diagnosis.png` and `10_worked_whatif.png`.

@@ -16,6 +16,7 @@ Application layer and bridges to psychoacoustic toolboxes.
 - `rota.maps`: binning of map frames into rpm bins (`rpm_bins`, `segment`, `min_count`, `bin_phase`; `bin_map`, `BinnedMap`).
 - `rota.speed`: `align_signals` (GCC-PHAT delay), `detect_onsets`, `AlignResult`.
 - Examples 07 (MoSQITo), 08 (sottek-hearing-model) and 09 (SQAT in MATLAB, workflow `sqat-bridge`, results kept in the workflow artifact); the toolboxes are optional, external dependencies and the tests of examples 07 and 08 are skipped without them.
+- Worked analysis (`examples/10_worked_analysis.py`, `docs/worked_example.md`, `tests/test_worked_example.py`): an electric-drive run-up with a gear whine that passes a resonance, from speed and overview to the ECMA-418-1 diagnosis, a what-if reduction of the order, its effect on loudness, sharpness and ECMA-418-2 tonality, and the findings checked against the built-in truth; audio before and after in `docs/audio/`.
 
 ### Changed
 

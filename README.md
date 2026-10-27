@@ -88,11 +88,17 @@ The amplitude convention of every function is stated in its docstring.
 
 ## Examples
 
-Six scripts in [examples/](https://github.com/ZhenxianLi/ROTA/tree/main/examples) cover order maps and slices, tachometer and tacholess speed, order extraction and removal, order-table resynthesis, and two complete synthetic recordings that you can listen to, an engine run-up and an electric drive. Each builds its signal with `rota.synth` and prints its results against the known truth.
+Scripts in [examples/](https://github.com/ZhenxianLi/ROTA/tree/main/examples) cover order maps and slices, tachometer and tacholess speed, order extraction and removal, order-table resynthesis, and two complete synthetic recordings that you can listen to, an engine run-up and an electric drive (01 to 06); three bridges to open-source psychoacoustic toolboxes (07 to 09); and a worked analysis (10). Each builds its signal with `rota.synth` and prints its results against the known truth.
 
 ![Campbell diagram, order map, engine speed and firing-order level of a synthetic engine run-up](https://raw.githubusercontent.com/ZhenxianLi/ROTA/main/docs/images/realistic_runup.png)
 
 *A synthetic four-cylinder engine run-up from `rota.synth.synth_scenario("ice_runup")`: launch from idle with clutch slip, two upshifts, combustion bursts, a modal transfer path, engine broadband, road noise and rumble, two receiver channels. Campbell diagram and order map, the speed from the tachometer against the truth, and the level of the firing order against the truth at the receiver, before and after `remove_orders` ([examples/05_realistic_engine_audio.py](https://github.com/ZhenxianLi/ROTA/blob/main/examples/05_realistic_engine_audio.py)).*
+
+### Worked analysis
+
+[docs/worked_example.md](https://github.com/ZhenxianLi/ROTA/blob/main/docs/worked_example.md) follows one analysis from a run-up recording with a tonal complaint to a conclusion an engineer can act on: speed, overview (A-weighted level, 1/3-octave bands, order map), diagnosis of the prominent order with the ECMA-418-1 tone-to-noise and prominence ratios, extraction and a what-if reduction of that order, the effect on loudness, sharpness and ECMA-418-2 tonality computed with optional open-source toolboxes, and the result checked against the truth built into the synthetic signal, with audio before and after.
+
+![Order slices, tone-to-noise ratio and prominence ratio of the problem order against the ECMA-418-1 criterion](https://raw.githubusercontent.com/ZhenxianLi/ROTA/main/docs/images/10_worked_diagnosis.png)
 
 ### Listen
 
