@@ -123,13 +123,17 @@ def window_enbw(matlab_name, n=8192):
 #   window_freq_map     flat top: the peak reading of a line is free of scalloping loss,
 #                       so no assumption on the window length of the other side is needed.
 #   overlap_percent     75 %, amplitude RMS (a unit sine of peak A reads A / sqrt(2)).
-#   vk_filter_order     second-difference structure equation, as in rota.extract.order_waveform.
+#   vk_filter_order     MATLAB 'FilterOrder' whose response matches the second-difference
+#                       structure of rota.extract.order_waveform, |H| = 1 / (1 + c d^4) at an
+#                       offset d from the carrier. Measured on the probe VKBW (CI run of
+#                       commit 3684ea2): 'FilterOrder' 1 follows the d^4 law (gains within
+#                       0.6 dB of ROTA's out to 5 Hz), 'FilterOrder' 2 a d^6 law.
 _COMMON = {
     "window_order_map": "hann",
     "window_freq_map": "flattopwin",
     "overlap_percent": 75.0,
     "amplitude_map": "rms",
-    "vk_filter_order": 2.0,
+    "vk_filter_order": 1.0,
     "vk_amplitude": "peak",
 }
 
