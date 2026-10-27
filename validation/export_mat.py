@@ -67,8 +67,8 @@ CASE_NAMES = ("T1", "T2", "T3", "T5", "T6", "T14", "VKBW")
 # that the carrier of the order is a fixed line, and unit tones at known offsets (Hz) from it.
 # The filters are linear: the gain at each offset is read off a least-squares fit of the output
 # on the known frequencies (compare.py). Offsets are dense around the set -3 dB offset (2 Hz).
-# The sampling rate is low (fs / bandwidth = 100) because MATLAB's orderwaveform solves the
-# filter iteratively (PCG) and did not converge at fs = 2 kHz (first CI runs: flag 1).
+# The sampling rate is low (fs / bandwidth = 100) so that iterative Vold-Kalman solvers converge
+# quickly on this probe.
 VK_PROBE = {
     "fs": 200.0, "duration": 30.0, "rpm": 1500.0, "order": 1.0, "bandwidth": 2.0, "seed": 21,
     "offsets": (-5.0, -4.0, -3.0, -2.5, -2.25, -2.0, -1.75, -1.5, -1.0, -0.5,
@@ -85,8 +85,7 @@ MATLAB_BANDWIDTH_FACTOR = 2.0
 # Meaning of the resolution arguments of the maps. ROTA's resolution (``par.order_resolution``,
 # ``par.freq_resolution``) is the bin spacing, one over the window length. MATLAB's ``res`` is
 # the resolution bandwidth, the equivalent noise bandwidth of the window times the bin spacing
-# (first CI run: with res 0.25 orders and a Hann window MATLAB returned bins 0.1666 orders apart,
-# with res 8 Hz and a flat-top window 2.121 Hz). For the same window length on both sides MATLAB
+# For the same window length on both sides MATLAB
 # is given ``res = ENBW * resolution`` (``par.order_resolution_matlab``,
 # ``par.freq_resolution_matlab``), with the ENBW of the window in bins (Hann 1.5, flat top 3.77).
 MATLAB_TO_SCIPY_WINDOW = {"hann": "hann", "flattopwin": "flattop"}
@@ -125,9 +124,7 @@ def window_enbw(matlab_name, n=8192):
 #   overlap_percent     75 %, amplitude RMS (a unit sine of peak A reads A / sqrt(2)).
 #   vk_filter_order     MATLAB 'FilterOrder' whose response matches the second-difference
 #                       structure of rota.extract.order_waveform, |H| = 1 / (1 + c d^4) at an
-#                       offset d from the carrier. Measured on the probe VKBW (CI run of
-#                       commit 3684ea2): 'FilterOrder' 1 follows the d^4 law (gains within
-#                       0.6 dB of ROTA's out to 5 Hz), 'FilterOrder' 2 a d^6 law.
+#                       offset d from the carrier; the probe VKBW checks the response law.
 _COMMON = {
     "window_order_map": "hann",
     "window_freq_map": "flattopwin",

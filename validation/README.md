@@ -185,7 +185,7 @@ The two sides define some arguments differently. The parameters are mapped so th
 
 ### Solver time and convergence of MATLAB's Vold-Kalman filter
 
-In R2026b `orderwaveform` with `FilterOrder` 2 (the setting of the first CI runs) warned on every case that its iterative solver did not converge (`PCG did not converge and returned flag 1`; flag 4 on the 16 kHz cases T1, T2 and T14), and its waveforms were far from the truth. With `FilterOrder` 1, the structure that matches ROTA's (see "Conventions"), it converged on the probe, T3 and T6, and where it still warns (T1, T14) its waveforms are close to the truth but no longer exact. The Vold-Kalman form of `ordertrack` also warns on the long 16 kHz cases, and its envelopes are then far from the truth on T2 and T14 while ROTA's are not; such rows read `pass (truth decides)`, and the warning is shown in their notes. The Vold-Kalman calls take minutes per call on the long multi-order cases (up to about half an hour on T2), so the workflow runs these calls of T2, T3 and T14 in jobs of their own (parts `vkwave` and `vktrack`). No solver option is documented, so none is set.
+`FilterOrder` 1 is used because its response has the structure of ROTA's filter (see "Conventions"). The Vold-Kalman calls solve their filter iteratively; any solver warning is written to the log and shown in the notes of the affected rows, and rows where ROTA meets the truth and the reference does not read `pass (truth decides)`. These calls can take many minutes on the long multi-order cases, so the workflow runs them for T2, T3 and T14 in jobs of their own (parts `vkwave` and `vktrack`). No solver option is documented, so none is set.
 
 ### Calls made (MATLAB)
 
