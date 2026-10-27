@@ -6,19 +6,23 @@ name: sqat-engine
 # must match the MATLAB release, so both are pinned together below.
 #
 # Licensing. MathWorks licenses MATLAB automatically for public repositories inside its own
-# run actions (run-command, run-tests, run-build). Whether a MATLAB started from Python by
-# matlab.engine.start_matlab() is licensed as well is probed in the first step; the second
-# step tries the alternative of sharing the engine of a licensed run-command session
-# (matlab.engine.shareEngine) and connecting to it from Python. The pytest step uses the mode
-# that worked. No MATLAB output is committed; the logs stay in the job.
+# run actions (run-command, run-tests, run-build). The workflow probes two ways of reaching
+# that MATLAB from Python; neither worked on ubuntu-latest with R2026b and matlabengine
+# 26.2.5 (run 40593180645, October 2026):
+#   1. matlab.engine.start_matlab() fails after about 14 s with
+#      "matlab.engine.EngineError: Unable to launch MVM server: License Error: Licensing
+#      shutdown" (a MATLAB started outside the run actions is not licensed);
+#   2. matlab.engine.shareEngine in a licensed run-command session: Python sees the shared
+#      engine (find_matlab() returns ('rota_ci',)), but connect_matlab() never returns,
+#      because a batch session busy in its command does not serve engine requests.
+# The workflow is therefore an informational probe, run by hand (workflow_dispatch) only:
+# both probes are continue-on-error, so it never leaves a red check, and the pytest steps
+# run only if a probe succeeds (for example on a self-hosted runner with a licensed MATLAB,
+# or after MathWorks changes the licensing). The stub tests of tests/test_bridges_sqat.py
+# run in the ordinary CI. No MATLAB output is committed; the logs stay in the job.
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - "src/rota/bridges/sqat.py"
-      - "tests/test_bridges_sqat.py"
-      - ".github/workflows/sqat-engine.yml"
 
 permissions:
   contents: read
@@ -127,14 +131,15 @@ jobs:
         id: probe_shared
         if: ${{ steps.probe_start.outcome != 'success' }}
         continue-on-error: true
-        timeout-minutes: 20
+        timeout-minutes: 8
         uses: matlab-actions/run-command@v2
         with:
           command: >-
             matlab.engine.shareEngine('rota_ci');
-            system('python build/sqat_engine/probe.py rota_ci > build/sqat_engine/probe_shared.log 2>&1 &');
-            t0 = tic; while ~isfile('build/sqat_engine/probe_rota_ci.status') && toc(t0) < 900, pause(1); end;
+            system('timeout 300 python build/sqat_engine/probe.py rota_ci > build/sqat_engine/probe_shared.log 2>&1 &');
+            t0 = tic; while ~isfile('build/sqat_engine/probe_rota_ci.status') && toc(t0) < 320, pause(1); end;
             type('build/sqat_engine/probe_shared.log');
+            assert(isfile('build/sqat_engine/probe_rota_ci.status'), 'shared-engine probe: connect_matlab did not return within 300 s');
             assert(strcmp(strtrim(fileread('build/sqat_engine/probe_rota_ci.status')), 'ok'), 'shared-engine probe failed');
 
       - name: "pytest tests/test_bridges_sqat.py (engine started from Python)"
@@ -163,4 +168,6 @@ jobs:
             echo
             echo "* start_matlab(): ${{ steps.probe_start.outcome }}"
             echo "* connect_matlab() to a run-command session: ${{ steps.probe_shared.outcome || 'not tried' }}"
+            echo
+            echo "Informational probe: a failure of both means a MATLAB started or reached from Python is not licensed on this runner; the stub tests run in the ordinary CI."
           } >> "$GITHUB_STEP_SUMMARY"
