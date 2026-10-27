@@ -18,15 +18,15 @@ Pre-alpha. The current release is 0.4.0; functions and signatures may still chan
 
 | Module | Contents | Since |
 |---|---|---|
-| `rota.speed` | Tachometer pulses to rpm, rpm to shaft angle, control-signal cleanup and resampling, vehicle speed to rpm, steady-segment selection; tacholess speed estimation (order comb + dynamic programming, with confidence and search-boundary flags); virtual rpm. Later: signal alignment (v0.5) | 0.1–0.4 |
+| `rota.speed` | Tachometer pulses to rpm, rpm to shaft angle, control-signal cleanup and resampling, vehicle speed to rpm, steady-segment selection; tacholess speed estimation (order comb + dynamic programming, with confidence and search-boundary flags); virtual rpm; alignment of signals by GCC-PHAT delay and onset detection | 0.1–0.5 |
 | `rota.angle` | Resampling from uniform time to uniform shaft angle (computed order tracking) with angle-domain anti-aliasing; the inverse mapping; time warping to a reference speed (stationarize) | 0.1, 0.3 |
-| `rota.maps` | Rpm-frequency (Campbell) map, rpm-order map. Later: binning options (v0.5) | 0.1 |
-| `rota.slices` | Order spectrum, order slice. Later: frequency slice, overall level, metric versus rpm, order share (v0.5) | 0.1 |
+| `rota.maps` | Rpm-frequency (Campbell) map, rpm-order map; binning of frames into rpm bins (per segment, minimum count, phase-coherent option) | 0.1, 0.5 |
+| `rota.slices` | Order spectrum, order slice; frequency slice, overall level, any metric binned along rpm, attribution of frequency tracks to orders, order share | 0.1, 0.5 |
 | `rota.extract` | Order extraction (second-generation Vold-Kalman filter, joint over orders and shafts; phase-locked tracked harmonics), order removal, residual, resolvability check | 0.2 |
 | `rota.resynth` | Order tables (explicit peak/RMS), additive order synthesis offline and in blocks, broadband synthesis without frame-rate pumping, order editing, speed remapping, order-plus-residual recombination, steady listening excerpts, provenance sidecars | 0.3 |
 | `rota.synth` | Speed profiles and run-up signals with analytic ground truth; tone-plus-noise listening stimuli; realistic scenarios (engine run-up, electric drive, cruise) with transfer paths, background noise and recorder impairments | 0.1, 0.3, 0.4 |
 | `rota.metrics` | Speed-track error, waveform similarity (energy-weighted), residual order energy, window and pumping checks, envelope statistics | 0.1–0.3 |
-| `rota.tonal` | Thin bridge to open-source psychoacoustic tools: A/C weighting, calibrated levels and resampling, octave and 1/3-octave bands, order prominence | v0.5 (planned) |
+| `rota.tonal` | Bridge to open-source psychoacoustic tools: A/C weighting (IEC 61672-1), calibrated levels and resampling to 48 kHz, octave and 1/3-octave bands (IEC 61260-1) and band levels along rpm, tone-to-noise ratio and prominence ratio of orders (ECMA-418-1, 3rd edition) | 0.5 (unreleased) |
 | `rota.plot` | Plotting helpers, kept separate from computation | v0.6 (planned) |
 
 Planned for v1.0: full validation report, complete documentation, Zenodo DOI.
@@ -125,7 +125,7 @@ The recordings below are synthetic (no measured data) and are written by [exampl
 2. Verifiable: each function is tested on synthetic signals with known analytic ground truth.
 3. Transparent: docstrings give the literature, the amplitude definition and the units.
 4. Plain Python: snake_case functions, NumPy arrays as input and output, computation separate from plotting.
-5. Interoperable: results can be passed on to open-source psychoacoustic tools such as SQAT and MoSQITo. ROTA does not depend on them.
+5. Interoperable: results can be passed on to open-source psychoacoustic tools; examples 07 to 09 link ROTA to [MoSQITo](https://github.com/Eomys/MoSQITo), [sottek-hearing-model](https://github.com/mlotinga/sottek-hearing-model) and [SQAT](https://github.com/ggrecow/SQAT). ROTA does not depend on them. Open-source implementations of psychoacoustic metrics, with the standard and edition each follows, are listed in [LISQM](https://zhenxianli.github.io/LISQM/).
 6. Multichannel first: operators are linear per channel (see Conventions).
 7. Reproducible: seedable randomness, and planned JSON sidecar files recording the parameters of each resynthesis.
 8. No hidden constants.

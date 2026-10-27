@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+Application layer and bridges to psychoacoustic toolboxes.
+
+### Added
+
+- `rota.tonal`: A and C frequency weighting (IEC 61672-1; `weighting_db`, `weighting_filter`, `weight`), levels and level versus time, channel combination, `to_calibrated_48k` (calibration to Pa and resampling to 48 kHz for psychoacoustic tools), octave and fractional-octave filterbank (IEC 61260-1; `octave_band_centres`, `octave_filterbank`, `octave_levels`) and band levels along rpm (`band_levels_vs_rpm`).
+- `rota.tonal`: tone-to-noise ratio and prominence ratio after ECMA-418-1 (3rd edition, 2024): `tone_prominence` for a stationary spectrum, `order_prominence` for orders in the angle domain along a run-up, `prominence_criterion`, `critical_bandwidth`, `critical_band_edges`, `components`.
+- `rota.slices`: `frequency_slice`, `overall_level`, `metric_vs_rpm` (bins any time-varying metric, for instance loudness from a psychoacoustic toolbox, along rpm), `frequency_to_order`, `order_share`.
+- `rota.maps`: binning of map frames into rpm bins (`rpm_bins`, `segment`, `min_count`, `bin_phase`; `bin_map`, `BinnedMap`).
+- `rota.speed`: `align_signals` (GCC-PHAT delay), `detect_onsets`, `AlignResult`.
+- Examples 07 (MoSQITo), 08 (sottek-hearing-model) and 09 (SQAT in MATLAB, workflow `sqat-bridge`, results kept in the workflow artifact); the toolboxes are optional, external dependencies and the tests of examples 07 and 08 are skipped without them.
+
+### Changed
+
+- Roadmap: octave and 1/3-octave band analysis added to v0.5; `rota.plot` moves to v0.6.
+
 ## [0.4.0] - 2026-10-27
 
 Realistic test signals, stress tests and the black-box reference comparison.

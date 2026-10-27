@@ -600,7 +600,11 @@ def metric_vs_rpm(
     ValueError
         For invalid arguments, or if no sample remains after the exclusions.
 
-    The metric is binned as given (any unit); no amplitude convention applies except for ``aggregate="power"``, which treats the values as levels in dB of power (RMS) quantities.
+    Notes
+    -----
+    The metric is binned as given (any unit); no amplitude convention
+    applies except for ``aggregate="power"``, which treats the values as
+    levels in dB of power (RMS) quantities.
 
     References
     ----------

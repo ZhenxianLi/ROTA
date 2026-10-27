@@ -1,6 +1,6 @@
 # Examples
 
-Six runnable scripts that show the main parts of ROTA on synthetic signals. All data come from `rota.synth`, so every result can be compared with the analytic truth that went into the signal, and each script prints those comparisons as numbers before it saves one figure. Scripts 5 and 6 also write WAV files that you can listen to.
+Runnable scripts that show the main parts of ROTA on synthetic signals: six on ROTA alone (01 to 06) and three bridges to open-source psychoacoustic toolboxes (07 to 09), which are optional, external dependencies. All data come from `rota.synth`, so every result can be compared with the analytic truth that went into the signal, and each script prints those comparisons as numbers before it saves one figure. Scripts 5 and 6 also write WAV files that you can listen to.
 
 ## Running
 
@@ -15,6 +15,8 @@ python examples/04_order_table_resynthesis.py
 python examples/05_realistic_engine_audio.py
 python examples/06_electric_drive_audio.py
 ```
+
+The bridges need their toolbox: `pip install mosqito` for script 7 and `pip install sottek-hearing-model` (Python 3.11 or later) for script 8; example 9 runs SQAT in MATLAB and is described in its own folder.
 
 The scripts can be started from any directory. Each runs in a few seconds (about 2 s, 2 s, 8 s, 5 s, 11 s and 25 s) and writes its figure to `docs/images/`, 8 inches wide at 150 dpi; scripts 5 and 6 also write their WAV files to `docs/audio/` (`scipy.io.wavfile`). Random elements use fixed seeds, so the numbers, figures and audio files are reproducible.
 
@@ -80,6 +82,22 @@ Audio: `docs/audio/electric_runup.wav` (the recording), `electric_runup_motor_or
 
 Figure: `docs/images/electric_drive.png`.
 
+## 07_mosqito_bridge.py
+
+Links ROTA to MoSQITo (Apache-2.0, `pip install mosqito`, tested with PyPI 1.2.1, repository github.com/Eomys/MoSQITo), which computes the psychoacoustic metrics that ROTA leaves out of scope. MoSQITo is an optional, external dependency: ROTA does not import, vendor or copy it, the script calls only documented public functions, and without the package the script stops with the install message and `tests/test_bridge_mosqito.py` is skipped. The functions and the standards behind them, as catalogued at zhenxianli.github.io/LISQM: `loudness_zwtv` (ISO 532-1:2017, time-varying), `sharpness_din_from_loudness` (DIN 45692), `roughness_dw` (Daniel & Weber) and `tnr_ecma_st` (the ECMA-74 Annex D tone-to-noise ratio, catalogued against ECMA-74:2019). MoSQITo's ECMA-418-2 functions (`loudness_ecma`, `roughness_ecma`) are the 2nd edition (2022) only, not the current 4th edition, and the script does not use them.
+
+The signal is the first 6 s of the seeded `synth_scenario("ice_runup")` (1200 to 4400 rpm, one receiver channel, before the first upshift). ROTA prepares it: calibrated Pa at 48 kHz with `to_calibrated_48k` (the level is unchanged, 86.79 dB re 20 uPa before and after) and the speed from the tachometer with `tacho_to_rpm` (median error 0.014 %). MoSQITo computes loudness, sharpness and roughness; `metric_vs_rpm` bins them in 250 rpm bins on the run-up, with the start-up of each metric skipped (0.6 s for loudness and sharpness, 1.5 s for roughness) and the aggregation that suits each: the 95th percentile of loudness (N5), the median of sharpness and the 90th percentile of roughness (R10). The metrics are never averaged in dB.
+
+The order contribution comes from two more signals made with ROTA: order 2 removed with `remove_orders` (tracked harmonics, 8 revolutions) and order 2 raised by 6 dB (`modify_orders` on the extracted components, `resynthesize` with the unchanged residual). The script checks them before MoSQITo sees them: the order-2 slice drops by 25.8 dB and rises by 6.0 dB (median, RMS), the A-weighted level changes by -1.4 and +2.7 dB. The figure and the printed table give the differences along rpm. Removing order 2 lowers the N5 loudness by 2.5 sone at 2400 rpm and 9.7 sone at 4400 rpm (+2.8 and +11.2 sone for the raised order) and raises the sharpness by 0.03 to 0.21 acum (the raised order lowers it by 0.04 to 0.13 acum): order 2 carries much of the loudness and, being low in frequency, keeps the sound less sharp. The roughness change is below the scatter of a bin (a few 0.1 s frames per bin, interquartile range 0.02 asper against changes of 0.01), so the example draws no conclusion on the contribution of order 2 to roughness.
+
+The last part compares the tone prominence of order 2. ROTA's `order_prominence` works in the angle domain: frames of 50 revolutions keep order 2 a stationary line although the speed rises by 500 rpm/s, and the critical band of each frame is evaluated at its mean speed (ECMA-418-1, 3rd edition, 2024). MoSQITo's `tnr_ecma_st` has no speed input; it takes a signal of fixed duration as one spectrum and detects the tones itself, so it is run on five steady 2 s excerpts (`stationary_excerpt`) at each of three speeds, next to ROTA's `tone_prominence` on the same excerpts. A fixed 1 s window cut from the run-up would let order 2 sweep 17 to 18 Hz, 17 to 18 % of the critical band, which the standard no longer calls resolved (the table flags it). Results: ROTA's angle-domain TNR of order 2 rises from 12.1 to 17.4 dB between 3000 and 4000 rpm and lies within 3.5 dB of ROTA's value on the steady excerpts (10 to 20 dB; the excerpt is a resynthesis, not the recording). MoSQITo agrees with ROTA within 1.5 dB in none of the 15 excerpts: it returns 0.1 to 1 dB in 12 of them and 11 dB in 3. On a steady tone in noise with an exact spectrum the two agree within about 0.5 dB from 130 Hz to 4 kHz (the test), and with Gaussian noise MoSQITo 1.2.1 gives 2 to 3 dB instead of the right value for about half of the tones between 130 and 380 Hz. MoSQITo is catalogued against ECMA-74:2019, whose method is that of the 2nd edition of ECMA-418-1, and the 3rd edition followed by ROTA changed the tone band and the noise estimate, which may explain part of the difference; we have not investigated MoSQITo's implementation.
+
+The figure shows loudness, sharpness and roughness along rpm for the three signals and their differences to the original (a to f), and the tone-to-noise ratio of order 2 along rpm: ROTA in the angle domain with the criterion, ROTA on a 1 s window, ROTA and MoSQITo on the steady excerpts (g). Run time is about 40 s on four cores (the three signals are processed by MoSQITo in parallel processes, about 2 min on one core).
+
+![Psychoacoustic metrics along rpm and order contribution](../docs/images/07_mosqito_bridge.png)
+
+Figure: `docs/images/07_mosqito_bridge.png`.
+
 ## 08_sottek_hearing_model_bridge.py
 
 Links ROTA to the Python implementation of the Sottek hearing model of ECMA-418-2, the package `sottek-hearing-model` (import name `sottek_hearing_model`, tested with PyPI 0.1.14, repository github.com/mlotinga/sottek-hearing-model). It implements ECMA-418-2:2025 (4th edition) tonality (with the frequency of the dominant tonal component), loudness and roughness; fluctuation strength is not in the released package yet, so it is not used. The package is an optional external dependency: it is licensed AGPL-3.0-only (package metadata), needs Python 3.11 or later and pulls in PyQt6 and Matplotlib; install it only if you accept that licence (`pip install sottek-hearing-model`). ROTA does not import, vendor or copy it, the script calls only its documented functions `shm_tonality_ecma`, `shm_loudness_ecma_from_comp` and `shm_roughness_ecma`, and without the package it stops with the install message. The test `tests/test_bridge_shm.py` is skipped when the package is missing.
@@ -93,3 +111,7 @@ The figure shows the model's tonal components against time with the order lines 
 ![ECMA-418-2 metrics along rpm and order attribution](../docs/images/08_sottek_hearing_model_bridge.png)
 
 Figure: `docs/images/08_sottek_hearing_model_bridge.png`.
+
+## 09_sqat_bridge/
+
+Links ROTA to SQAT (MATLAB, GPL-3.0 as a whole, github.com/ggrecow/SQAT, release v2.0 pinned to a commit). `export_signals.py` writes the two seeded run-ups (`ice_runup` and `ev_runup`) as calibrated pressure in Pa at 48 kHz with their speed; `run_sqat.m` computes ISO 532-1 loudness, DIN 45692 sharpness, Daniel & Weber roughness and ECMA-418-2 tonality with SQAT; `import_results.py` bins them along rpm with `metric_vs_rpm`. It runs in GitHub Actions (`.github/workflows/sqat-bridge.yml`), where SQAT is cloned at run time; its results stay in the workflow artifacts and are not committed. Details, the calls and their parameters: [09_sqat_bridge/README.md](09_sqat_bridge/README.md).
