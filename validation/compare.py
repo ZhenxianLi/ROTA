@@ -220,12 +220,16 @@ class Ref:
         self.path = Path(path)
         self.d = None
         self.load_error = ""
-        if self.path.exists():
+        # <case>_ref.mat, and the parts <case>_ref_<part>.mat that CI jobs of their own wrote
+        # (ROTA_REF_PART in run_reference.m); the calls of different parts do not overlap.
+        files = [self.path] if self.path.exists() else []
+        files += sorted(self.path.parent.glob(f"{self.path.stem}_*.mat"))
+        for f in files:
             try:
-                raw = loadmat(self.path, squeeze_me=True)
-                self.d = {k: v for k, v in raw.items() if not k.startswith("__")}
+                raw = loadmat(f, squeeze_me=True)
+                self.d = (self.d or {}) | {k: v for k, v in raw.items() if not k.startswith("__")}
             except Exception as err:  # noqa: BLE001 - report any unreadable file
-                self.load_error = f"{type(err).__name__}: {err}"
+                self.load_error += f"{f.name}: {type(err).__name__}: {err}. "
 
     @property
     def present(self):
@@ -254,8 +258,9 @@ class Ref:
         if not self.ran(cid):
             return MISSING + " (call not run for this case)"
         if not self.ok(cid):
-            if self.text(cid, "msg").startswith("skipped"):
-                return "MATLAB call skipped (an input call failed)"
+            msg = self.text(cid, "msg")
+            if msg.startswith("skipped"):
+                return f"MATLAB call skipped ({msg[len('skipped:'):].strip()[:120] or 'an input call failed'})"
             return "MATLAB call failed"
         return ""
 
@@ -264,13 +269,25 @@ class Ref:
         msg = self.text(cid, "msg").strip()
         return (msg[:160] + "...") if len(msg) > 160 else msg
 
+    def warning(self, cid):
+        """Warning MATLAB issued during the call that ran (e.g. an iterative solver that did not
+        converge), or ''."""
+        msg = self.text(cid, "msg")
+        i = msg.find("warning: ")
+        return f"MATLAB {msg[i:i + 150].strip()}" if i >= 0 else ""
+
     def degraded(self, cid):
-        """Note if a later variant (fewer arguments) of the call was the one that ran."""
+        """Note if a later variant (fewer arguments) of the call was the one that ran, and any
+        warning of that call."""
+        notes = []
         if self.ok(cid):
             var = int(np.asarray(self.get(cid, "variant")).reshape(-1)[0])
             if var > 1:
-                return f"MATLAB variant {var} ran (fewer arguments: {self.text(cid, 'call')[:140]})"
-        return ""
+                notes.append(f"MATLAB variant {var} ran (fewer arguments: {self.text(cid, 'call')[:140]}).")
+            w = self.warning(cid)
+            if w:
+                notes.append(w.rstrip(".") + ".")
+        return " ".join(notes)
 
 
 # --------------------------------------------------------------------------------------------
@@ -292,6 +309,7 @@ class Case:
         self.t = np.asarray(d["t"], dtype=float)
         self.rpm = np.asarray(d["rpm"], dtype=float)
         self.tacho = np.asarray(d["tacho"], dtype=float) if "tacho" in d else None
+        self.pulse_times = np.atleast_1d(d["pulse_times"]).astype(float) if "pulse_times" in d else None
         self.orders = np.atleast_1d(d["orders"]).astype(float)
         K = self.orders.size
         self.amp = np.asarray(d["order_amplitude"], dtype=float).reshape(self.x.size, K)
@@ -412,7 +430,12 @@ class Row:
         return abs(v) <= tol[1] if tol[0] == "<=" else v >= tol[1]
 
     def verdict(self):
-        """('pass' | 'pass (ROTA only)' | 'FAIL' | 'ERROR' | 'info' | 'n/a', comment)."""
+        """('pass' | 'pass (truth decides)' | 'pass (ROTA only)' | 'FAIL' | 'ERROR' | 'info' | 'n/a', comment).
+
+        Analytic truth is the first standard (ROADMAP 5.1): when ROTA is within the truth
+        tolerance and MATLAB is outside it, the two differ because of MATLAB, and the row passes
+        with the verdict 'pass (truth decides)'.
+        """
         if isinstance(self.rota_truth, str) and self.rota_truth.startswith("ROTA error"):
             return "ERROR", ""
         t_ok = self._check(self.rota_truth, self.tol_truth)
@@ -421,6 +444,11 @@ class Row:
         if t_ok is False:
             return "FAIL", "ROTA is outside the truth tolerance."
         if m_ok is False:
+            if mt_ok is False and t_ok is True:
+                return "pass (truth decides)", (
+                    "ROTA and MATLAB differ; ROTA is within the truth tolerance and MATLAB is not, so the truth "
+                    "decides for ROTA."
+                )
             if mt_ok is False:
                 return "FAIL", "ROTA and MATLAB differ; MATLAB is also outside the truth tolerance, so the truth decides."
             if mt_ok is True:
@@ -552,6 +580,16 @@ def tacho_table(cases):
                 e_rm = _rel_pct(rota, mat)
                 mt, rm = _median(e_mt), _median(e_rm)
                 n_m = f"n={int(np.isfinite(e_mt).sum())}."
+                tp = case.ref.get(cid, "tp")
+                if tol and tp is not None and np.size(tp) > 2:
+                    # Black-box view of the pulses MATLAB used: intervals of about twice their
+                    # neighbours are dropped pulses that were not filled in.
+                    dtp = np.diff(np.atleast_1d(tp).astype(float).ravel())
+                    nb = np.minimum(np.r_[dtp[1:], dtp[-1]], np.r_[dtp[0], dtp[:-1]])
+                    gaps = int(np.sum(dtp > 1.5 * nb))
+                    rendered = "" if case.pulse_times is None else f", {case.pulse_times.size} rendered (truth)"
+                    n_m += (f" MATLAB `tp`: {np.size(tp)} pulses{rendered}; {gaps} intervals of about twice their "
+                            "neighbours (dropped pulses, not filled).")
             tab.rows.append(Row(
                 case.name, f"Median relative rpm error ({label})", _median(e_rt), mt, rm, " %",
                 ("<=", TOL_RPM_MEDIAN) if tol else None, ("<=", TOL_RPM_MEDIAN) if tol else None,
@@ -897,9 +935,12 @@ def axis_table(cases):
     """
     tab = Table(
         "6. Order and frequency axes: spacing against the requested resolution",
-        "Median spacing of the bin axis relative to `par.order_resolution` / `par.freq_resolution`, in percent "
-        "(signed; the tolerance applies to the absolute value). ROTA-MATLAB is the relative difference of the "
-        "two spacings.",
+        "Median spacing of the bin axis relative to `par.order_resolution` / `par.freq_resolution` (the bin "
+        "spacing, one over the window length), in percent (signed; the tolerance applies to the absolute "
+        "value). ROTA-MATLAB is the relative difference of the two spacings. MATLAB's `res` is a resolution "
+        "bandwidth, the window ENBW times the bin spacing, so it is given `par.order_resolution_matlab` / "
+        "`par.freq_resolution_matlab` = ENBW x the resolution (Hann 1.5, flat top 3.77 bins); its `res` output "
+        "is listed in the notes. The time-axis rows check MATLAB's frame times against its speed output.",
     )
     for case in cases:
         for do, kind, cid, rota_map, req in (
@@ -924,8 +965,9 @@ def axis_table(cases):
                 case.name, name, 100.0 * (sp_r / req - 1.0), mt, rm, " %",
                 ("<=", TOL_AXIS_PCT), ("<=", TOL_AXIS_PCT),
                 note=f"requested {req:g}, ROTA {sp_r:g}" + (
-                    f", MATLAB {sp_m:.6g} (its `res` output: {_text(case.ref.get(cid, 'res'))})"
-                    if case.ref.ok(cid) else "") + ".",
+                    f", MATLAB {sp_m:.6g} (`res` given {_text(case.ref.get(cid, 'res_in')) or 'n/a'}, returned "
+                    f"{float(np.asarray(case.ref.get(cid, 'res'), dtype=float).reshape(-1)[0]):.6g})"
+                    if case.ref.ok(cid) and case.ref.get(cid, "res") is not None else "") + ".",
             ))
             # Time axis of the MATLAB map: the exact speed at the returned frame times against the
             # speed returned for the same frames (small if the times are the frame centres).
@@ -1212,7 +1254,8 @@ def probe_table(cases):
     """
     tab = Table(
         "10. Vold-Kalman -3 dB bandwidth: `order_waveform` vs `orderwaveform` (probe VKBW)",
-        "Constant speed, one order (carrier 100 Hz) and unit tones at known offsets from it (`par.probe_offsets`). "
+        "Constant speed, one order (carrier 25 Hz, fs 200 Hz) and unit tones at known offsets from it "
+        "(`par.probe_offsets`). "
         "Single-order filters, second-order structure. The gain at each offset is |output| / |input| of a "
         "least-squares fit on the known frequencies over the interior "
         f"({VK_EDGE_BANDWIDTHS:g} / bandwidth seconds dropped at each end); the -3 dB offset is interpolated "

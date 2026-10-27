@@ -137,13 +137,13 @@ The black-box reference comparison (ROADMAP section 5.5, steps 2 and 3: running 
 
 ## Black-box reference (MATLAB)
 
-ROADMAP section 5.5 describes a second reference besides the analytic truth: the same signals analysed by an external implementation, used as a black box. This section describes the set-up; no result has been published yet (the first run is pending), so the statement under "Not yet" above still holds.
+ROADMAP section 5.5 describes a second reference besides the analytic truth: the same signals analysed by an external implementation, used as a black box. This section describes the set-up. The comparison runs in CI; its output stays in the workflow artifact and has not been published with any release, so the statement under "Not yet" above still holds for the releases so far.
 
 **Rules (ROADMAP section 4).** `validation/matlab/run_reference.m` only calls documented public functions of the Signal Processing Toolbox, with every parameter given explicitly, on the signals of `make_signals.py`, and saves what they return. No toolbox code is read or reused, no other data is processed and nothing is evaluated in that script. The comparison is done by `compare.py`. When ROTA and MATLAB disagree, the analytic truth decides (ROADMAP section 5.1): every row of the report also says how far MATLAB is from the truth.
 
 ### Running it in CI
 
-Actions, then `matlab-reference`, then Run workflow. The workflow also runs on pushes that change `validation/matlab/**`, `validation/export_mat.py` or `validation/compare.py`. It installs ROTA, runs `python validation/export_mat.py`, sets up MATLAB with the Signal Processing Toolbox (`matlab-actions/setup-matlab`, which licenses MATLAB itself for a public repository on a GitHub-hosted runner), runs `run('validation/matlab/run_reference.m')`, then `python validation/compare.py --out validation/reference/report.md`. The report is appended to the job summary, and `validation/reference/` (report, `<case>_ref.mat`, `versions.txt` with the MATLAB release and toolbox versions, and `log.txt` with every call, warning and error) is uploaded as the artifact `matlab-reference`. Every call is wrapped in `try`/`catch`: a failing call is logged and the others continue; the report then shows `MATLAB call failed` for it.
+Actions, then `matlab-reference`, then Run workflow. The workflow also runs on pushes that change `validation/matlab/**`, `validation/export_mat.py`, `validation/compare.py` or the workflow itself. One job per case, and for T2, T3 and T14 one per part of the calls (`main`, `vkwave`: `orderwaveform`, `vktrack`: `ordertrack` in its Vold-Kalman form; environment variable `ROTA_REF_PART`), all in parallel, installs ROTA, runs `python validation/export_mat.py <case>`, sets up MATLAB with the Signal Processing Toolbox (`matlab-actions/setup-matlab`, which licenses MATLAB itself for a public repository on a GitHub-hosted runner), runs `run('validation/matlab/run_reference.m')` and uploads `validation/reference/` as the artifact `reference-<case>-<part>`. The `report` job then exports all cases, collects the `<case>_ref.mat` and `<case>_ref_<part>.mat` files (`compare.py` merges the parts of a case), concatenates the logs and runs `python validation/compare.py --out validation/reference/report.md`. The report is appended to the job summary, and `validation/reference/` (report, `<case>_ref.mat`, `versions.txt` with the MATLAB release and toolbox versions, and `log.txt` with every call, its duration, warnings and errors) is uploaded as the artifact `matlab-reference`. Every call is wrapped in `try`/`catch`: a failing call is logged and the others continue; the report then shows `MATLAB call failed` for it.
 
 **The MATLAB output is not committed.** It stays in the CI artifact (and `validation/reference/` and `validation/signals/` are git-ignored) until the licence terms of the institution concerned have been confirmed (ROADMAP section 5.5).
 
@@ -158,30 +158,46 @@ writes `validation/signals/<case>.mat` and a report in which ROTA is compared wi
 
 ### Cases and parameters
 
-`export_mat.py` writes T1, T2, T3, T5 (60 pulses per revolution), T6 and T14 as MATLAB v5 files with `x`, `fs`, `t`, `rpm` (the exact speed, column), `tacho` (T5), `orders`, `order_amplitude` (peak truth), `order_stems` (truth waveforms) and the struct `par` of analysis parameters that both sides use; `compare.py` reads the same table, so they cannot drift apart.
+`export_mat.py` writes T1, T2, T3, T5 (60 pulses per revolution), T6, T14 and the probe VKBW as MATLAB v5 files with `x`, `fs`, `t`, `rpm` (the exact speed, column), `tacho` (T5), `orders`, `order_amplitude` (peak truth), `order_stems` (truth waveforms) and the struct `par` of analysis parameters that both sides use; `compare.py` reads the same table, so they cannot drift apart. VKBW is built in `export_mat.py` with `rota.synth.synth_runup`: 1500 rpm constant, order 1 (carrier 25 Hz, 1 Pa peak) and unit tones at 0.5 to 5 Hz above and below the carrier, 200 Hz sampling (a low `fs / bandwidth`, because MATLAB's iterative Vold-Kalman solver did not converge on the first version of the probe at 2 kHz), 30 s, no noise.
 
-| Case | Order resolution | Frequency map | Vold-Kalman bandwidth | Tacholess speed (MATLAB order; ROTA comb = all orders) |
+| Case | Order resolution | Frequency map | Vold-Kalman bandwidth (ROTA; MATLAB `Bandwidth`) | Tacholess speed (MATLAB order; ROTA comb = all orders) |
 |---|---|---|---|---|
-| T1 | 0.25 | 8 Hz | 2 Hz | order 2, 4 Hz; ROTA range 800 to 4500 rpm |
-| T2 | 0.25 | none | 2 Hz | order 2, 4 Hz; 800 to 5500 rpm |
-| T3 | 0.25 | none | 2 Hz | order 2, 6 Hz; 800 to 4500 rpm |
+| T1 | 0.25 | 8 Hz | 2 Hz; 4 Hz | order 2, 4 Hz; ROTA range 800 to 4500 rpm |
+| T2 | 0.25 | none | 2 Hz; 4 Hz | order 2, 4 Hz; 800 to 5500 rpm |
+| T3 | 0.25 | none | 2 Hz; 4 Hz | order 2, 6 Hz; 800 to 4500 rpm |
 | T5 | none | none | none | tachometer: 60 pulses per revolution, state levels from the signal |
-| T6 | 0.25 | none | 16 Hz | none (1 s record) |
-| T14 | 0.125 | none | 2 Hz | order 1, 3 Hz; 600 to 3500 rpm |
+| T6 | 0.25 | none | 16 Hz; 32 Hz | none (1 s record) |
+| T14 | 0.125 | none | 2 Hz; 4 Hz | order 1, 3 Hz; 600 to 3500 rpm |
+| VKBW | none | none | 2 Hz; 4 Hz and 2 Hz (probe only) | none |
 
 Order maps use a Hann window and 75 % overlap, the frequency map a flat-top window (no scalloping) and 75 % overlap; amplitudes are RMS. The frequency map is run for T1 only, the one case whose single line is further from its neighbours than the flat-top main lobe. The Vold-Kalman filter is joint over several orders (decoupled) with a second-order structure.
+
+### Conventions
+
+The two sides define some arguments differently. The parameters are mapped so that both estimate the same quantity; the results are never rescaled to agree.
+
+* **Vold-Kalman bandwidth.** ROTA's `bandwidth` (`par.vk_bandwidth`) is the offset from the carrier at which the single-order filter attenuates a tone by 3 dB, so its pass band is twice as wide. MATLAB's `Bandwidth` is the full width of the pass band between the two -3 dB points, so it is given `par.vk_bandwidth_matlab` = 2 x `par.vk_bandwidth`. The probe VKBW measures this (table 10): each filter's -3 dB offset is read off its gains at the known tone offsets, MATLAB with `Bandwidth` = 2 x and = 1 x the ROTA value.
+* **Amplitude.** Map readings are RMS on both sides (`Amplitude` `'rms'`; a sine of peak amplitude A reads A / sqrt(2)), Vold-Kalman envelopes peak (`Amplitude` `'peak'`). The truth is peak; RMS rows divide it by sqrt(2). Waveforms are compared by correlation and least-squares gain, which need no amplitude convention.
+* **Time axes.** MATLAB's `time`, `t` and `tout` outputs are used as returned (s from the first sample). A MATLAB map reading is compared with the truth at the speed MATLAB returns for that frame, and with ROTA by interpolation in time onto the ROTA frame centres; table 6 checks that the exact speed at MATLAB's `time` matches its `rpm` output, i.e. that `time` holds the frame centres.
+* **Resolution.** ROTA's `order_resolution` and `resolution` are the bin spacing (one over the window length). MATLAB's `res` behaves as a resolution bandwidth, the equivalent noise bandwidth (ENBW) of the window times the bin spacing: in the first CI run, `res` 0.25 orders with a Hann window gave bins 0.1666 orders apart, and `res` 8 Hz with a flat-top window 2.12 Hz. MATLAB is therefore given `par.order_resolution_matlab` / `par.freq_resolution_matlab` = ENBW x the ROTA resolution (Hann 1.5, flat top 3.77 bins, computed in `export_mat.py`), so that both sides use the same window length; table 6 reports the spacing each side obtains and MATLAB's `res` input and output. A map is read at the bin nearest the order (MATLAB) or by band power over the main lobe (ROTA `order_slice`).
+* **Tachometer.** ROTA's `tacho_to_rpm` fills dropped pulses; MATLAB's `tachorpm` returns the pulses it found (`tp`) and, judging from the intervals of about twice their neighbours in `tp`, computes the speed across the gaps as they are. T5 drops 0.5 % of its pulses, which pulls the MATLAB speed down; the report counts the gaps.
+
+### Solver time and convergence of MATLAB's Vold-Kalman filter
+
+In R2026b `orderwaveform` and the Vold-Kalman form of `ordertrack` warn that their iterative solver did not converge (`PCG did not converge and returned flag 1`, also flags 3 and 4) on every case of this comparison, and they take minutes per call on the long multi-order cases (T3: about 200 s per call for 32 000 samples and 4 orders). The waveforms then deviate from the truth (tables 8 and 10); the warning is shown in the notes of the rows. The workflow runs these calls of T2, T3 and T14 in jobs of their own (parts `vkwave` and `vktrack`, see the workflow), so that they fit the job time limit. No solver option is documented, so none is set.
 
 ### Calls made (MATLAB)
 
 | Function | Arguments |
 |---|---|
 | `tachorpm` | `(tacho, fs, 'PulsesPerRev', 60, 'StateLevels', [low high], 'OutputFs', 1000, 'FitType', 'smooth', 'FitPoints', 60)`; and with `'FitType', 'linear'` (no `FitPoints`) |
-| `rpmordermap` | `(x, fs, rpm, res, 'Window', 'hann', 'OverlapPercent', 75, 'Amplitude', 'rms', 'Scale', 'linear')`, `res` in orders |
-| `rpmfreqmap` | `(x, fs, rpm, res, 'Window', 'flattopwin', 'OverlapPercent', 75, 'Amplitude', 'rms', 'Scale', 'linear')`, `res` in Hz |
+| `rpmordermap` | `(x, fs, rpm, res, 'Window', 'hann', 'OverlapPercent', 75, 'Amplitude', 'rms', 'Scale', 'linear')`, `res` = 1.5 x the ROTA order resolution (orders) |
+| `rpmfreqmap` | `(x, fs, rpm, res, 'Window', 'flattopwin', 'OverlapPercent', 75, 'Amplitude', 'rms', 'Scale', 'linear')`, `res` = 3.77 x the ROTA resolution (Hz) |
 | `orderspectrum` | `(map, order, 'Amplitude', 'rms')`, with the map and order axis of `rpmordermap` |
-| `ordertrack` (order map) | `(map, order, rpm, time, orders, 'Amplitude', 'rms', 'Scale', 'linear')`, from `rpmordermap` |
-| `ordertrack` (Vold-Kalman) | `(x, fs, rpm, orders, ones(1, K), 'Amplitude', 'peak', 'Scale', 'linear', 'Bandwidth', bw, 'Decouple', dec)` |
-| `orderwaveform` | `(x, fs, rpm, orders, ones(1, K), 'FilterOrder', 2, 'Bandwidth', bw, 'Decouple', dec)` |
+| `ordertrack` (order map) | `(map, order, rpm, time, orders)`, from `rpmordermap`; the map form takes no name-value arguments (amplitude type and scale are those of the map) |
+| `ordertrack` (Vold-Kalman) | `(x, fs, rpm, orders, 'Amplitude', 'peak', 'Scale', 'linear', 'Bandwidth', bw, 'Decouple', dec)`, `bw` = `par.vk_bandwidth_matlab` (2 x the ROTA bandwidth); with one speed column `ordertrack` refuses an `rpmrefidx` argument |
+| `orderwaveform` | `(x, fs, rpm, orders, ones(1, K), 'FilterOrder', 2, 'Bandwidth', bw, 'Decouple', dec)`, `bw` as above |
+| `orderwaveform` (probe VKBW) | `(x, fs, rpm, 1, 1, 'FilterOrder', 2, 'Bandwidth', b, 'Decouple', false)` with `b` = 4 Hz (`par.vk_bandwidth_matlab`) and `b` = 2 Hz (`par.vk_bandwidth`) |
 | `rpmtrack` | `(x, fs, order, [t0 f0], 'Method', 'stft', 'FrequencyResolution', res, 'PowerPenalty', Inf, 'FrequencyPenalty', 0, 'StartTime', t(1), 'EndTime', t(end))`, with `[t0 f0]` a point on the ridge read off the exact speed at mid-record |
 
 The script keeps a short list of fallbacks for each call (the same call without the optional arguments that a given release might not accept, or with the speed repeated in two columns). The variant that ran is saved with the output, listed under "MATLAB calls recorded" in the report, and marked in the notes of the rows whenever it was not the first.
@@ -195,9 +211,10 @@ One table per comparison, with the columns ROTA to truth, MATLAB to truth, ROTA 
 3. Amplitude of an order along its ridge in an order map, `rpm_order_map` with `order_slice` against `rpmordermap` (largest dB difference over interior frames where the truth amplitude varies by at most 2 % over a frame; 0.2 dB against the truth, 0.5 dB against MATLAB).
 4. The same against `ordertrack` applied to the MATLAB order map.
 5. The same for the frequency map (T1).
-6. Spacing of the order and frequency axes against the requested resolution (5 %).
+6. Spacing of the order and frequency axes against the requested resolution (5 %), and the time axis of the MATLAB maps against the exact speed (informational).
 7. Average order spectrum, `order_spectrum` against `orderspectrum`: peak order (within half a bin) and, where the truth amplitude is constant, peak amplitude.
 8. Vold-Kalman waveforms, `order_waveform` against `orderwaveform`: correlation (0.99) and least-squares gain of the waveform on the true waveform (0.2 dB, 0.5 dB).
 9. Vold-Kalman envelope amplitude, `order_waveform` against `ordertrack` in its Vold-Kalman form (0.2 dB, 0.5 dB).
+10. Vold-Kalman -3 dB bandwidth on the probe VKBW, `order_waveform` against `orderwaveform`: the offset at which each filter attenuates a tone by 3 dB, above and below the carrier (within 5 % of the set value and of MATLAB, ROADMAP section 5.4), the gain at the carrier, and informationally the offset MATLAB reaches when `Bandwidth` is the same number as ROTA's.
 
-Not covered: the -3 dB bandwidth of the Vold-Kalman filter (ROADMAP section 5.4), which needs a dedicated test signal, and the cases T4, T8, T10 and T13. `rpmtrack` has no argument for a frequency range, so the tacholess comparison is anchored by the initial ridge point and the frequency resolution instead. The meaning of the bandwidth and resolution arguments of the MATLAB functions is taken as documented (Hz and orders); where the two sides define them differently the rows show a systematic offset, not noise, and the report is the place to read it.
+Not covered: the cases T4, T8, T10 and T13. `rpmtrack` has no argument for a frequency range, so the tacholess comparison is anchored by the initial ridge point and the frequency resolution instead. Where the two sides define an argument differently the parameters are mapped (see "Conventions"); a remaining systematic offset in a row is a finding, not noise, and the report is the place to read it.

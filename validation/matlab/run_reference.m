@@ -84,8 +84,21 @@ if isempty(files)
 end
 [~, sortIdx] = sort({files.name});
 files = files(sortIdx);
+% Part of the calls to make (environment variable ROTA_REF_PART, set by the CI matrix so that the
+% slow Vold-Kalman calls of the long cases run in jobs of their own): 'all' or empty (every call),
+% 'main' (all but the Vold-Kalman calls of the case comparison), 'vkwave' (orderwaveform only) or
+% 'vktrack' (ordertrack in its Vold-Kalman form only). A part other than 'all' saves
+% <case>_ref_<part>.mat; compare.py merges the parts of a case.
+part = lower(strtrim(getenv('ROTA_REF_PART')));
+if isempty(part)
+    part = 'all';
+end
+if ~any(strcmp(part, {'all', 'main', 'vkwave', 'vktrack'}))
+    error('run_reference:part', 'Unknown ROTA_REF_PART "%s" (all, main, vkwave or vktrack).', part);
+end
+logmsg('part: %s', part);
 for k = 1:numel(files)
-    process_case(fullfile(sigDir, files(k).name), refDir);
+    process_case(fullfile(sigDir, files(k).name), refDir, part);
 end
 logmsg('run_reference.m finished');
 
@@ -93,10 +106,14 @@ logmsg('run_reference.m finished');
 % Local functions (must stay at the end of the script file)
 % =================================================================================================
 
-function process_case(file, refDir)
-% Run all applicable calls on one case file and save <case>_ref.mat.
+function process_case(file, refDir, part)
+% Run the applicable calls of one part on one case file and save <case>_ref.mat (part 'all') or
+% <case>_ref_<part>.mat.
 [~, base] = fileparts(file);
-logmsg('---- case %s (%s)', base, file);
+logmsg('---- case %s (%s), part %s', base, file, part);
+doMain = any(strcmp(part, {'all', 'main'}));
+doVkWave = any(strcmp(part, {'all', 'vkwave'}));
+doVkTrack = any(strcmp(part, {'all', 'vktrack'}));
 R = struct();
 R.case_name = base;
 try
@@ -114,7 +131,7 @@ try
     logmsg('n = %d samples, fs = %g Hz, %d order(s), rpm %g ... %g', numel(x), fs, K, rpm(1), rpm(end));
 
     % -- tachometer speed (T5): pulses per revolution, state levels, output rate and fit explicit
-    if par.do_tachorpm ~= 0
+    if doMain && par.do_tachorpm ~= 0
         tacho = S.tacho(:);
         common = {'PulsesPerRev', par.ppr, 'StateLevels', par.state_levels};
         R = run_call(R, 'tachorpm_smooth', {'rpm', 't', 'tp'}, { ...
@@ -131,15 +148,20 @@ try
                       'as above without the output rate')});
     end
 
-    % -- order-rpm map, average order spectrum, order tracks read from the map
-    if par.do_maps ~= 0
+    % -- order-rpm map, average order spectrum, order tracks read from the map.
+    %    'res' is a resolution bandwidth (window ENBW times the bin spacing); it is given as
+    %    par.order_resolution_matlab = ENBW * par.order_resolution, so that the bin spacing and
+    %    the window length are those of ROTA (export_mat.py). The same holds for rpmfreqmap.
+    if doMain && par.do_maps ~= 0
         nv = {'Window', par.window_order_map, 'OverlapPercent', par.overlap_percent, ...
               'Amplitude', par.amplitude_map, 'Scale', 'linear'};
+        res = par.order_resolution_matlab;
         R = run_call(R, 'rpmordermap', {'map', 'order', 'rpm', 'time', 'res'}, { ...
-            mkvariant('rpmordermap', [{x, fs, rpm, par.order_resolution}, nv], ...
+            mkvariant('rpmordermap', [{x, fs, rpm, res}, nv], ...
                       'order resolution, window, overlap percent, amplitude and scale explicit'), ...
-            mkvariant('rpmordermap', {x, fs, rpm, par.order_resolution}, ...
+            mkvariant('rpmordermap', {x, fs, rpm, res}, ...
                       'order resolution only (other arguments at their defaults)')});
+        R.rpmordermap_res_in = res;
         R.rpmordermap_amplitude = par.amplitude_map;
         if R.rpmordermap_ok ~= 0
             map = R.rpmordermap_map;
@@ -151,12 +173,12 @@ try
                           'order map, order axis, amplitude explicit'), ...
                 mkvariant('orderspectrum', {map, ordAxis}, 'order map and order axis only')});
             R.orderspectrum_amplitude = par.amplitude_map;
+            % The map form takes no name-value arguments (they apply only with a signal input,
+            % error signal:rpmmap:MAPORDERTRACKNOARGS): amplitude type and scale are those of the
+            % map, i.e. the 'Amplitude' and 'Scale' given to rpmordermap above.
             R = run_call(R, 'ordertrack_map', {'mag', 'rpm', 'time'}, { ...
-                mkvariant('ordertrack', {map, ordAxis, rpmMap, timeMap, orders, ...
-                          'Amplitude', par.amplitude_map, 'Scale', 'linear'}, ...
-                          'order map, axes, order list, amplitude and scale explicit'), ...
                 mkvariant('ordertrack', {map, ordAxis, rpmMap, timeMap, orders}, ...
-                          'order map, axes and order list only')});
+                          'order map, its axes and the order list (amplitude and scale of the map)')});
             R.ordertrack_map_amplitude = par.amplitude_map;
         else
             R = skip_call(R, 'orderspectrum', 'rpmordermap failed');
@@ -165,14 +187,16 @@ try
     end
 
     % -- frequency-rpm map
-    if par.do_freqmap ~= 0
+    if doMain && par.do_freqmap ~= 0
         nv = {'Window', par.window_freq_map, 'OverlapPercent', par.overlap_percent, ...
               'Amplitude', par.amplitude_map, 'Scale', 'linear'};
+        res = par.freq_resolution_matlab;
         R = run_call(R, 'rpmfreqmap', {'map', 'freq', 'rpm', 'time', 'res'}, { ...
-            mkvariant('rpmfreqmap', [{x, fs, rpm, par.freq_resolution}, nv], ...
+            mkvariant('rpmfreqmap', [{x, fs, rpm, res}, nv], ...
                       'frequency resolution, window, overlap percent, amplitude and scale explicit'), ...
-            mkvariant('rpmfreqmap', {x, fs, rpm, par.freq_resolution}, ...
+            mkvariant('rpmfreqmap', {x, fs, rpm, res}, ...
                       'frequency resolution only (other arguments at their defaults)')});
+        R.rpmfreqmap_res_in = res;
         R.rpmfreqmap_amplitude = par.amplitude_map;
     end
 
@@ -185,6 +209,8 @@ try
         bw = par.vk_bandwidth_matlab;
         dec = par.vk_decouple ~= 0;
         R.vk_bandwidth_matlab = bw;
+    end
+    if doVkWave && par.do_vk ~= 0
         R = run_call(R, 'orderwaveform', {'xrec'}, { ...
             mkvariant('orderwaveform', {x, fs, rpm, orders, refIdx, 'FilterOrder', par.vk_filter_order, ...
                       'Bandwidth', bw, 'Decouple', dec}, ...
@@ -194,16 +220,20 @@ try
                       'as above, speed given as two identical columns'), ...
             mkvariant('orderwaveform', {x, fs, rpm, orders, refIdx, 'Bandwidth', bw, 'Decouple', dec}, ...
                       'bandwidth and decoupling explicit, filter order at its default')});
+    end
+    if doVkTrack && par.do_vk ~= 0
+        % One speed column: no RPMREFIDX (ordertrack accepts it only with a speed matrix, error
+        % signal:rpmmap:RPMMustBeMatrix); every order then refers to that column.
         R = run_call(R, 'ordertrack_vk', {'mag', 'rpm', 'time'}, { ...
-            mkvariant('ordertrack', {x, fs, rpm, orders, refIdx, 'Amplitude', par.vk_amplitude, ...
+            mkvariant('ordertrack', {x, fs, rpm, orders, 'Amplitude', par.vk_amplitude, ...
                       'Scale', 'linear', 'Bandwidth', bw, 'Decouple', dec}, ...
-                      'Vold-Kalman form: amplitude, scale, bandwidth and decoupling explicit'), ...
+                      'Vold-Kalman form, one speed column: amplitude, scale, bandwidth and decoupling explicit'), ...
             mkvariant('ordertrack', {x, fs, [rpm rpm], orders, refIdx, 'Amplitude', par.vk_amplitude, ...
                       'Scale', 'linear', 'Bandwidth', bw, 'Decouple', dec}, ...
-                      'as above, speed given as two identical columns'), ...
-            mkvariant('ordertrack', {x, fs, rpm, orders, refIdx, 'Amplitude', par.vk_amplitude, ...
+                      'as above, speed given as two identical columns with RPMREFIDX'), ...
+            mkvariant('ordertrack', {x, fs, rpm, orders, 'Amplitude', par.vk_amplitude, ...
                       'Bandwidth', bw, 'Decouple', dec}, ...
-                      'Vold-Kalman form without the scale argument')});
+                      'Vold-Kalman form, one speed column, without the scale argument')});
         R.ordertrack_vk_amplitude = par.vk_amplitude;
     end
 
@@ -211,7 +241,7 @@ try
     %    offsets from it. The single-order filter is run with 'Bandwidth' par.vk_bandwidth_matlab
     %    (as in the comparisons above) and with the same number as ROTA's bandwidth; compare.py
     %    reads the gain at every offset off the returned waveforms.
-    if isfield(par, 'do_vkprobe') && par.do_vkprobe ~= 0
+    if doMain && isfield(par, 'do_vkprobe') && par.do_vkprobe ~= 0
         R = run_call(R, 'vkprobe', {'xrec'}, { ...
             mkvariant('orderwaveform', {x, fs, rpm, par.probe_order, 1, 'FilterOrder', par.vk_filter_order, ...
                       'Bandwidth', par.vk_bandwidth_matlab, 'Decouple', false}, ...
@@ -225,7 +255,7 @@ try
     end
 
     % -- tacholess speed: order and one point (time, frequency) on its ridge, from the exact speed
-    if par.do_rpmtrack ~= 0
+    if doMain && par.do_rpmtrack ~= 0
         p = [par.rpmtrack_t0, par.rpmtrack_f0];
         fres = par.rpmtrack_resolution;
         R = run_call(R, 'rpmtrack', {'rpm', 'tout'}, { ...
@@ -247,7 +277,11 @@ catch ME
     logmsg('[case error] %s: %s', base, oneline(ME.message));
 end
 
-outFile = fullfile(refDir, [base '_ref.mat']);
+if strcmp(part, 'all')
+    outFile = fullfile(refDir, [base '_ref.mat']);
+else
+    outFile = fullfile(refDir, [base '_ref_' part '.mat']);
+end
 try
     save(outFile, '-struct', 'R', '-v7');           % MAT-file version 7: readable by scipy.io.loadmat
     logmsg('saved %s', outFile);

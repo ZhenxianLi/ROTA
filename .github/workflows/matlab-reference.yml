@@ -7,7 +7,9 @@ name: matlab-reference
 # committed: the licence terms must be confirmed before it is published (ROADMAP 5.5).
 #
 # One job per case runs the MATLAB calls in parallel; the report job collects their output and
-# runs compare.py once over all cases.
+# runs compare.py once over all cases. MATLAB's Vold-Kalman calls take minutes per call on the
+# long multi-order cases (iterative solver), so for T2, T3 and T14 they run in jobs of their own
+# (ROTA_REF_PART: main, vkwave, vktrack); compare.py merges the parts of a case.
 
 on:
   workflow_dispatch:
@@ -23,13 +25,28 @@ permissions:
 
 jobs:
   reference:
-    name: reference (${{ matrix.case }})
+    name: reference (${{ matrix.case }}, ${{ matrix.part }})
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
-        case: [T1, T2, T3, T5, T6, T14, VKBW]
+        include:
+          - { case: T1, part: all }
+          - { case: T2, part: main }
+          - { case: T2, part: vkwave }
+          - { case: T2, part: vktrack }
+          - { case: T3, part: main }
+          - { case: T3, part: vkwave }
+          - { case: T3, part: vktrack }
+          - { case: T5, part: all }
+          - { case: T6, part: all }
+          - { case: T14, part: main }
+          - { case: T14, part: vkwave }
+          - { case: T14, part: vktrack }
+          - { case: VKBW, part: all }
+    env:
+      ROTA_REF_PART: ${{ matrix.part }}
     steps:
       - uses: actions/checkout@v4
 
@@ -63,7 +80,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: reference-${{ matrix.case }}
+          name: reference-${{ matrix.case }}-${{ matrix.part }}
           path: validation/reference/
           if-no-files-found: warn
 
@@ -93,14 +110,15 @@ jobs:
           pattern: reference-*
           path: parts
 
-      # <case>_ref.mat of every case, the logs one after the other, versions.txt of the first case.
+      # <case>_ref.mat and <case>_ref_<part>.mat of every job, the logs one after the other,
+      # versions.txt of the first job.
       - name: Collect the reference output
         run: |
           mkdir -p validation/reference
           : > validation/reference/log.txt
           for d in parts/reference-*; do
             [ -d "$d" ] || continue
-            cp "$d"/*_ref.mat validation/reference/ 2>/dev/null || true
+            cp "$d"/*_ref*.mat validation/reference/ 2>/dev/null || true
             if [ -f "$d/log.txt" ]; then cat "$d/log.txt" >> validation/reference/log.txt; fi
             if [ -f "$d/versions.txt" ] && [ ! -f validation/reference/versions.txt ]; then
               cp "$d/versions.txt" validation/reference/

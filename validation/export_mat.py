@@ -50,6 +50,7 @@ from pathlib import Path
 
 import numpy as np
 from scipy.io import savemat
+from scipy.signal import get_window
 
 from rota.synth import synth_runup
 
@@ -66,8 +67,10 @@ CASE_NAMES = ("T1", "T2", "T3", "T5", "T6", "T14", "VKBW")
 # that the carrier of the order is a fixed line, and unit tones at known offsets (Hz) from it.
 # The filters are linear: the gain at each offset is read off a least-squares fit of the output
 # on the known frequencies (compare.py). Offsets are dense around the set -3 dB offset (2 Hz).
+# The sampling rate is low (fs / bandwidth = 100) because MATLAB's orderwaveform solves the
+# filter iteratively (PCG) and did not converge at fs = 2 kHz (first CI runs: flag 1).
 VK_PROBE = {
-    "fs": 2000.0, "duration": 30.0, "rpm": 1500.0, "order": 4.0, "bandwidth": 2.0, "seed": 21,
+    "fs": 200.0, "duration": 30.0, "rpm": 1500.0, "order": 1.0, "bandwidth": 2.0, "seed": 21,
     "offsets": (-5.0, -4.0, -3.0, -2.5, -2.25, -2.0, -1.75, -1.5, -1.0, -0.5,
                 0.5, 1.0, 1.5, 1.75, 2.0, 2.25, 2.5, 3.0, 4.0, 5.0),
 }
@@ -78,6 +81,40 @@ VK_PROBE = {
 # two -3 dB points, so it is given ``par.vk_bandwidth_matlab = 2 * par.vk_bandwidth``. The probe
 # VKBW measures both (compare.py, table 10), with this value and with the same number as ROTA.
 MATLAB_BANDWIDTH_FACTOR = 2.0
+
+# Meaning of the resolution arguments of the maps. ROTA's resolution (``par.order_resolution``,
+# ``par.freq_resolution``) is the bin spacing, one over the window length. MATLAB's ``res`` is
+# the resolution bandwidth, the equivalent noise bandwidth of the window times the bin spacing
+# (first CI run: with res 0.25 orders and a Hann window MATLAB returned bins 0.1666 orders apart,
+# with res 8 Hz and a flat-top window 2.121 Hz). For the same window length on both sides MATLAB
+# is given ``res = ENBW * resolution`` (``par.order_resolution_matlab``,
+# ``par.freq_resolution_matlab``), with the ENBW of the window in bins (Hann 1.5, flat top 3.77).
+MATLAB_TO_SCIPY_WINDOW = {"hann": "hann", "flattopwin": "flattop"}
+
+
+def window_enbw(matlab_name, n=8192):
+    """Equivalent noise bandwidth of a window in bins, ``n sum(w^2) / (sum w)^2``.
+
+    Parameters
+    ----------
+    matlab_name : str
+        ``"hann"`` or ``"flattopwin"``; evaluated with the periodic SciPy window of the same
+        definition (``hann``, ``flattop``).
+    n : int, default 8192
+        Window length used for the evaluation (the value converges for long windows).
+
+    Returns
+    -------
+    float
+        ENBW in bins (Hann 1.5, flat top about 3.77).
+
+    References
+    ----------
+    Harris, F. J. (1978). On the use of windows for harmonic analysis with the discrete Fourier
+    transform. Proceedings of the IEEE, 66(1), 51-83.
+    """
+    w = get_window(MATLAB_TO_SCIPY_WINDOW[matlab_name], n, fftbins=True)
+    return float(n * np.sum(w**2) / np.sum(w) ** 2)
 
 # Settings shared by all cases.
 #   window_order_map    Hann: the main lobe is two bins wide each side, so orders half an
@@ -158,7 +195,7 @@ def vk_probe():
     """Probe of the Vold-Kalman -3 dB bandwidth (case VKBW).
 
     Constant speed ``VK_PROBE["rpm"]`` (rpm), one order ``VK_PROBE["order"]`` of peak
-    amplitude 1 Pa (the carrier, 100 Hz) and one fixed tone of peak amplitude 1 Pa at every
+    amplitude 1 Pa (the carrier, 25 Hz) and one fixed tone of peak amplitude 1 Pa at every
     offset of ``VK_PROBE["offsets"]`` (Hz) from the carrier, random phases from the seed; no
     noise. A linear filter tracking the order passes each tone with its gain at that offset,
     which ``compare.py`` reads off a least-squares fit on the known frequencies.
@@ -227,7 +264,9 @@ def analysis_parameters(name, sig):
     Returns
     -------
     dict
-        Keys: ``order_resolution`` (orders), ``freq_resolution`` (Hz),
+        Keys: ``order_resolution`` (orders), ``freq_resolution`` (Hz; both bin spacings),
+        ``order_resolution_matlab``, ``freq_resolution_matlab`` (MATLAB ``res``: window ENBW
+        times the bin spacing),
         ``window_order_map``, ``window_freq_map`` (MATLAB window names),
         ``overlap_percent``, ``amplitude_map`` (``"rms"``), ``vk_bandwidth`` (Hz, ROTA:
         -3 dB offset from the carrier), ``vk_bandwidth_matlab`` (Hz, MATLAB ``Bandwidth``:
@@ -256,6 +295,8 @@ def analysis_parameters(name, sig):
     par.update(
         order_resolution=float(spec["order_resolution"]),
         freq_resolution=float(spec["freq_resolution"]),
+        order_resolution_matlab=float(window_enbw(_COMMON["window_order_map"]) * spec["order_resolution"]),
+        freq_resolution_matlab=float(window_enbw(_COMMON["window_freq_map"]) * spec["freq_resolution"]),
         vk_bandwidth=float(spec["vk_bandwidth"]),
         vk_bandwidth_matlab=float(MATLAB_BANDWIDTH_FACTOR * spec["vk_bandwidth"]),
         vk_decouple=float(orders.size > 1),
@@ -303,6 +344,7 @@ def _to_mat(name, sig, par):
     }
     if sig.tacho is not None:
         out["tacho"] = col(sig.tacho)
+        out["pulse_times"] = col(sig.pulse_times)  # truth: rendered pulses (dropped ones absent), s
     return out
 
 
