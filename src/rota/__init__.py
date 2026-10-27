@@ -12,6 +12,8 @@ resynth  Order tables, order and broadband resynthesis, provenance.
 tonal    Weighting, calibrated levels, octave bands, order prominence.
 synth    Synthetic test signals with analytic ground truth.
 metrics  Validation metrics.
+bridges  Optional thin wrappers for MoSQITo and the Sottek hearing model (toolboxes
+         not required; imported lazily).
 
 Conventions
 -----------
@@ -24,9 +26,9 @@ in each docstring and selected explicitly where a choice exists.
 
 __version__ = "0.5.0"
 
-from . import angle, extract, maps, metrics, resynth, slices, speed, synth, tonal  # noqa: F401
+from . import angle, bridges, extract, maps, metrics, resynth, slices, speed, synth, tonal  # noqa: F401
 
 __all__ = [
-    "angle", "extract", "maps", "metrics", "resynth", "slices", "speed", "synth", "tonal",
+    "angle", "bridges", "extract", "maps", "metrics", "resynth", "slices", "speed", "synth", "tonal",
     "__version__",
 ]

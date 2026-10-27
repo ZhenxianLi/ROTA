@@ -70,6 +70,18 @@ Run:  python examples/10_worked_analysis.py     (needs matplotlib; about 75 s on
 toolboxes, about 20 s without them)
 Writes docs/images/10_worked_overview.png, 10_worked_diagnosis.png, 10_worked_whatif.png and
 docs/audio/worked_*.wav. The narrative is in docs/worked_example.md.
+
+Toolboxes used (cite them as their authors ask; ROTA does not include or redistribute
+their code, which keeps its own licence):
+
+* Green Forge Coop (2024). MOSQITO (version 1.2.1) [software]. Zenodo.
+  https://doi.org/10.5281/zenodo.11026796 (Apache-2.0).
+* Lotinga, M. J. B., Torjussen, M., & Felix Greco, G. (2025). Verified implementations of
+  the Sottek psychoacoustic Hearing Model standardised sound quality metrics (ECMA-418-2
+  loudness, tonality and roughness). Proceedings of Forum Acusticum / Euronoise 2025,
+  Malaga, Spain. Software: sottek-hearing-model 0.1.14,
+  https://github.com/mlotinga/sottek-hearing-model (AGPL-3.0-only).
+
 """
 
 import contextlib

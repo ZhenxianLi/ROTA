@@ -33,14 +33,16 @@ classifiers = [
 dependencies = ["numpy>=1.23", "scipy>=1.9"]
 
 [project.urls]
-Homepage = "https://github.com/ZhenxianLi/ROTA"
-Source = "https://github.com/ZhenxianLi/ROTA"
-Issues = "https://github.com/ZhenxianLi/ROTA/issues"
-Changelog = "https://github.com/ZhenxianLi/ROTA/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/ZhenxianLi/rota-order"
+Source = "https://github.com/ZhenxianLi/rota-order"
+Issues = "https://github.com/ZhenxianLi/rota-order/issues"
+Changelog = "https://github.com/ZhenxianLi/rota-order/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 test = ["pytest>=7"]
 plot = ["matplotlib>=3.5"]
+mosqito = ["mosqito>=1.2", "matplotlib"]
+shm = ["sottek-hearing-model>=0.1.14; python_version>='3.11'"]
 
 [tool.setuptools.dynamic]
 version = { attr = "rota.__version__" }

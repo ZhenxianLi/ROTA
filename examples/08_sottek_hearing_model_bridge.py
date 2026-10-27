@@ -75,6 +75,16 @@ Run:  python examples/08_sottek_hearing_model_bridge.py
 Needs matplotlib and sottek-hearing-model. About 100 s on four cores (the model dominates;
 by default it uses all cores but one, ``PARALLEL_CORES = 1`` is about three times slower).
 Writes docs/images/08_sottek_hearing_model_bridge.png.
+
+Toolboxes used (cite them as their authors ask; ROTA does not include or redistribute
+their code, which keeps its own licence):
+
+* Lotinga, M. J. B., Torjussen, M., & Felix Greco, G. (2025). Verified implementations of
+  the Sottek psychoacoustic Hearing Model standardised sound quality metrics (ECMA-418-2
+  loudness, tonality and roughness). Proceedings of Forum Acusticum / Euronoise 2025,
+  Malaga, Spain. Software: sottek-hearing-model 0.1.14,
+  https://github.com/mlotinga/sottek-hearing-model (AGPL-3.0-only).
+
 """
 
 import sys

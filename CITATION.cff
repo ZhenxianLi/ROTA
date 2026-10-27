@@ -7,7 +7,7 @@ authors:
     given-names: Zhenxian
 version: 0.5.0
 date-released: 2026-10-27
-repository-code: "https://github.com/ZhenxianLi/ROTA"
+repository-code: "https://github.com/ZhenxianLi/rota-order"
 license: GPL-3.0-or-later
 abstract: >-
   ROTA is a lightweight Python library for order analysis of noise and

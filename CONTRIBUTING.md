@@ -25,7 +25,7 @@ Allowed:
 
 ## Code
 
-- Dependencies: NumPy and SciPy only. Matplotlib is allowed only in `rota.plot` and in examples. Psychoacoustic toolboxes appear only as optional dependencies in examples.
+- Dependencies: NumPy and SciPy only. Matplotlib is allowed only in `rota.plot` and in examples. Psychoacoustic toolboxes appear only as optional dependencies, in examples and, imported lazily inside functions, in `rota.bridges`.
 - Every public function has a docstring with a References section. The docstring states the amplitude convention (peak or RMS) and the units of inputs and outputs.
 - Units follow the README: s, Hz, rpm, revolutions, km/h. Signals have shape `(n,)` or `(n, ch)` and are processed per channel, linearly.
 - Gains, calibration factors and reference pressures are explicit arguments, never built-in constants.

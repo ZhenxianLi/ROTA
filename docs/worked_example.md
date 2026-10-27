@@ -4,7 +4,7 @@ This page follows one analysis from the raw signal to a statement an engineer ca
 
 > The gear whine, order 40, is prominent between about 3.0 and 4.7 krpm (2.0 to 3.1 kHz) and more than 6 dB above the ECMA-418-1 criterion between 3.8 and 4.5 krpm. It exceeds the criterion by up to 14 dB, at 4.3 krpm. About 15 dB less at that order brings it under the criterion. That lowers the A-weighted level in the range by 1.05 dB, the loudness by 8.6 %, and the ECMA-418-2 tonality by 69 %.
 
-The script is [examples/10_worked_analysis.py](https://github.com/ZhenxianLi/ROTA/blob/main/examples/10_worked_analysis.py). It runs in about 75 s on four cores with the two optional toolboxes (about 20 s without them), prints every number quoted below, and writes the three figures and three WAV files linked here. All numbers on this page are its output.
+The script is [examples/10_worked_analysis.py](https://github.com/ZhenxianLi/rota-order/blob/main/examples/10_worked_analysis.py). It runs in about 75 s on four cores with the two optional toolboxes (about 20 s without them), prints every number quoted below, and writes the three figures and three WAV files linked here. All numbers on this page are its output.
 
 The recording is synthetic: `rota.synth.synth_scenario("ev_runup")`, seeded. Nothing is measured. That is deliberate: the signal has an exact truth, so each step of the analysis can be compared with what was put into the signal, and the page does that in a table at the end. The analysis itself does not use the truth. It finds the order, the speed range and the size of the problem from the signal alone.
 
@@ -132,7 +132,7 @@ The order slice drops by 14.89 and 9.95 dB, as applied. Ten dB is not enough: th
 
 ## 5. Psychoacoustics
 
-ROTA computes none of the psychoacoustic metrics; it prepares the signal and the speed, and bins the time-varying results of the toolboxes along rpm (`metric_vs_rpm`). This step uses two optional, open-source packages through their documented public functions. ROTA does not import or copy them; without a package the script prints which part it skipped (`pip install mosqito`, `pip install sottek-hearing-model`) and the tests for that part are skipped. Other open-source implementations are catalogued at [zhenxianli.github.io/LISQM](https://zhenxianli.github.io/LISQM/); [examples 07](https://github.com/ZhenxianLi/ROTA/blob/main/examples/07_mosqito_bridge.py) and [08](https://github.com/ZhenxianLi/ROTA/blob/main/examples/08_sottek_hearing_model_bridge.py) describe the two bridges in detail.
+ROTA computes none of the psychoacoustic metrics; it prepares the signal and the speed, and bins the time-varying results of the toolboxes along rpm (`metric_vs_rpm`). This step uses two optional, open-source packages through their documented public functions. ROTA does not import or copy them; without a package the script prints which part it skipped (`pip install mosqito`, `pip install sottek-hearing-model`) and the tests for that part are skipped. Other open-source implementations are catalogued at [zhenxianli.github.io/LISQM](https://zhenxianli.github.io/LISQM/); [examples 07](https://github.com/ZhenxianLi/rota-order/blob/main/examples/07_mosqito_bridge.py) and [08](https://github.com/ZhenxianLi/rota-order/blob/main/examples/08_sottek_hearing_model_bridge.py) describe the two bridges in detail.
 
 * MoSQITo 1.2.1 (Apache-2.0): `loudness_zwtv` (ISO 532-1:2017, time-varying, free field) and `sharpness_din_from_loudness` (DIN 45692).
 * The Sottek hearing model, `sottek-hearing-model` 0.1.14 (AGPL-3.0-only, Python 3.11 or later; install it only if you accept the licence): `shm_tonality_ecma`, the ECMA-418-2:2025 (4th edition) tonality. Its dominant tonal frequencies are attributed to order 40 with `frequency_to_order` (10 % window), as in example 08.
@@ -226,9 +226,9 @@ The what-if changes what it should: the order slice falls by 14.89 dB and 9.95 d
 
 Three mono 16-bit WAV files at 48 kHz, 8 s, with the same scaling as examples 05 and 06 (4 Pa is digital full scale; no normalisation or limiter), so their levels can be compared directly. The resonance is passed between about 2.05 and 3.15 s (3034 to 4685 rpm); the three files differ only in the level of the whine, which rises through 2 to 3 kHz in that interval. The whole recording is 87.7 dB SPL (RMS, unweighted), dominated by the rumble.
 
-* [worked_original.wav](https://github.com/ZhenxianLi/ROTA/blob/main/docs/audio/worked_original.wav): the recording.
-* [worked_order40_minus15db.wav](https://github.com/ZhenxianLi/ROTA/blob/main/docs/audio/worked_order40_minus15db.wav): order 40 reduced by 15 dB (below the criterion).
-* [worked_order40_minus10db.wav](https://github.com/ZhenxianLi/ROTA/blob/main/docs/audio/worked_order40_minus10db.wav): order 40 reduced by 10 dB (still prominent).
+* [worked_original.wav](https://github.com/ZhenxianLi/rota-order/blob/main/docs/audio/worked_original.wav): the recording.
+* [worked_order40_minus15db.wav](https://github.com/ZhenxianLi/rota-order/blob/main/docs/audio/worked_order40_minus15db.wav): order 40 reduced by 15 dB (below the criterion).
+* [worked_order40_minus10db.wav](https://github.com/ZhenxianLi/rota-order/blob/main/docs/audio/worked_order40_minus10db.wav): order 40 reduced by 10 dB (still prominent).
 
 ## Reproducing
 

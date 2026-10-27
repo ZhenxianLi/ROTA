@@ -124,7 +124,7 @@ Goal: turn analysis results (order tables, extracted order waveforms, residuals)
 
 ### 2.9 Psychoacoustic bridge (`rota.tonal`, thin layer, new)
 
-ROTA does not implement metrics that already have open-source implementations, such as loudness, sharpness, roughness and ECMA-418-2 tonality. It only provides bridges:
+ROTA does not implement metrics that already have open-source implementations, such as loudness, sharpness, roughness and ECMA-418-2 tonality. It only provides bridges. From v0.6 `rota.bridges` offers optional thin wrappers for MoSQITo, the Sottek hearing model and SQAT; the toolboxes are imported lazily inside the functions, never vendored and never required:
 
 | Function | Purpose | Literature | Version |
 |---|---|---|---|
@@ -136,7 +136,7 @@ ROTA does not implement metrics that already have open-source implementations, s
 
 ### 2.10 Plotting (`rota.plot`)
 
-Plotting helpers, separate from computation: Campbell diagram, order map, slices, rpm track and confidence, before/after comparison of resynthesis. v0.6 (moved from v0.5).
+Plotting helpers, separate from computation: Campbell diagram, order map, slices, rpm track and confidence, before/after comparison of resynthesis. v0.7 (moved from v0.5, then v0.6).
 
 ---
 
@@ -155,10 +155,13 @@ All of `rota.resynth`, `angular_to_time`, `stationarize`, `virtual_rpm`, `synth_
 `synth_scenario` (engine run-up, electric drive, steady cruise) with speed and source models (gear shifts, angular speed ripple, angle-locked impulses, sidebands, inverter carriers), transfer paths (modal resonances, cabin impulse responses), speed-dependent background noise and recorder impairments; stress tests on these scenarios (`validation/stress.md`); a more robust `rpm_from_ridge` (automatic window, recalibrated confidence and warnings); the black-box MATLAB comparison in CI (section 5.5); audio examples.
 
 **v0.5 Application layer and psychoacoustic bridges** (released 2026-10-27):
-`frequency_slice`, `overall_level`, `metric_vs_rpm`, `frequency_to_order`, `order_share`, Δrpm binning, `align_signals`, `rota.tonal` (A/C weighting, levels, calibrated 48 kHz resampling, octave and 1/3-octave band levels, `order_prominence`). Examples linking ROTA to three open-source psychoacoustic toolboxes as optional, external dependencies (never vendored): MoSQITo (Python), the Sottek hearing model implementation of ECMA-418-2 (Python) and SQAT (MATLAB, run in CI like the black-box reference) — for example how loudness, tonality or roughness vary with rpm after an order is removed or boosted. A complete worked analysis example: preparation, order analysis, extraction, psychoacoustics along rpm, order contributions with audio, and an engineering conclusion.
+`frequency_slice`, `overall_level`, `metric_vs_rpm`, `frequency_to_order`, `order_share`, Δrpm binning, `align_signals`, `rota.tonal` (A/C weighting, levels, calibrated 48 kHz resampling, octave and 1/3-octave band levels, `order_prominence`). Examples linking ROTA to three open-source psychoacoustic toolboxes as optional, external dependencies (never vendored; from 0.6 `rota.bridges` offers thin wrappers, imported lazily): MoSQITo (Python), the Sottek hearing model implementation of ECMA-418-2 (Python) and SQAT (MATLAB, run in CI like the black-box reference) — for example how loudness, tonality or roughness vary with rpm after an order is removed or boosted. A complete worked analysis example: preparation, order analysis, extraction, psychoacoustics along rpm, order contributions with audio, and an engineering conclusion.
 
-**v0.6 Plotting**:
-`rota.plot` (moved from v0.5).
+**v0.6 Optional toolbox bridges**:
+`rota.bridges`: thin wrappers that call the documented public functions of MoSQITo (ISO 532-1 loudness, DIN 45692 sharpness, Daniel and Weber roughness), the Sottek hearing model (ECMA-418-2:2025 tonality, loudness, roughness) and SQAT via the MATLAB Engine on ROTA's conventions (Pa, calibration factor, 48 kHz), and `along_rpm` to bin the results along rpm. The toolboxes are imported lazily inside the functions, are never vendored and never required (extras `mosqito` and `shm`); without them the wrappers raise `ImportError` with the install command.
+
+**v0.7 Plotting**:
+`rota.plot` (moved from v0.6).
 
 **v1.0 Official release**:
 Full validation report, English documentation, PyPI release, Zenodo DOI. Submit a validation paper (JOSS or an acoustics conference).

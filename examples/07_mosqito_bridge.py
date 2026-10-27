@@ -87,6 +87,13 @@ gains (ratios) are applied to them. MoSQITo takes the signal in Pa and returns s
 
 Run:  python examples/07_mosqito_bridge.py     (needs matplotlib and mosqito; about 1 minute on 4 cores, 2 on one)
 Writes docs/images/07_mosqito_bridge.png.
+
+Toolboxes used (cite them as their authors ask; ROTA does not include or redistribute
+their code, which keeps its own licence):
+
+* Green Forge Coop (2024). MOSQITO (version 1.2.1) [software]. Zenodo.
+  https://doi.org/10.5281/zenodo.11026796 (Apache-2.0).
+
 """
 
 import contextlib

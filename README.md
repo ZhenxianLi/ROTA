@@ -1,16 +1,16 @@
 # ROTA
 
-[![Tests](https://github.com/ZhenxianLi/ROTA/actions/workflows/tests.yml/badge.svg)](https://github.com/ZhenxianLi/ROTA/actions/workflows/tests.yml)
+[![Tests](https://github.com/ZhenxianLi/rota-order/actions/workflows/tests.yml/badge.svg)](https://github.com/ZhenxianLi/rota-order/actions/workflows/tests.yml)
 [![PyPI](https://img.shields.io/pypi/v/rota-order.svg)](https://pypi.org/project/rota-order/)
-[![License: GPL v3+](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](https://github.com/ZhenxianLi/ROTA/blob/main/LICENSE)
-[![Python 3.10–3.13](https://img.shields.io/badge/python-3.10%E2%80%933.13-blue.svg)](https://github.com/ZhenxianLi/ROTA/blob/main/pyproject.toml)
-[![Dependencies: NumPy + SciPy](https://img.shields.io/badge/dependencies-NumPy%20%2B%20SciPy-informational.svg)](https://github.com/ZhenxianLi/ROTA/blob/main/pyproject.toml)
+[![License: GPL v3+](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](https://github.com/ZhenxianLi/rota-order/blob/main/LICENSE)
+[![Python 3.10–3.13](https://img.shields.io/badge/python-3.10%E2%80%933.13-blue.svg)](https://github.com/ZhenxianLi/rota-order/blob/main/pyproject.toml)
+[![Dependencies: NumPy + SciPy](https://img.shields.io/badge/dependencies-NumPy%20%2B%20SciPy-informational.svg)](https://github.com/ZhenxianLi/rota-order/blob/main/pyproject.toml)
 
 **R**otational **O**rder **T**racking & **A**nalysis. *Rota* is Latin for "wheel".
 
 ROTA is a lightweight, open-source Python library for order analysis of noise and vibration signals from rotating machinery (engines, electric motors, gearboxes), with tools for order-based sound resynthesis. It depends only on NumPy and SciPy. The project rule is that each function is implemented independently from the published literature and tested on synthetic signals with known analytic ground truth.
 
-The design document is [ROADMAP.md](https://github.com/ZhenxianLi/ROTA/blob/main/ROADMAP.md).
+The design document is [ROADMAP.md](https://github.com/ZhenxianLi/rota-order/blob/main/ROADMAP.md).
 
 ## Status
 
@@ -27,7 +27,8 @@ Pre-alpha. The current release is 0.5.0; functions and signatures may still chan
 | `rota.synth` | Speed profiles and run-up signals with analytic ground truth; tone-plus-noise listening stimuli; realistic scenarios (engine run-up, electric drive, cruise) with transfer paths, background noise and recorder impairments | 0.1, 0.3, 0.4 |
 | `rota.metrics` | Speed-track error, waveform similarity (energy-weighted), residual order energy, window and pumping checks, envelope statistics | 0.1–0.3 |
 | `rota.tonal` | Bridge to open-source psychoacoustic tools: A/C weighting (IEC 61672-1), calibrated levels and resampling to 48 kHz, octave and 1/3-octave bands (IEC 61260-1) and band levels along rpm, tone-to-noise ratio and prominence ratio of orders (ECMA-418-1, 3rd edition) | 0.5 |
-| `rota.plot` | Plotting helpers, kept separate from computation | v0.6 (planned) |
+| `rota.bridges` | Optional thin wrappers for MoSQITo, the Sottek hearing model (ECMA-418-2) and SQAT (MATLAB, through the MATLAB Engine API for Python): one-line time-varying loudness, sharpness, roughness and tonality on ROTA's conventions, binned along rpm; the toolboxes are not installed with ROTA and are imported lazily | 0.6 |
+| `rota.plot` | Plotting helpers, kept separate from computation | v0.7 (planned) |
 
 Planned for v1.0: full validation report, complete documentation, Zenodo DOI.
 
@@ -46,7 +47,7 @@ The distribution is called `rota-order` because the name `rota` is taken on PyPI
 From source:
 
 ```
-git clone https://github.com/ZhenxianLi/ROTA.git
+git clone https://github.com/ZhenxianLi/rota-order.git
 cd ROTA
 pip install -e .
 ```
@@ -58,7 +59,7 @@ pip install -e ".[test]"
 pytest
 ```
 
-Matplotlib is an optional extra for `rota.plot` and the examples: `pip install -e ".[plot]"`.
+Matplotlib is an optional extra for `rota.plot` and the examples: `pip install -e ".[plot]"`. The psychoacoustic toolboxes behind `rota.bridges` are optional extras too: `pip install -e ".[mosqito]"` (MoSQITo, Apache-2.0) and `pip install -e ".[shm]"` (sottek-hearing-model, AGPL-3.0-only, Python 3.11 or later; mind its licence). A plain `pip install rota-order` installs only NumPy and SciPy.
 
 ## Quick start
 
@@ -88,29 +89,51 @@ The amplitude convention of every function is stated in its docstring.
 
 ## Examples
 
-Scripts in [examples/](https://github.com/ZhenxianLi/ROTA/tree/main/examples) cover order maps and slices, tachometer and tacholess speed, order extraction and removal, order-table resynthesis, and two complete synthetic recordings that you can listen to, an engine run-up and an electric drive (01 to 06); three bridges to open-source psychoacoustic toolboxes (07 to 09); and a worked analysis (10). Each builds its signal with `rota.synth` and prints its results against the known truth.
+Scripts in [examples/](https://github.com/ZhenxianLi/rota-order/tree/main/examples) cover order maps and slices, tachometer and tacholess speed, order extraction and removal, order-table resynthesis, and two complete synthetic recordings that you can listen to, an engine run-up and an electric drive (01 to 06); three bridges to open-source psychoacoustic toolboxes (07 to 09); and a worked analysis (10). Each builds its signal with `rota.synth` and prints its results against the known truth.
 
-![Campbell diagram, order map, engine speed and firing-order level of a synthetic engine run-up](https://raw.githubusercontent.com/ZhenxianLi/ROTA/main/docs/images/realistic_runup.png)
+![Campbell diagram, order map, engine speed and firing-order level of a synthetic engine run-up](https://raw.githubusercontent.com/ZhenxianLi/rota-order/main/docs/images/realistic_runup.png)
 
-*A synthetic four-cylinder engine run-up from `rota.synth.synth_scenario("ice_runup")`: launch from idle with clutch slip, two upshifts, combustion bursts, a modal transfer path, engine broadband, road noise and rumble, two receiver channels. Campbell diagram and order map, the speed from the tachometer against the truth, and the level of the firing order against the truth at the receiver, before and after `remove_orders` ([examples/05_realistic_engine_audio.py](https://github.com/ZhenxianLi/ROTA/blob/main/examples/05_realistic_engine_audio.py)).*
+*A synthetic four-cylinder engine run-up from `rota.synth.synth_scenario("ice_runup")`: launch from idle with clutch slip, two upshifts, combustion bursts, a modal transfer path, engine broadband, road noise and rumble, two receiver channels. Campbell diagram and order map, the speed from the tachometer against the truth, and the level of the firing order against the truth at the receiver, before and after `remove_orders` ([examples/05_realistic_engine_audio.py](https://github.com/ZhenxianLi/rota-order/blob/main/examples/05_realistic_engine_audio.py)).*
 
 ### Worked analysis
 
-[docs/worked_example.md](https://github.com/ZhenxianLi/ROTA/blob/main/docs/worked_example.md) follows one analysis from a run-up recording with a tonal complaint to a conclusion an engineer can act on: speed, overview (A-weighted level, 1/3-octave bands, order map), diagnosis of the prominent order with the ECMA-418-1 tone-to-noise and prominence ratios, extraction and a what-if reduction of that order, the effect on loudness, sharpness and ECMA-418-2 tonality computed with optional open-source toolboxes, and the result checked against the truth built into the synthetic signal, with audio before and after.
+[docs/worked_example.md](https://github.com/ZhenxianLi/rota-order/blob/main/docs/worked_example.md) follows one analysis from a run-up recording with a tonal complaint to a conclusion an engineer can act on: speed, overview (A-weighted level, 1/3-octave bands, order map), diagnosis of the prominent order with the ECMA-418-1 tone-to-noise and prominence ratios, extraction and a what-if reduction of that order, the effect on loudness, sharpness and ECMA-418-2 tonality computed with optional open-source toolboxes, and the result checked against the truth built into the synthetic signal, with audio before and after.
 
-![Order slices, tone-to-noise ratio and prominence ratio of the problem order against the ECMA-418-1 criterion](https://raw.githubusercontent.com/ZhenxianLi/ROTA/main/docs/images/10_worked_diagnosis.png)
+![Order slices, tone-to-noise ratio and prominence ratio of the problem order against the ECMA-418-1 criterion](https://raw.githubusercontent.com/ZhenxianLi/rota-order/main/docs/images/10_worked_diagnosis.png)
+
+### Psychoacoustic toolboxes (optional)
+
+`rota.bridges` calls MoSQITo, the Sottek hearing model or SQAT in one line, on ROTA's conventions (sound pressure in Pa, any sampling rate, calibration factor), and bins the result along rpm:
+
+```python
+from rota.bridges import along_rpm, mosqito, shm
+
+loud = mosqito.loudness(x, fs, calibration=cal)             # ISO 532-1:2017, sone
+res = along_rpm(loud, rpm, t, bin_width=250.0)              # N5 per rpm bin, start-up skipped
+ton = shm.tonality(x, fs, calibration=cal)                  # ECMA-418-2:2025, tu_HMS
+```
+
+The toolboxes are never vendored or required; without one, the call raises `ImportError` with the install command. ROTA does not include, copy or redistribute any of their code: each keeps its own licence, and you install it yourself. Please cite the toolbox you use as its authors ask:
+
+| Module | Toolbox | Licence | Needs | Cite |
+|---|---|---|---|---|
+| `rota.bridges.mosqito` | [MoSQITo](https://github.com/Eomys/MoSQITo) 1.2.1: ISO 532-1 loudness, DIN 45692 sharpness, Daniel & Weber roughness | Apache-2.0 | `pip install mosqito` (and matplotlib) | Green Forge Coop (2024). MOSQITO, version 1.2.1. Zenodo. [doi:10.5281/zenodo.11026796](https://doi.org/10.5281/zenodo.11026796) |
+| `rota.bridges.shm` | [sottek-hearing-model](https://github.com/mlotinga/sottek-hearing-model) 0.1.14: ECMA-418-2:2025 tonality, loudness, roughness | AGPL-3.0-only | `pip install sottek-hearing-model`, Python 3.11 or later | Lotinga, M. J. B., Torjussen, M., & Felix Greco, G. (2025). Verified implementations of the Sottek psychoacoustic Hearing Model standardised sound quality metrics (ECMA-418-2 loudness, tonality and roughness). Forum Acusticum / Euronoise 2025, Malaga |
+| `rota.bridges.sqat` | [SQAT](https://github.com/ggrecow/SQAT) v2.0 (MATLAB): ISO 532-1 loudness, DIN 45692 sharpness, Daniel & Weber roughness, ECMA-418-2:2025 tonality | GPL-3.0 (some files BSD-3-Clause or MIT) | a licensed MATLAB with the Signal Processing Toolbox, `pip install matlabengine` matching your MATLAB release, a SQAT checkout in `ROTA_SQAT_PATH` | Felix Greco, G., Merino-Martínez, R., Osses, A., & Lotinga, M. J. B. (2026). SQAT: a sound quality analysis toolbox for MATLAB. Zenodo. [doi:10.5281/zenodo.7934709](https://doi.org/10.5281/zenodo.7934709); Felix Greco, G., Merino-Martínez, R., Osses, A., & Langer, S. C. (2023). INTER-NOISE 2023. [doi:10.3397/IN_2023_1075](https://doi.org/10.3397/IN_2023_1075) |
+
+The Sottek hearing model is AGPL-3.0-only: ROTA (GPL-3.0-or-later) may be used together with it, but whoever distributes the combination, or offers it to others over a network, must meet the AGPL-3.0 terms for the model's part. Open-source implementations of psychoacoustic metrics, with the standard and edition each follows, are listed in [LISQM](https://zhenxianli.github.io/LISQM/).
 
 ### Listen
 
-The recordings below are synthetic (no measured data) and are written by [examples/05_realistic_engine_audio.py](https://github.com/ZhenxianLi/ROTA/blob/main/examples/05_realistic_engine_audio.py) and [examples/06_electric_drive_audio.py](https://github.com/ZhenxianLi/ROTA/blob/main/examples/06_electric_drive_audio.py): 16-bit WAV at 32 kHz, all with the same scaling (4 Pa is digital full scale), so levels can be compared between files.
+The recordings below are synthetic (no measured data) and are written by [examples/05_realistic_engine_audio.py](https://github.com/ZhenxianLi/rota-order/blob/main/examples/05_realistic_engine_audio.py) and [examples/06_electric_drive_audio.py](https://github.com/ZhenxianLi/rota-order/blob/main/examples/06_electric_drive_audio.py): 16-bit WAV at 32 kHz, all with the same scaling (4 Pa is digital full scale), so levels can be compared between files.
 
-- [engine_runup.wav](https://github.com/ZhenxianLi/ROTA/blob/main/docs/audio/engine_runup.wav): the engine run-up as recorded (two channels).
-- [engine_runup_orders_removed.wav](https://github.com/ZhenxianLi/ROTA/blob/main/docs/audio/engine_runup_orders_removed.wav): the residual after `remove_orders`: engine broadband, road noise, rumble and what is not periodic in the combustion bursts.
-- [engine_runup_orders_only.wav](https://github.com/ZhenxianLi/ROTA/blob/main/docs/audio/engine_runup_orders_only.wav): the extracted engine orders.
-- [engine_runup_faster.wav](https://github.com/ZhenxianLi/ROTA/blob/main/docs/audio/engine_runup_faster.wav): the same recording with the apparent engine speed raised by 15 % (`remap_rpm`, then `resynthesize` with the residual kept).
-- [electric_runup.wav](https://github.com/ZhenxianLi/ROTA/blob/main/docs/audio/electric_runup.wav): an electric drive run-up: motor orders and gear whine, a dithered 10 kHz inverter carrier with sidebands, two fixed tones, road noise and rumble. The tonal lines are weak against the broadband.
-- [electric_runup_motor_orders_removed.wav](https://github.com/ZhenxianLi/ROTA/blob/main/docs/audio/electric_runup_motor_orders_removed.wav): after removing the motor and gear orders; the inverter sidebands are not orders and remain.
-- [electric_runup_whine_only.wav](https://github.com/ZhenxianLi/ROTA/blob/main/docs/audio/electric_runup_whine_only.wav): the extracted motor and gear orders.
+- [engine_runup.wav](https://github.com/ZhenxianLi/rota-order/blob/main/docs/audio/engine_runup.wav): the engine run-up as recorded (two channels).
+- [engine_runup_orders_removed.wav](https://github.com/ZhenxianLi/rota-order/blob/main/docs/audio/engine_runup_orders_removed.wav): the residual after `remove_orders`: engine broadband, road noise, rumble and what is not periodic in the combustion bursts.
+- [engine_runup_orders_only.wav](https://github.com/ZhenxianLi/rota-order/blob/main/docs/audio/engine_runup_orders_only.wav): the extracted engine orders.
+- [engine_runup_faster.wav](https://github.com/ZhenxianLi/rota-order/blob/main/docs/audio/engine_runup_faster.wav): the same recording with the apparent engine speed raised by 15 % (`remap_rpm`, then `resynthesize` with the residual kept).
+- [electric_runup.wav](https://github.com/ZhenxianLi/rota-order/blob/main/docs/audio/electric_runup.wav): an electric drive run-up: motor orders and gear whine, a dithered 10 kHz inverter carrier with sidebands, two fixed tones, road noise and rumble. The tonal lines are weak against the broadband.
+- [electric_runup_motor_orders_removed.wav](https://github.com/ZhenxianLi/rota-order/blob/main/docs/audio/electric_runup_motor_orders_removed.wav): after removing the motor and gear orders; the inverter sidebands are not orders and remain.
+- [electric_runup_whine_only.wav](https://github.com/ZhenxianLi/rota-order/blob/main/docs/audio/electric_runup_whine_only.wav): the extracted motor and gear orders.
 
 ## Tacholess speed
 
@@ -138,9 +161,9 @@ The recordings below are synthetic (no measured data) and are written by [exampl
 
 ## Validation
 
-Analytic ground truth from `rota.synth` is the first reference: every test signal comes with its true speed, shaft angle, and amplitude and phase of each order. A black-box comparison with MATLAB's documented public functions, all parameters explicit, is the second reference: it runs in CI (workflow `matlab-reference`, see [validation/README.md](https://github.com/ZhenxianLi/ROTA/blob/main/validation/README.md)) and compares physical quantities (speed curves, order amplitudes along a ridge, Vold-Kalman waveforms and bandwidth), not map cells; when the two disagree, the analytic truth decides. Its output stays in the workflow artifact and is not published in the repository until the licence terms are confirmed. Resynthesis is tested by round trip: synthesise, analyse, compare with the input table. Continuous integration runs pytest only.
+Analytic ground truth from `rota.synth` is the first reference: every test signal comes with its true speed, shaft angle, and amplitude and phase of each order. A black-box comparison with MATLAB's documented public functions, all parameters explicit, is the second reference: it runs in CI (workflow `matlab-reference`, see [validation/README.md](https://github.com/ZhenxianLi/rota-order/blob/main/validation/README.md)) and compares physical quantities (speed curves, order amplitudes along a ridge, Vold-Kalman waveforms and bandwidth), not map cells; when the two disagree, the analytic truth decides. Its output stays in the workflow artifact and is not published in the repository until the licence terms are confirmed. Resynthesis is tested by round trip: synthesise, analyse, compare with the input table. Continuous integration runs pytest only.
 
-The design document defines 14 validation signals (T1 to T14). Version 0.1 covers T1 (single order, constant amplitude, linear run-up), T2 (several orders, a fixed-frequency resonance, noise), T5 (multi-pulse tachometer with jitter and dropped pulses) and T14 (low-speed start from idle with orders half an order apart). Version 0.2 adds T3 (exponential run-down), T4 (crossing orders on two shafts), T6 (fast run-up), T8 (twin shafts 0.5–4 % apart), T10 (true speed outside the search range), T12 (order removal) and T13 (extraction error versus speed-reference error). Version 0.3 adds T9 (order table → synthesis → analysis → table round trip, `tests/test_ordertable.py`) and T11 (broadband synthesis: PSD accuracy and no frame-rate pumping, `tests/test_broadband.py`). Version 0.4 adds stress tests on realistic scenarios ([validation/stress.md](https://github.com/ZhenxianLi/ROTA/blob/main/validation/stress.md)). Cases and measured results: [validation/README.md](https://github.com/ZhenxianLi/ROTA/blob/main/validation/README.md).
+The design document defines 14 validation signals (T1 to T14). Version 0.1 covers T1 (single order, constant amplitude, linear run-up), T2 (several orders, a fixed-frequency resonance, noise), T5 (multi-pulse tachometer with jitter and dropped pulses) and T14 (low-speed start from idle with orders half an order apart). Version 0.2 adds T3 (exponential run-down), T4 (crossing orders on two shafts), T6 (fast run-up), T8 (twin shafts 0.5–4 % apart), T10 (true speed outside the search range), T12 (order removal) and T13 (extraction error versus speed-reference error). Version 0.3 adds T9 (order table → synthesis → analysis → table round trip, `tests/test_ordertable.py`) and T11 (broadband synthesis: PSD accuracy and no frame-rate pumping, `tests/test_broadband.py`). Version 0.4 adds stress tests on realistic scenarios ([validation/stress.md](https://github.com/ZhenxianLi/rota-order/blob/main/validation/stress.md)). Cases and measured results: [validation/README.md](https://github.com/ZhenxianLi/rota-order/blob/main/validation/README.md).
 
 Tolerances (the analytic column is enforced by the test suite; the black-box column is the target of the CI comparison):
 
@@ -156,7 +179,7 @@ Tolerances (the analytic column is enforced by the test suite; the black-box col
 | Remaining energy of a removed order in the residual (T12) | <= -20 dB | not compared |
 | Frame-rate pumping of broadband synthesis (T11) | <= 1 dB | not compared |
 
-All rows of the analytic column are met by the current release; measured values are in [validation/README.md](https://github.com/ZhenxianLi/ROTA/blob/main/validation/README.md).
+All rows of the analytic column are met by the current release; measured values are in [validation/README.md](https://github.com/ZhenxianLi/rota-order/blob/main/validation/README.md).
 
 ## Independence statement
 
@@ -166,11 +189,11 @@ All algorithms are implemented from the published literature cited in each docst
 
 ## License
 
-ROTA is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. See [LICENSE](https://github.com/ZhenxianLi/ROTA/blob/main/LICENSE).
+ROTA is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. See [LICENSE](https://github.com/ZhenxianLi/rota-order/blob/main/LICENSE).
 
 ## Citation
 
-See [CITATION.cff](https://github.com/ZhenxianLi/ROTA/blob/main/CITATION.cff) (GitHub shows it as "Cite this repository"). A Zenodo DOI is planned for v1.0.
+See [CITATION.cff](https://github.com/ZhenxianLi/rota-order/blob/main/CITATION.cff) (GitHub shows it as "Cite this repository"). A Zenodo DOI is planned for v1.0.
 
 ## Acknowledgements
 
