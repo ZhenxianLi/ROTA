@@ -14,20 +14,20 @@ The design document is [ROADMAP.md](https://github.com/ZhenxianLi/ROTA/blob/main
 
 ## Status
 
-Pre-alpha. The current release is 0.3.0; functions and signatures may still change before 1.0.
+Pre-alpha. The current release is 0.4.0; functions and signatures may still change before 1.0.
 
 | Module | Contents | Since |
 |---|---|---|
-| `rota.speed` | Tachometer pulses to rpm, rpm to shaft angle, control-signal cleanup and resampling, vehicle speed to rpm, steady-segment selection; tacholess speed estimation (order comb + dynamic programming, with confidence and search-boundary flags); virtual rpm. Later: signal alignment (v0.4) | 0.1–0.3 |
+| `rota.speed` | Tachometer pulses to rpm, rpm to shaft angle, control-signal cleanup and resampling, vehicle speed to rpm, steady-segment selection; tacholess speed estimation (order comb + dynamic programming, with confidence and search-boundary flags); virtual rpm. Later: signal alignment (v0.5) | 0.1–0.4 |
 | `rota.angle` | Resampling from uniform time to uniform shaft angle (computed order tracking) with angle-domain anti-aliasing; the inverse mapping; time warping to a reference speed (stationarize) | 0.1, 0.3 |
-| `rota.maps` | Rpm-frequency (Campbell) map, rpm-order map. Later: binning options (v0.4) | 0.1 |
-| `rota.slices` | Order spectrum, order slice. Later: frequency slice, overall level, metric versus rpm, order share (v0.4) | 0.1 |
+| `rota.maps` | Rpm-frequency (Campbell) map, rpm-order map. Later: binning options (v0.5) | 0.1 |
+| `rota.slices` | Order spectrum, order slice. Later: frequency slice, overall level, metric versus rpm, order share (v0.5) | 0.1 |
 | `rota.extract` | Order extraction (second-generation Vold-Kalman filter, joint over orders and shafts; phase-locked tracked harmonics), order removal, residual, resolvability check | 0.2 |
 | `rota.resynth` | Order tables (explicit peak/RMS), additive order synthesis offline and in blocks, broadband synthesis without frame-rate pumping, order editing, speed remapping, order-plus-residual recombination, steady listening excerpts, provenance sidecars | 0.3 |
-| `rota.synth` | Speed profiles and run-up signals with analytic ground truth; tone-plus-noise listening stimuli | 0.1, 0.3 |
+| `rota.synth` | Speed profiles and run-up signals with analytic ground truth; tone-plus-noise listening stimuli; realistic scenarios (engine run-up, electric drive, cruise) with transfer paths, background noise and recorder impairments | 0.1, 0.3, 0.4 |
 | `rota.metrics` | Speed-track error, waveform similarity (energy-weighted), residual order energy, window and pumping checks, envelope statistics | 0.1–0.3 |
-| `rota.tonal` | Thin bridge to open-source psychoacoustic tools: calibrated level, resampling, order prominence | v0.4 (planned) |
-| `rota.plot` | Plotting helpers, kept separate from computation | v0.4 (planned) |
+| `rota.tonal` | Thin bridge to open-source psychoacoustic tools: calibrated level, resampling, order prominence | v0.5 (planned) |
+| `rota.plot` | Plotting helpers, kept separate from computation | v0.5 (planned) |
 
 Planned for v1.0: full validation report, complete documentation, Zenodo DOI.
 
@@ -132,13 +132,13 @@ The recordings below are synthetic (no measured data) and are written by [exampl
 
 ## Validation
 
-Analytic ground truth from `rota.synth` is the first reference: every test signal comes with its true speed, shaft angle, and amplitude and phase of each order. Where a public implementation elsewhere exists, a black-box comparison with explicit parameters is planned as a second reference, comparing physical quantities (speed curves, order amplitudes along a ridge), not map cells; when the two disagree, the analytic truth decides. **This comparison has not been run yet: every result reported so far is against the analytic truth only.** Resynthesis is tested by round trip: synthesise, analyse, compare with the input table. Continuous integration runs pytest only.
+Analytic ground truth from `rota.synth` is the first reference: every test signal comes with its true speed, shaft angle, and amplitude and phase of each order. A black-box comparison with MATLAB's documented public functions, all parameters explicit, is the second reference: it runs in CI (workflow `matlab-reference`, see [validation/README.md](https://github.com/ZhenxianLi/ROTA/blob/main/validation/README.md)) and compares physical quantities (speed curves, order amplitudes along a ridge, Vold-Kalman waveforms and bandwidth), not map cells; when the two disagree, the analytic truth decides. Its output stays in the workflow artifact and is not published in the repository until the licence terms are confirmed. Resynthesis is tested by round trip: synthesise, analyse, compare with the input table. Continuous integration runs pytest only.
 
-The design document defines 14 validation signals (T1 to T14). Version 0.1 covers T1 (single order, constant amplitude, linear run-up), T2 (several orders, a fixed-frequency resonance, noise), T5 (multi-pulse tachometer with jitter and dropped pulses) and T14 (low-speed start from idle with orders half an order apart). Version 0.2 adds T3 (exponential run-down), T4 (crossing orders on two shafts), T6 (fast run-up), T8 (twin shafts 0.5–4 % apart), T10 (true speed outside the search range), T12 (order removal) and T13 (extraction error versus speed-reference error). Version 0.3 adds T9 (order table → synthesis → analysis → table round trip, `tests/test_ordertable.py`) and T11 (broadband synthesis: PSD accuracy and no frame-rate pumping, `tests/test_broadband.py`). Cases and measured results: [validation/README.md](https://github.com/ZhenxianLi/ROTA/blob/main/validation/README.md).
+The design document defines 14 validation signals (T1 to T14). Version 0.1 covers T1 (single order, constant amplitude, linear run-up), T2 (several orders, a fixed-frequency resonance, noise), T5 (multi-pulse tachometer with jitter and dropped pulses) and T14 (low-speed start from idle with orders half an order apart). Version 0.2 adds T3 (exponential run-down), T4 (crossing orders on two shafts), T6 (fast run-up), T8 (twin shafts 0.5–4 % apart), T10 (true speed outside the search range), T12 (order removal) and T13 (extraction error versus speed-reference error). Version 0.3 adds T9 (order table → synthesis → analysis → table round trip, `tests/test_ordertable.py`) and T11 (broadband synthesis: PSD accuracy and no frame-rate pumping, `tests/test_broadband.py`). Version 0.4 adds stress tests on realistic scenarios ([validation/stress.md](https://github.com/ZhenxianLi/ROTA/blob/main/validation/stress.md)). Cases and measured results: [validation/README.md](https://github.com/ZhenxianLi/ROTA/blob/main/validation/README.md).
 
-Tolerances (the analytic column is enforced by the test suite; the black-box column is the target for the planned comparison):
+Tolerances (the analytic column is enforced by the test suite; the black-box column is the target of the CI comparison):
 
-| Quantity | Against analytic truth | Against black-box reference (planned) |
+| Quantity | Against analytic truth | Against black-box reference |
 |---|---|---|
 | Speed, median relative error | <= 0.1 % | <= 0.1 % |
 | Tacholess speed, fraction of frames within 3 % (steady or slowly rising) | >= 90 % | within 5 percentage points |

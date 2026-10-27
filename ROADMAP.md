@@ -15,7 +15,7 @@ Licence: GPL-3.0-or-later (decided 2026-10-25).
 - Three modules added: `rota.resynth` (resynthesis), `rota.metrics` (validation metrics) and `rota.tonal` (psychoacoustic bridge);
 - `rota.vkf` extended to `rota.extract`, which adds a phase-locked short-time harmonic extractor alongside Vold-Kalman;
 - `rota.speed` gains tacholess comb–Viterbi rpm estimation, rpm → phase, vehicle speed → rpm and control-signal clean-up;
-- Validation cases extended from T1–T7 to T1–T14, and the version plan changed to v0.1–v0.4 + v1.0;
+- Validation cases extended from T1–T7 to T1–T14, and the version plan changed to v0.1–v0.4 + v1.0 (v0.5 added on 2026-10-27);
 - The independent-implementation rules extended from MATLAB to all commercial software, proprietary file formats, third-party code of unclear licence and restricted data.
 
 ---
@@ -48,7 +48,7 @@ Modules: `rota.speed`, `rota.angle`, `rota.maps`, `rota.slices`, `rota.extract`,
 | `steady_segments` | Extracts steady segments from accelerating or varying-speed recordings by target vehicle speed or rpm: the centre of the longest continuous segment within tolerance is taken, with a minimum-duration constraint; used for steady-state spectra and listening excerpts | — | v0.1 |
 | `rpm_from_ridge` | Estimates rpm from the signal when there is no tachometer: order combs (generated from priors such as number of cylinders, pole pairs, tooth count) are scored on a whitened spectrogram, then a path is selected by Viterbi dynamic programming with a continuity penalty; optional "moving-condition" mode (removes fixed-frequency lines). Returns rpm, confidence and a search-boundary flag | Peeters et al. 2019 (review); comb and dynamic-programming design follows the fundamental-frequency tracking literature (Hermes 1988) | v0.2 |
 | `virtual_rpm` | Generates a virtual rpm curve `clip(k·v, idle, redline)` from vehicle speed, for decoupling sound from vehicle dynamics in listening or driving experiments | — | v0.3 |
-| `align_signals` | Time alignment of two unsynchronised acquisition systems: onset detection of transients such as hand claps and coarse alignment by generalised cross-correlation (GCC-PHAT), sub-sample refinement on the low-frequency waveform; clock drift estimated from start and end markers; reports the uncertainty | Knapp & Carter 1976 | v0.4 |
+| `align_signals` | Time alignment of two unsynchronised acquisition systems: onset detection of transients such as hand claps and coarse alignment by generalised cross-correlation (GCC-PHAT), sub-sample refinement on the low-frequency waveform; clock drift estimated from start and end markers; reports the uncertainty | Knapp & Carter 1976 | v0.5 |
 
 ### 2.2 Angle domain (`rota.angle`)
 
@@ -64,7 +64,7 @@ Modules: `rota.speed`, `rota.angle`, `rota.maps`, `rota.slices`, `rota.extract`,
 |---|---|---|---|
 | `rpm_frequency_map` | Frequency–rpm map (Campbell diagram) | Brandt 2011 | v0.1 |
 | `rpm_order_map` | Order–rpm map (based on `angular_resample`) | Fyfe & de Munck 1997; Brandt 2011 | v0.1 |
-| Binning options | By time frame, or by Δrpm bin (with hysteresis); monotonic segment selection (run-up, run-down, automatic) | Brandt 2011 | v0.4 |
+| Binning options | By time frame, or by Δrpm bin (with hysteresis); monotonic segment selection (run-up, run-down, automatic) | Brandt 2011 | v0.5 |
 
 ### 2.4 Spectra and slices (`rota.slices`)
 
@@ -72,10 +72,10 @@ Modules: `rota.speed`, `rota.angle`, `rota.maps`, `rota.slices`, `rota.extract`,
 |---|---|---|---|
 | `order_spectrum` | Energy-averages the order map over time to obtain the average order spectrum | Brandt 2011 | v0.1 |
 | `order_slice` | Amplitude of a given order as a function of rpm (can return the complex amplitude, for use by `OrderTable`) | Brandt 2011 | v0.1 |
-| `frequency_slice` | Fixed-frequency slice, for observing structural resonances | Brandt 2011 | v0.4 |
-| `overall_level` | Overall sound level versus rpm, optionally A-weighted | IEC 61672-1 | v0.4 |
-| `metric_vs_rpm` | Bins any time-varying quantity (psychoacoustic metric, sound level, output of third-party tools) along rpm or vehicle speed: monotonic segment selection, bin width, minimum samples per bin, start skip, aggregation (mean, percentile, power average); returns the counts and the dispersion | — | v0.4 |
-| `frequency_to_order`, `order_share` | Frequency track (e.g. the dominant tone frequency given by a tonality tool) → order attribution (within a given tolerance); computes the fraction falling on a given order and its harmonics | — | v0.4 |
+| `frequency_slice` | Fixed-frequency slice, for observing structural resonances | Brandt 2011 | v0.5 |
+| `overall_level` | Overall sound level versus rpm, optionally A-weighted | IEC 61672-1 | v0.5 |
+| `metric_vs_rpm` | Bins any time-varying quantity (psychoacoustic metric, sound level, output of third-party tools) along rpm or vehicle speed: monotonic segment selection, bin width, minimum samples per bin, start skip, aggregation (mean, percentile, power average); returns the counts and the dispersion | — | v0.5 |
+| `frequency_to_order`, `order_share` | Frequency track (e.g. the dominant tone frequency given by a tonality tool) → order attribution (within a given tolerance); computes the fraction falling on a given order and its harmonics | — | v0.5 |
 
 ### 2.5 Order extraction (`rota.extract`, formerly `rota.vkf`)
 
@@ -86,7 +86,7 @@ Modules: `rota.speed`, `rota.angle`, `rota.maps`, `rota.slices`, `rota.extract`,
 | `remove_orders` | Subtracts the specified orders from the original signal (using either extractor), for "remove an order and listen" | As above | v0.2 |
 | `residual` | Original signal minus all shafts and all orders, giving the broadband residual | As above | v0.2 |
 | `resolution_check` | Resolvability diagnostic: for adjacent orders, or two shafts at nearly the same speed, the relation of the beat frequency to the reciprocal of the window length and to the envelope bandwidth; the number of orders spanned by a constant-bandwidth time window at low rpm; whether the demodulation bandwidth exceeds the spacing between adjacent orders. Gives warnings and a recommended window length (in revolutions) or bandwidth | — | v0.2 |
-| `kalman_smoother` (optional) | Kalman/RTS smoother for a random-walk envelope model, as a Bayesian reference implementation of Vold-Kalman | — | after v0.4 |
+| `kalman_smoother` (optional) | Kalman/RTS smoother for a random-walk envelope model, as a Bayesian reference implementation of Vold-Kalman | — | after v0.5 |
 
 ### 2.6 Resynthesis (`rota.resynth`, new)
 
@@ -128,14 +128,14 @@ ROTA does not implement metrics that already have open-source implementations, s
 
 | Function | Purpose | Literature | Version |
 |---|---|---|---|
-| `a_weighting`, `level_db` | IEC 61672-1 A/C weighting (bilinear transform of the analogue poles, normalised at 1 kHz), applied only once (one pass in the time domain, or in the frequency domain), not zero-phase forward-backward filtering; dB re 20 µPa; RMS definition explicit; binaural energy averaging | IEC 61672-1 | v0.4 |
-| `to_calibrated_48k` | Calibration-preserving polyphase resampling, outputting a 48 kHz signal in Pa, for use with SQAT, MoSQITo and open-source ECMA-418-2 implementations | — | v0.4 |
-| `order_prominence` | Computes the ECMA-74 Annex D tone-to-noise ratio TNR and prominence ratio PR on the order-tracked spectrum (angle domain): per-tone detection, prominence flag, frequency-dependent threshold; the window is long enough to resolve low-frequency tones (e.g. a 140 Hz tone lies within a critical band about 100 Hz wide); yields an "order prominence versus rpm" curve | ECMA-74; ISO 7779; ECMA-418-1 | v0.4 |
-| `components` | Description structure for order components (order, rpm range, level, bandwidth, harmonicity index), to ease comparison with the component output of tonality tools | Becker & Sottek 2019 (to be verified) | v0.4 |
+| `a_weighting`, `level_db` | IEC 61672-1 A/C weighting (bilinear transform of the analogue poles, normalised at 1 kHz), applied only once (one pass in the time domain, or in the frequency domain), not zero-phase forward-backward filtering; dB re 20 µPa; RMS definition explicit; binaural energy averaging | IEC 61672-1 | v0.5 |
+| `to_calibrated_48k` | Calibration-preserving polyphase resampling, outputting a 48 kHz signal in Pa, for use with SQAT, MoSQITo and open-source ECMA-418-2 implementations | — | v0.5 |
+| `order_prominence` | Computes the ECMA-74 Annex D tone-to-noise ratio TNR and prominence ratio PR on the order-tracked spectrum (angle domain): per-tone detection, prominence flag, frequency-dependent threshold; the window is long enough to resolve low-frequency tones (e.g. a 140 Hz tone lies within a critical band about 100 Hz wide); yields an "order prominence versus rpm" curve | ECMA-74; ISO 7779; ECMA-418-1 | v0.5 |
+| `components` | Description structure for order components (order, rpm range, level, bandwidth, harmonicity index), to ease comparison with the component output of tonality tools | Becker & Sottek 2019 (to be verified) | v0.5 |
 
 ### 2.10 Plotting (`rota.plot`)
 
-Plotting helpers, separate from computation: Campbell diagram, order map, slices, rpm track and confidence, before/after comparison of resynthesis. v0.4.
+Plotting helpers, separate from computation: Campbell diagram, order map, slices, rpm track and confidence, before/after comparison of resynthesis. v0.5.
 
 ---
 
@@ -150,7 +150,10 @@ Plotting helpers, separate from computation: Campbell diagram, order map, slices
 **v0.3 Resynthesis**:
 All of `rota.resynth`, `angular_to_time`, `stationarize`, `virtual_rpm`, `synth_tone_noise`, `window_checks`, `envelope_stats`. Validation cases T9, T11.
 
-**v0.4 Application layer and bridges**:
+**v0.4 Realistic test signals and black-box reference** (released 2026-10-27):
+`synth_scenario` (engine run-up, electric drive, steady cruise) with speed and source models (gear shifts, angular speed ripple, angle-locked impulses, sidebands, inverter carriers), transfer paths (modal resonances, cabin impulse responses), speed-dependent background noise and recorder impairments; stress tests on these scenarios (`validation/stress.md`); a more robust `rpm_from_ridge` (automatic window, recalibrated confidence and warnings); the black-box MATLAB comparison in CI (section 5.5); audio examples.
+
+**v0.5 Application layer and bridges** (moved from v0.4):
 `frequency_slice`, `overall_level`, `metric_vs_rpm`, `order_share`, Δrpm binning, `align_signals`, `rota.tonal`, `rota.plot`. Provides examples linking to SQAT, MoSQITo and open-source ECMA-418-2 implementations, for example "how loudness or tonality varies with rpm after an order is removed".
 
 **v1.0 Official release**:
