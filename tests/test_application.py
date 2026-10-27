@@ -170,22 +170,23 @@ def test_overall_level_validation():
         overall_level(x, FS, rpm[:-1])
 
 
-@pytest.mark.parametrize("weighting, db_100hz", [("A", -19.1), ("C", -0.3)])
-def test_overall_level_weighting(weighting, db_100hz):
+@pytest.mark.parametrize("weighting", ["A", "C"])
+def test_overall_level_weighting(weighting):
     tonal = pytest.importorskip("rota.tonal")
-    if not hasattr(tonal, "weight"):
-        pytest.skip("rota.tonal.weight not available")
+    # the digital weighting filters are specified for audio sampling rates (>= 44.1 kHz)
+    fs = 48000.0
     amp = 1.0
-    n = int(4 * FS)
-    t = np.arange(n) / FS
+    n = int(4 * fs)
+    t = np.arange(n) / fs
     rpm = np.full(n, 2000.0)
     ref_level = 20 * np.log10(amp / np.sqrt(2) / 20e-6)
-    for f, expected in ((1000.0, 0.0), (100.0, db_100hz)):
+    for f in (1000.0, 100.0):
+        expected = float(tonal.weighting_db(np.array([f]), weighting)[0])
         x = amp * np.sin(2 * np.pi * f * t)
-        r = overall_level(x, FS, rpm, frame=0.5, weighting=weighting)
+        r = overall_level(x, fs, rpm, frame=0.5, weighting=weighting)
         assert r.weighting == weighting
         # skip the filter's start-up frames
-        assert abs(np.mean(r.level[2:]) - (ref_level + expected)) < 0.15
+        assert abs(np.mean(r.level[2:]) - (ref_level + expected)) < 0.05
 
 
 # --------------------------------------------------------------------------

@@ -276,3 +276,32 @@ def order_spectrum(m, *, rpm_range=None, t_range=None):
         n_frames=n,
         enbw_bins=float(m.enbw_bins),
     )
+
+
+# Application layer: fixed-frequency slices, overall level, metrics along rpm,
+# order attribution of frequency tracks.
+from ._application import (  # noqa: E402
+    FrequencyOrder,
+    FrequencySlice,
+    MetricVsRpm,
+    OrderShare,
+    OverallLevel,
+    frequency_slice,
+    frequency_to_order,
+    metric_vs_rpm,
+    order_share,
+    overall_level,
+)
+
+__all__ += [
+    "frequency_slice",
+    "overall_level",
+    "metric_vs_rpm",
+    "frequency_to_order",
+    "order_share",
+    "FrequencySlice",
+    "OverallLevel",
+    "MetricVsRpm",
+    "FrequencyOrder",
+    "OrderShare",
+]

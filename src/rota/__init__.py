@@ -9,6 +9,7 @@ maps     RPM-frequency and RPM-order maps.
 slices   Order spectra and order slices.
 extract  Order extraction (Vold-Kalman, tracked harmonics), removal, residual.
 resynth  Order tables, order and broadband resynthesis, provenance.
+tonal    Weighting, calibrated levels, octave bands, order prominence.
 synth    Synthetic test signals with analytic ground truth.
 metrics  Validation metrics.
 
@@ -23,9 +24,9 @@ in each docstring and selected explicitly where a choice exists.
 
 __version__ = "0.4.0"
 
-from . import angle, extract, maps, metrics, resynth, slices, speed, synth  # noqa: F401
+from . import angle, extract, maps, metrics, resynth, slices, speed, synth, tonal  # noqa: F401
 
 __all__ = [
-    "angle", "extract", "maps", "metrics", "resynth", "slices", "speed", "synth",
+    "angle", "extract", "maps", "metrics", "resynth", "slices", "speed", "synth", "tonal",
     "__version__",
 ]

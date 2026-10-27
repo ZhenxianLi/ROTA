@@ -600,6 +600,8 @@ def metric_vs_rpm(
     ValueError
         For invalid arguments, or if no sample remains after the exclusions.
 
+    The metric is binned as given (any unit); no amplitude convention applies except for ``aggregate="power"``, which treats the values as levels in dB of power (RMS) quantities.
+
     References
     ----------
     Fastl, H., & Zwicker, E. (2007). Psychoacoustics: Facts and Models, 3rd
@@ -921,6 +923,8 @@ def order_share(freq, rpm, base_order, *, harmonics=4, tolerance=0.04, weights=N
     -------
     OrderShare
         Total and per-harmonic shares with the sample counts.
+
+    No amplitudes are involved (frequencies in Hz, speed in rpm).
 
     References
     ----------

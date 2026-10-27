@@ -24,6 +24,9 @@ __all__ = [
     "RidgeResult",
     "WhiteningWarning",
     "RidgeQualityWarning",
+    "align_signals",
+    "AlignResult",
+    "detect_onsets",
 ]
 
 
@@ -689,3 +692,4 @@ def steady_segments(
 
 
 from ._ridge import RidgeQualityWarning, RidgeResult, WhiteningWarning, rpm_from_ridge  # noqa: E402  (tacholess estimation)
+from ._align import AlignResult, align_signals, detect_onsets  # noqa: E402  (signal alignment)
