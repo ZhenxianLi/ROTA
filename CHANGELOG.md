@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `rota.synth.synth_scenario` and `ScenarioSignal`: complete synthetic drive-train recordings with exact truth. Kinds: `ice_runup` (four-stroke four-cylinder engine: full-load run-up from 1200 rpm at about 500 rpm/s through upshifts that drop the speed by about 30 %, optional clutch-slip launch, angle-periodic speed ripple, orders with level and speed-slope laws, combustion bursts ringing a structure resonance), `ev_runup` (electric drive: shaft rpm 100 per km/h, motor-family orders, gear mesh and whine with slow modulation, optional whine sidebands, a dithered inverter carrier with speed-dependent sidebands, fixed high-frequency tones set against the local noise floor, coast-down variant) and `steady_cruise` (either powertrain at constant speed with weak tones). Each has a tachometer channel with jitter and delay, a modal transfer path with a cabin boom, a cabin impulse response (smooth below the Schroeder frequency, diffuse above), receiver-level broadband noise with a stated spectral tilt, low-frequency hump and speed laws, transient events, one or more receiver channels with diffuse-field coherence, and an optional recorder (`measurement`: clipping, quantisation, self-noise, clock drift). All default parameters are illustrative values typical of passenger cars, rounded, not measurements of any specific vehicle; `scenario_defaults` returns them. The result holds the recording, the true instantaneous speed and angle, every stem before and after the path (the stems add up to the recording bit for bit for an ideal recorder), the source-order truth, `through_path`, `path_response` and `quasi_static_amplitude`, and a JSON configuration with the seed.
+- `rota.synth` re-exports the building blocks behind the scenarios: `drive_rpm`, `angular_speed_ripple`, `angle_impulses`, `sideband_orders`, `carrier_components`, `modal_path`, `modal_response`, `room_impulse_response`, `apply_ir`, `speed_noise`, `transient_events`, `measurement_chain` and `delay_signal`.
+- Tests of the scenarios against their own truth and the documented defaults (`tests/test_scenario.py`).
+
 ## [0.3.0] - 2026-10-26
 
 Order-based resynthesis.
