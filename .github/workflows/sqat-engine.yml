@@ -1,0 +1,163 @@
+name: sqat-engine
+
+# Tests of rota.bridges.sqat against a real MATLAB and SQAT (tests/test_bridges_sqat.py), on a
+# GitHub-hosted runner. SQAT (github.com/ggrecow/SQAT, GPL-3.0) is cloned at the pinned commit
+# of release v2.0 and never vendored; the MATLAB Engine API for Python (matlabengine on PyPI)
+# must match the MATLAB release, so both are pinned together below.
+#
+# Licensing. MathWorks licenses MATLAB automatically for public repositories inside its own
+# run actions (run-command, run-tests, run-build). Whether a MATLAB started from Python by
+# matlab.engine.start_matlab() is licensed as well is probed in the first step; the second
+# step tries the alternative of sharing the engine of a licensed run-command session
+# (matlab.engine.shareEngine) and connecting to it from Python. The pytest step uses the mode
+# that worked. No MATLAB output is committed; the logs stay in the job.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "src/rota/bridges/sqat.py"
+      - "tests/test_bridges_sqat.py"
+      - ".github/workflows/sqat-engine.yml"
+
+permissions:
+  contents: read
+
+env:
+  MATLAB_RELEASE: R2026b
+  MATLABENGINE_VERSION: "26.2.5"   # matlabengine 26.2.x <-> MATLAB R2026b
+  SQAT_REPO: https://github.com/ggrecow/SQAT
+  SQAT_REF: v2.0
+  SQAT_COMMIT: 94f489c053d1366da05d5e62838c3f54ac7715c3
+
+jobs:
+  engine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Clone SQAT at the pinned commit
+        run: |
+          mkdir -p build/sqat_engine/SQAT
+          cd build/sqat_engine/SQAT
+          git init -q
+          git remote add origin "$SQAT_REPO"
+          git fetch -q --depth 1 origin "$SQAT_COMMIT"
+          git checkout -q FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$SQAT_COMMIT"
+          echo "ROTA_SQAT_PATH=$PWD" >> "$GITHUB_ENV"
+
+      # SQAT's ECMA-418-2 functions require the Signal Processing Toolbox.
+      - name: Set up MATLAB
+        uses: matlab-actions/setup-matlab@v2
+        with:
+          release: ${{ env.MATLAB_RELEASE }}
+          products: MATLAB Signal_Processing_Toolbox
+
+      - name: Install ROTA and the MATLAB Engine API for Python
+        run: |
+          MATLAB_ROOT="$(dirname "$(dirname "$(readlink -f "$(command -v matlab)")")")"
+          echo "MATLAB root: $MATLAB_ROOT"
+          echo "LD_LIBRARY_PATH=$MATLAB_ROOT/extern/bin/glnxa64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+          python -m pip install --upgrade pip
+          pip install -e ".[test]" "matlabengine==$MATLABENGINE_VERSION"
+          pip show matlabengine | head -3
+
+      - name: Write the engine probe
+        run: |
+          mkdir -p build/sqat_engine
+          cat > build/sqat_engine/probe.py <<'EOF'
+          """Start or connect to a MATLAB engine, initialise SQAT and run one loudness call."""
+          import os, sys, time, traceback
+          import numpy as np
+          mode = sys.argv[1] if len(sys.argv) > 1 else "start"
+          done = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"probe_{mode}.status")
+          status = "fail"
+          try:
+              import matlab, matlab.engine
+              t0 = time.time()
+              if mode == "start":
+                  eng = matlab.engine.start_matlab()
+              else:
+                  print("shared engines:", matlab.engine.find_matlab(), flush=True)
+                  eng = matlab.engine.connect_matlab(mode)
+              print(f"engine ({mode}) after {time.time() - t0:.1f} s:", eng.version(nargout=1), flush=True)
+              sqat = os.environ["ROTA_SQAT_PATH"]
+              eng.addpath(sqat, nargout=0)
+              eng.startup_SQAT(sqat + os.sep, nargout=0)
+              fs = 48000.0
+              x = 0.02 * np.sqrt(2) * np.sin(2 * np.pi * 1000.0 * np.arange(int(fs)) / fs)
+              try:
+                  col = matlab.double(x.reshape(-1, 1))
+                  print("matlab.double from numpy: size", col.size, flush=True)
+              except Exception as err:
+                  print("matlab.double from numpy failed:", repr(err), flush=True)
+                  col = matlab.double(x.reshape(-1, 1).tolist())
+              out = eng.Loudness_ISO532_1(col, fs, 0.0, 2.0, 0.5, False, nargout=1)
+              n = np.asarray(out["InstantaneousLoudness"], dtype=float).ravel()
+              print("Loudness_ISO532_1 of a 1 kHz tone at 40 dB SPL: median",
+                    float(np.median(n[n.size // 2:])), "sone; fields:", sorted(out), flush=True)
+              if mode == "start":
+                  eng.quit()
+              status = "ok"
+          except BaseException:
+              traceback.print_exc()
+              sys.stdout.flush()
+          finally:
+              with open(done, "w") as fh:
+                  fh.write(status + "\n")
+          sys.exit(0 if status == "ok" else 1)
+          EOF
+
+      - name: "Probe 1: engine started from Python (start_matlab)"
+        id: probe_start
+        continue-on-error: true
+        timeout-minutes: 15
+        run: python build/sqat_engine/probe.py start
+
+      - name: "Probe 2: engine shared by a licensed run-command session (connect_matlab)"
+        id: probe_shared
+        if: ${{ steps.probe_start.outcome != 'success' }}
+        continue-on-error: true
+        timeout-minutes: 20
+        uses: matlab-actions/run-command@v2
+        with:
+          command: >-
+            matlab.engine.shareEngine('rota_ci');
+            system('python build/sqat_engine/probe.py rota_ci > build/sqat_engine/probe_shared.log 2>&1 &');
+            t0 = tic; while ~isfile('build/sqat_engine/probe_rota_ci.status') && toc(t0) < 900, pause(1); end;
+            type('build/sqat_engine/probe_shared.log');
+            assert(strcmp(strtrim(fileread('build/sqat_engine/probe_rota_ci.status')), 'ok'), 'shared-engine probe failed');
+
+      - name: "pytest tests/test_bridges_sqat.py (engine started from Python)"
+        if: ${{ steps.probe_start.outcome == 'success' && hashFiles('src/rota/bridges/sqat.py') != '' }}
+        run: python -m pytest tests/test_bridges_sqat.py -v -rs -s
+
+      - name: "pytest tests/test_bridges_sqat.py (shared engine)"
+        if: ${{ steps.probe_start.outcome != 'success' && steps.probe_shared.outcome == 'success' && hashFiles('src/rota/bridges/sqat.py') != '' }}
+        uses: matlab-actions/run-command@v2
+        env:
+          ROTA_MATLAB_ENGINE_NAME: rota_ci
+        with:
+          command: >-
+            matlab.engine.shareEngine('rota_ci');
+            delete('build/sqat_engine/pytest.status');
+            system('(python -m pytest tests/test_bridges_sqat.py -v -rs -s; echo $? > build/sqat_engine/pytest.status) > build/sqat_engine/pytest.log 2>&1 &');
+            t0 = tic; while ~isfile('build/sqat_engine/pytest.status') && toc(t0) < 2400, pause(1); end;
+            type('build/sqat_engine/pytest.log');
+            assert(strcmp(strtrim(fileread('build/sqat_engine/pytest.status')), '0'), 'pytest failed');
+
+      - name: Summary
+        if: ${{ !cancelled() }}
+        run: |
+          {
+            echo "## MATLAB engine from Python ($MATLAB_RELEASE, matlabengine $MATLABENGINE_VERSION, SQAT $SQAT_REF)"
+            echo
+            echo "* start_matlab(): ${{ steps.probe_start.outcome }}"
+            echo "* connect_matlab() to a run-command session: ${{ steps.probe_shared.outcome || 'not tried' }}"
+          } >> "$GITHUB_STEP_SUMMARY"
