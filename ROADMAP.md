@@ -1,20 +1,20 @@
-# ROTA Development Roadmap
+# rota-order Development Roadmap
 
-**ROTA**: **R**otational **O**rder **T**racking & **A**nalysis
+**rota-order**: **R**otational **O**rder **T**racking & **A**nalysis
 
 Latin *rota* means "wheel", from the same root as rotate, rotation and rotor.
 
-ROTA is a lightweight, open-source, validated Python library for order analysis of noise and vibration signals from rotating machinery (engines, electric motors, gearboxes, etc.), with tools for order-based sound resynthesis. It depends only on NumPy and SciPy. Each function is implemented independently from the published literature and comes with a validation script.
+rota-order is a lightweight, open-source, validated Python library for order analysis of noise and vibration signals from rotating machinery (engines, electric motors, gearboxes, etc.), with tools for order-based sound resynthesis. It depends only on NumPy and SciPy. Each function is implemented independently from the published literature and comes with a validation script.
 
-Naming convention: the project is written ROTA in running text; the import name in code is lowercase `rota` (`import rota`); the repository and the distribution on PyPI are `rota-order` (`pip install rota-order`).
+Naming convention: the project is written rota-order in running text; the import name in code is `rota_order` (`import rota_order as ro`); the repository and the distribution on PyPI are `rota-order` (`pip install rota-order`).
 
 Licence: GPL-3.0-or-later (decided 2026-10-25).
 
-**Revision (2026-10-25)**: on top of the first draft, lessons from the author's earlier research projects were incorporated (section 6). ROTA reuses no earlier code; all functions are implemented from scratch from the published literature. Main changes:
+**Revision (2026-10-25)**: on top of the first draft, lessons from the author's earlier research projects were incorporated (section 6). rota-order reuses no earlier code; all functions are implemented from scratch from the published literature. Main changes:
 
-- Three modules added: `rota.resynth` (resynthesis), `rota.metrics` (validation metrics) and `rota.tonal` (psychoacoustic bridge);
-- `rota.vkf` extended to `rota.extract`, which adds a phase-locked short-time harmonic extractor alongside Vold-Kalman;
-- `rota.speed` gains tacholess comb–Viterbi rpm estimation, rpm → phase, vehicle speed → rpm and control-signal clean-up;
+- Three modules added: `rota_order.resynth` (resynthesis), `rota_order.metrics` (validation metrics) and `rota_order.tonal` (psychoacoustic bridge);
+- `rota_order.vkf` extended to `rota_order.extract`, which adds a phase-locked short-time harmonic extractor alongside Vold-Kalman;
+- `rota_order.speed` gains tacholess comb–Viterbi rpm estimation, rpm → phase, vehicle speed → rpm and control-signal clean-up;
 - Validation cases extended from T1–T7 to T1–T14, and the version plan changed to v0.1–v0.4 + v1.0 (v0.5 added on 2026-10-27);
 - The independent-implementation rules extended from MATLAB to all commercial software, proprietary file formats, third-party code of unclear licence and restricted data.
 
@@ -35,9 +35,9 @@ Licence: GPL-3.0-or-later (decided 2026-10-25).
 
 ## 2. Feature list
 
-Modules: `rota.speed`, `rota.angle`, `rota.maps`, `rota.slices`, `rota.extract`, `rota.resynth`, `rota.synth`, `rota.metrics`, `rota.tonal`, `rota.plot`.
+Modules: `rota_order.speed`, `rota_order.angle`, `rota_order.maps`, `rota_order.slices`, `rota_order.extract`, `rota_order.resynth`, `rota_order.synth`, `rota_order.metrics`, `rota_order.tonal`, `rota_order.plot`.
 
-### 2.1 Speed reference (`rota.speed`)
+### 2.1 Speed reference (`rota_order.speed`)
 
 | Function | Purpose | Literature | Version |
 |---|---|---|---|
@@ -50,7 +50,7 @@ Modules: `rota.speed`, `rota.angle`, `rota.maps`, `rota.slices`, `rota.extract`,
 | `virtual_rpm` | Generates a virtual rpm curve `clip(k·v, idle, redline)` from vehicle speed, for decoupling sound from vehicle dynamics in listening or driving experiments | — | v0.3 |
 | `align_signals` | Time alignment of two unsynchronised acquisition systems: onset detection of transients such as hand claps and coarse alignment by generalised cross-correlation (GCC-PHAT), sub-sample refinement on the low-frequency waveform; clock drift estimated from start and end markers; reports the uncertainty | Knapp & Carter 1976 | v0.5 |
 
-### 2.2 Angle domain (`rota.angle`)
+### 2.2 Angle domain (`rota_order.angle`)
 
 | Function | Purpose | Literature | Version |
 |---|---|---|---|
@@ -58,7 +58,7 @@ Modules: `rota.speed`, `rota.angle`, `rota.maps`, `rota.slices`, `rota.extract`,
 | `angular_to_time` | Maps an angle-domain signal back to uniform time sampling (the inverse of the angle-domain transform, used for resynthesis) | As above | v0.3 |
 | `stationarize` | Time warping for a known rpm proportionality (fixed gear ratio, linear run-up) that makes the order frequencies constant, for long-window spectral metrics; provides the inverse transform | — | v0.3 |
 
-### 2.3 Maps (`rota.maps`)
+### 2.3 Maps (`rota_order.maps`)
 
 | Function | Purpose | Literature | Version |
 |---|---|---|---|
@@ -66,7 +66,7 @@ Modules: `rota.speed`, `rota.angle`, `rota.maps`, `rota.slices`, `rota.extract`,
 | `rpm_order_map` | Order–rpm map (based on `angular_resample`) | Fyfe & de Munck 1997; Brandt 2011 | v0.1 |
 | Binning options | By time frame, or by Δrpm bin (with hysteresis); monotonic segment selection (run-up, run-down, automatic) | Brandt 2011 | v0.5 |
 
-### 2.4 Spectra and slices (`rota.slices`)
+### 2.4 Spectra and slices (`rota_order.slices`)
 
 | Function | Purpose | Literature | Version |
 |---|---|---|---|
@@ -77,7 +77,7 @@ Modules: `rota.speed`, `rota.angle`, `rota.maps`, `rota.slices`, `rota.extract`,
 | `metric_vs_rpm` | Bins any time-varying quantity (psychoacoustic metric, sound level, output of third-party tools) along rpm or vehicle speed: monotonic segment selection, bin width, minimum samples per bin, start skip, aggregation (mean, percentile, power average); returns the counts and the dispersion | — | v0.5 |
 | `frequency_to_order`, `order_share` | Frequency track (e.g. the dominant tone frequency given by a tonality tool) → order attribution (within a given tolerance); computes the fraction falling on a given order and its harmonics | — | v0.5 |
 
-### 2.5 Order extraction (`rota.extract`, formerly `rota.vkf`)
+### 2.5 Order extraction (`rota_order.extract`, formerly `rota_order.vkf`)
 
 | Function | Purpose | Literature | Version |
 |---|---|---|---|
@@ -88,7 +88,7 @@ Modules: `rota.speed`, `rota.angle`, `rota.maps`, `rota.slices`, `rota.extract`,
 | `resolution_check` | Resolvability diagnostic: for adjacent orders, or two shafts at nearly the same speed, the relation of the beat frequency to the reciprocal of the window length and to the envelope bandwidth; the number of orders spanned by a constant-bandwidth time window at low rpm; whether the demodulation bandwidth exceeds the spacing between adjacent orders. Gives warnings and a recommended window length (in revolutions) or bandwidth | — | v0.2 |
 | `kalman_smoother` (optional) | Kalman/RTS smoother for a random-walk envelope model, as a Bayesian reference implementation of Vold-Kalman | — | after v0.5 |
 
-### 2.6 Resynthesis (`rota.resynth`, new)
+### 2.6 Resynthesis (`rota_order.resynth`, new)
 
 Goal: turn analysis results (order tables, extracted order waveforms, residuals) back into audible sound, and allow resynthesis after modification. Typical uses: listening-experiment stimuli ("remove an order and listen", "keep only the broadband"), virtual operating conditions (mapping an order table onto a new rpm profile), and the sound engine of a driving simulator (block-wise synthesis).
 
@@ -96,15 +96,15 @@ Goal: turn analysis results (order tables, extracted order waveforms, residuals)
 |---|---|---|---|
 | `OrderTable` | Data structure: order × rpm → complex amplitude (Pa), explicitly marked as peak or RMS; supports non-integer and negative orders and a fixed frequency offset per order (carrier sidebands, e.g. sidebands of an inverter switching frequency); can be built from `order_slice` or `tracked_harmonics`; NPZ/JSON read and write | — | v0.3 |
 | `synthesize_orders` | Additive synthesis from an `OrderTable` and `rpm(t)`: the phase is the continuous integral 2π·order·∫rpm/60 dt; between rpm grid points the amplitude is interpolated, not the real and imaginary parts; orders above Nyquist are muted rather than clamped; the initial phase can be random (seedable), shared, or taken from the phases in the table | McAulay & Quatieri 1986 | v0.3 |
-| `OrderSynth` (streaming) | Block-wise API: keeps the phase accumulator and the state of the previous block, takes one block of rpm or load at a time and outputs one block of audio, for real-time programs or simulators (ROTA itself does no audio I/O) | — | v0.3 |
+| `OrderSynth` (streaming) | Block-wise API: keeps the phase accumulator and the state of the previous block, takes one block of rpm or load at a time and outputs one block of audio, for real-time programs or simulators (rota-order itself does no audio I/O) | — | v0.3 |
 | `synthesize_broadband` | Generates broadband noise from a magnitude-spectrum envelope (a lookup table that can vary with rpm or vehicle speed): random-phase IFFT grains + overlap-add with a power-complementary window (√Hann, 50 % overlap), no frame-rate pumping; very low frequencies removed within each grain; cross-fade between adjacent operating conditions with √ weights | Serra & Smith 1990; Allen & Rabiner 1977 | v0.3 |
 | `remap_rpm` | Maps an order table or extraction result onto a new rpm profile (virtual acceleration, changed gear ratio, changed apparent vehicle speed of a recording). This is the correct way to change the apparent vehicle speed, not a general pitch shift or speed change; the frequency changes by only about 0.25 % per km/h, so rpm and frequency accuracy must be far better than this | — | v0.3 |
 | `modify_orders` | Per-order gain, muting, frequency shift and replacement applied to extracted coefficient tracks or an order table, followed by re-modulation | — | v0.3 |
 | `resynthesize` | Recombines orders + residual, with an order-to-residual energy ratio (dB) that can be specified; returns three outputs: orders-only, residual-only and mix | — | v0.3 |
 | `stationary_excerpt` | Generates a listening excerpt with constant frequency and steady amplitude from an accelerating recording: angle-domain average spectrum (or a sinusoid + residual model) + random-phase IFFT; tonal components can use either of two models, true sinusoids (no beating) or random-phase clusters; reports the envelope fluctuation and the crest factor | — | v0.3 |
-| `provenance` | Writes a JSON sidecar for every resynthesis: all parameters, seed, ROTA version, input file digest | — | v0.3 |
+| `provenance` | Writes a JSON sidecar for every resynthesis: all parameters, seed, rota-order version, input file digest | — | v0.3 |
 
-### 2.7 Test signals (`rota.synth`)
+### 2.7 Test signals (`rota_order.synth`)
 
 | Function | Purpose | Version |
 |---|---|---|
@@ -112,7 +112,7 @@ Goal: turn analysis results (order tables, extracted order waveforms, residuals)
 | `rpm_profiles` | Rpm profile generation: linear, exponential, piecewise with holds (e.g. a 40→100→40 km/h mapping), twin shafts (independent, locked ratio, small difference) | v0.1 |
 | `synth_tone_noise` | Listening-experiment stimuli: a pure tone or harmonic complex + broadband or hump-shaped noise, with the tone-to-noise ratio (TNR) set by allocating the total power; anchor signals (e.g. a pure tone and white noise at 60 dB SPL) | v0.3 |
 
-### 2.8 Validation metrics (`rota.metrics`, new)
+### 2.8 Validation metrics (`rota_order.metrics`, new)
 
 | Function | Purpose | Version |
 |---|---|---|
@@ -122,9 +122,9 @@ Goal: turn analysis results (order tables, extracted order waveforms, residuals)
 | `window_checks` | COLA and power-complementarity checks; peak of the modulation spectrum at the frame rate (pumping detection) | v0.3 |
 | `envelope_stats` | Envelope fluctuation (percentiles), crest factor, error relative to the original spectrum | v0.3 |
 
-### 2.9 Psychoacoustic bridge (`rota.tonal`, thin layer, new)
+### 2.9 Psychoacoustic bridge (`rota_order.tonal`, thin layer, new)
 
-ROTA does not implement metrics that already have open-source implementations, such as loudness, sharpness, roughness and ECMA-418-2 tonality. It only provides bridges. From v0.6 `rota.bridges` offers optional thin wrappers for MoSQITo, the Sottek hearing model and SQAT; the toolboxes are imported lazily inside the functions, never vendored and never required:
+rota-order does not implement metrics that already have open-source implementations, such as loudness, sharpness, roughness and ECMA-418-2 tonality. It only provides bridges. From v0.6 `rota_order.bridges` offers optional thin wrappers for MoSQITo, the Sottek hearing model and SQAT; the toolboxes are imported lazily inside the functions, never vendored and never required:
 
 | Function | Purpose | Literature | Version |
 |---|---|---|---|
@@ -134,9 +134,9 @@ ROTA does not implement metrics that already have open-source implementations, s
 | `components` | Description structure for order components (order, rpm range, level, bandwidth, harmonicity index), to ease comparison with the component output of tonality tools | Becker & Sottek 2019 (to be verified) | v0.5 |
 | `octave_levels`, `band_levels_vs_rpm` | Octave and fractional-octave (e.g. 1/3-octave) band filter bank per IEC 61260-1 (base-10 mid-band frequencies, IIR band-pass filters, multirate for low bands); band levels over time and binned along rpm, next to the order map | IEC 61260-1; ANSI S1.11 | v0.5 |
 
-### 2.10 Plotting (`rota.plot`)
+### 2.10 Plotting (`rota_order.plot`)
 
-Figures of ROTA results, separate from computation, one call per result, named like the function that produced the result. Matplotlib is optional and imported inside the functions; every function takes `ax=` and returns the Axes it drew on (except `compare_maps`, which returns its own grid), never shows the figure and never changes the style. Labels carry the unit, the dB reference (explicit `ref`, `unit`; `SOUND_PRESSURE` for sound pressure in Pa) and the amplitude convention. Line plots take one result, a list or a dict and plot differences with `relative_to=`. v0.7.
+Figures of rota-order results, separate from computation, one call per result, named like the function that produced the result. Matplotlib is optional and imported inside the functions; every function takes `ax=` and returns the Axes it drew on (except `compare_maps`, which returns its own grid), never shows the figure and never changes the style. Labels carry the unit, the dB reference (explicit `ref`, `unit`; `SOUND_PRESSURE` for sound pressure in Pa) and the amplitude convention. Line plots take one result, a list or a dict and plot differences with `relative_to=`. v0.7.
 
 | Function | Result | Figure |
 |---|---|---|
@@ -162,19 +162,22 @@ Figures of ROTA results, separate from computation, one call per result, named l
 `rpm_from_ridge`, `order_waveform`, `tracked_harmonics`, `remove_orders`, `residual`, `resolution_check`, `waveform_similarity`, `order_residual_energy`. Validation cases T3, T4, T6, T8, T10, T12, T13.
 
 **v0.3 Resynthesis**:
-All of `rota.resynth`, `angular_to_time`, `stationarize`, `virtual_rpm`, `synth_tone_noise`, `window_checks`, `envelope_stats`. Validation cases T9, T11.
+All of `rota_order.resynth`, `angular_to_time`, `stationarize`, `virtual_rpm`, `synth_tone_noise`, `window_checks`, `envelope_stats`. Validation cases T9, T11.
 
 **v0.4 Realistic test signals and black-box reference** (released 2026-10-27):
 `synth_scenario` (engine run-up, electric drive, steady cruise) with speed and source models (gear shifts, angular speed ripple, angle-locked impulses, sidebands, inverter carriers), transfer paths (modal resonances, cabin impulse responses), speed-dependent background noise and recorder impairments; stress tests on these scenarios (`validation/stress.md`); a more robust `rpm_from_ridge` (automatic window, recalibrated confidence and warnings); the black-box MATLAB comparison in CI (section 5.5); audio examples.
 
 **v0.5 Application layer and psychoacoustic bridges** (released 2026-10-27):
-`frequency_slice`, `overall_level`, `metric_vs_rpm`, `frequency_to_order`, `order_share`, Δrpm binning, `align_signals`, `rota.tonal` (A/C weighting, levels, calibrated 48 kHz resampling, octave and 1/3-octave band levels, `order_prominence`). Examples linking ROTA to three open-source psychoacoustic toolboxes as optional, external dependencies (never vendored; from 0.6 `rota.bridges` offers thin wrappers, imported lazily): MoSQITo (Python), the Sottek hearing model implementation of ECMA-418-2 (Python) and SQAT (MATLAB, run in CI like the black-box reference) — for example how loudness, tonality or roughness vary with rpm after an order is removed or boosted. A complete worked analysis example: preparation, order analysis, extraction, psychoacoustics along rpm, order contributions with audio, and an engineering conclusion.
+`frequency_slice`, `overall_level`, `metric_vs_rpm`, `frequency_to_order`, `order_share`, Δrpm binning, `align_signals`, `rota_order.tonal` (A/C weighting, levels, calibrated 48 kHz resampling, octave and 1/3-octave band levels, `order_prominence`). Examples linking rota-order to three open-source psychoacoustic toolboxes as optional, external dependencies (never vendored; from 0.6 `rota_order.bridges` offers thin wrappers, imported lazily): MoSQITo (Python), the Sottek hearing model implementation of ECMA-418-2 (Python) and SQAT (MATLAB, run in CI like the black-box reference) — for example how loudness, tonality or roughness vary with rpm after an order is removed or boosted. A complete worked analysis example: preparation, order analysis, extraction, psychoacoustics along rpm, order contributions with audio, and an engineering conclusion.
 
 **v0.6 Optional toolbox bridges** (released 2026-10-28):
-`rota.bridges`: thin wrappers that call the documented public functions of MoSQITo (ISO 532-1 loudness, DIN 45692 sharpness, Daniel and Weber roughness), the Sottek hearing model (ECMA-418-2:2025 tonality, loudness, roughness) and SQAT via the MATLAB Engine on ROTA's conventions (Pa, calibration factor, 48 kHz). A bridge module and its extra are named exactly like the toolbox (`mosqito`, `sottek_hearing_model` / `sottek-hearing-model`, `sqat`). Each function returns a `TimeMetric`, whose method `vs_rpm` bins it along rpm with `metric_vs_rpm` (`bridges.mosqito.loudness(x, fs).vs_rpm(rpm, t_rpm)`) and hands the metric's name, unit and source on to the binned `MetricVsRpm`. The toolboxes are imported lazily inside the functions, are never vendored and never required (extras `mosqito` and `sottek-hearing-model`; none for SQAT); without them the wrappers raise `ImportError` with the install command.
+`rota_order.bridges`: thin wrappers that call the documented public functions of MoSQITo (ISO 532-1 loudness, DIN 45692 sharpness, Daniel and Weber roughness), the Sottek hearing model (ECMA-418-2:2025 tonality, loudness, roughness) and SQAT via the MATLAB Engine on rota-order's conventions (Pa, calibration factor, 48 kHz). A bridge module and its extra are named exactly like the toolbox (`mosqito`, `sottek_hearing_model` / `sottek-hearing-model`, `sqat`). Each function returns a `TimeMetric`, whose method `vs_rpm` bins it along rpm with `metric_vs_rpm` (`bridges.mosqito.loudness(x, fs).vs_rpm(rpm, t_rpm)`) and hands the metric's name, unit and source on to the binned `MetricVsRpm`. The toolboxes are imported lazily inside the functions, are never vendored and never required (extras `mosqito` and `sottek-hearing-model`; none for SQAT); without them the wrappers raise `ImportError` with the install command.
 
 **v0.7 Plotting** (released 2026-10-28):
-`rota.plot` (moved from v0.5, then v0.6): the functions of section 2.10, a gallery (`docs/plotting.md`, example 11), examples 01 and 02 rewritten on it.
+`rota_order.plot` (moved from v0.5, then v0.6): the functions of section 2.10, a gallery (`docs/plotting.md`, example 11), examples 01 and 02 rewritten on it.
+
+**v0.8 One name** (released 2026-10-28):
+The project, the distribution and the import name are unified: `rota-order`, `import rota_order as ro` (breaking; no compatibility package). The plotting gallery uses realistic synthetic recordings. Fix of order maps with `min_rpm`.
 
 **v1.0 Official release**:
 Full validation report, English documentation, PyPI release, Zenodo DOI. Submit a validation paper (JOSS or an acoustics conference).
@@ -183,7 +186,7 @@ Full validation report, English documentation, PyPI release, Zenodo DOI. Submit 
 
 - Real-time audio I/O (only a block-wise synthesis API is provided), GUI;
 - Analysis specific to rotor dynamics (orbits, Bode plots);
-- Spatial audio (DoA, beamforming, Ambisonics decoding and binaural rendering): to be a separate companion package; ROTA only guarantees multichannel linear operators (design principle 6);
+- Spatial audio (DoA, beamforming, Ambisonics decoding and binaural rendering): to be a separate companion package; rota-order only guarantees multichannel linear operators (design principle 6);
 - Reading any proprietary or commercial file format (section 4);
 - The metrics themselves: loudness, sharpness, roughness, ECMA-418-2 tonality.
 
@@ -191,13 +194,13 @@ Full validation report, English documentation, PyPI release, Zenodo DOI. Submit 
 
 ## 4. Independent implementation rules
 
-ROTA's API is friendly to MATLAB users, but the implementation is fully independent. All contributors follow the rules below.
+rota-order's API is friendly to MATLAB users, but the implementation is fully independent. All contributors follow the rules below.
 
 ### Prohibited
 
 1. Reading, copying or translating the source code or internal data structures of any commercial software (MATLAB toolboxes, commercial NVH analysis and simulation software). This includes opening built-in functions with `edit` or `type`, and stepping into built-in functions in a debugger.
 2. Copying the text, example code or example data of commercial software documentation. Docstrings, tutorials and examples are all written independently. Example data are generated by `synth_runup`, or come from own measurements with clear rights.
-3. Implementing or bundling a parser for any proprietary or unpublished file format, or describing its internal structure in the documentation. Users convert their data to WAV, NPZ, HDF5 or CSV before using ROTA.
+3. Implementing or bundling a parser for any proprietary or unpublished file format, or describing its internal structure in the documentation. Users convert their data to WAV, NPZ, HDF5 or CSV before using rota-order.
 4. Porting third-party code whose licence is unclear, including research code shared by colleagues or collaborators. Reimplement it only from the published paper, and cite the paper.
 5. Using trademarks such as MATLAB in the project name, the package name or in promotion.
 6. Writing "reproduces function X of software Y" in code comments. Write "implemented based on reference Z" instead.
@@ -213,12 +216,12 @@ ROTA's API is friendly to MATLAB users, but the implementation is fully independ
 ### Process
 
 - The PR template contains one confirmation: "This submission did not consult the source code of any commercial software and did not port code of unclear licence."
-- Before consulting or reusing third-party open-source code, confirm that its licence is compatible with ROTA, and acknowledge it in the NOTICE file.
+- Before consulting or reusing third-party open-source code, confirm that its licence is compatible with rota-order, and acknowledge it in the NOTICE file.
 - Before each release, search the whole git history for sensitive words (commercial software names, partners, vehicle models, personal names, local paths).
 
 ### Independence statement (placed in the README)
 
-> ROTA is an independent academic project. It is not affiliated with, endorsed by, or supported by MathWorks or any commercial software vendor. MATLAB is a registered trademark of The MathWorks, Inc.
+> rota-order is an independent academic project. It is not affiliated with, endorsed by, or supported by MathWorks or any commercial software vendor. MATLAB is a registered trademark of The MathWorks, Inc.
 
 ---
 
@@ -227,13 +230,13 @@ ROTA's API is friendly to MATLAB users, but the implementation is fully independ
 ### 5.1 Principles
 
 - **Analytic ground truth is the first standard; MATLAB is the second reference.** The purpose of the comparison is to confirm that the two agree in their estimate of the same physical quantity, not to copy MATLAB's output digit for digit. When the two disagree, the ground truth decides, and the report explains the source of the difference.
-- **Specify parameters explicitly.** In MATLAB calls, give all parameters explicitly (window function, resolution, overlap, amplitude type, filter bandwidth, etc.) and do not rely on defaults. This keeps the comparison reproducible, and ROTA does not need to copy MATLAB's default settings.
+- **Specify parameters explicitly.** In MATLAB calls, give all parameters explicitly (window function, resolution, overlap, amplitude type, filter bandwidth, etc.) and do not rely on defaults. This keeps the comparison reproducible, and rota-order does not need to copy MATLAB's default settings.
 - **Compare physical quantities, not grids.** The framing details of the two sides may differ. The comparison therefore uses derived quantities such as amplitudes along order ridges, peak positions and rpm curves, and does not compare map cells one by one.
 - **Round-trip tests for resynthesis.** Synthesis → analysis → comparison with the input table; broadband synthesis uses self-checks (window power sum, modulation spectrum).
 
 ### 5.2 Comparison table
 
-| ROTA | MATLAB (Signal Processing Toolbox) | Comparison method | Comparison metric |
+| rota-order | MATLAB (Signal Processing Toolbox) | Comparison method | Comparison metric |
 |---|---|---|---|
 | `tacho_to_rpm` | `tachorpm` | Direct comparison | Rpm curve error |
 | `rpm_from_ridge` | `rpmtrack` | Direct comparison | Rpm curve error; boundary-hit flag |
@@ -248,9 +251,9 @@ ROTA's API is friendly to MATLAB users, but the implementation is fully independ
 | `remove_orders`, `residual` | No public counterpart | Indirect: original signal minus the `orderwaveform` result | Remaining energy of that order in the residual |
 | `resolution_check` | None | By definition (T8) | Whether the warning is triggered |
 | `frequency_slice` | No public counterpart | Analytic truth | Position and amplitude of the resonance peak |
-| `overall_level`, `rota.tonal` | Not compared with MATLAB | Cross-validation against the `sound_level_meter` of SQAT (open source, verified against IEC 61672-1) | Level difference; TNR/PR difference |
-| `rota.resynth` | No public counterpart | Round-trip test (T9); self-check (T11) | Table round-trip error; pumping peak |
-| `rota.metrics`, `synth_runup` | None | By definition | — |
+| `overall_level`, `rota_order.tonal` | Not compared with MATLAB | Cross-validation against the `sound_level_meter` of SQAT (open source, verified against IEC 61672-1) | Level difference; TNR/PR difference |
+| `rota_order.resynth` | No public counterpart | Round-trip test (T9); self-check (T11) | Table round-trip error; pumping peak |
+| `rota_order.metrics`, `synth_runup` | None | By definition | — |
 
 ### 5.3 Test signals
 
@@ -294,7 +297,7 @@ validation/
 ├── matlab/
 │   └── run_reference.m  # contains only: load data, call public functions, save output
 ├── reference/           # MATLAB output, with MATLAB and toolbox version information
-└── compare.py           # runs ROTA, compares with the truth and with MATLAB, generates the report
+└── compare.py           # runs rota-order, compares with the truth and with MATLAB, generates the report
 ```
 
 1. Run `make_signals.py` to generate the test signals and the analytic truth.
@@ -308,7 +311,7 @@ Before publishing the MATLAB output in `reference/`, confirm that the MATLAB lic
 
 ## 6. Design constraints: lessons from earlier work
 
-The following experience comes from the author's earlier work on order analysis, preparation of listening-experiment stimuli and sound synthesis, and it shaped the design of several functions above. ROTA reuses none of that code; it takes over only the lessons.
+The following experience comes from the author's earlier work on order analysis, preparation of listening-experiment stimuli and sound synthesis, and it shaped the design of several functions above. rota-order reuses none of that code; it takes over only the lessons.
 
 **Speed and phase**
 
@@ -351,7 +354,7 @@ The following experience comes from the author's earlier work on order analysis,
 
 23. Without hardware synchronisation between several acquisition systems, only hand claps are available, with an accuracy of tens of ms; a recording without a marker cannot be aligned. → `align_signals` supports start and end markers and drift estimation, and reports the uncertainty; the documentation recommends one marker at the start and one at the end of each recording.
 24. Slow channels (vehicle speed, acceleration) have a sampling rate at an integer ratio to the acoustic channels (e.g. 5:1), and the channel layout and calibration differ from vehicle to vehicle. → `regularize_control` accepts any sampling rate; calibration factors are passed explicitly.
-25. Spherical-harmonic conventions (ACN/SN3D, Condon–Shortley phase, N3D scaling) are inconsistent between codes, which can rotate a directional pattern by 180° or weight it per order. This is a lesson for the companion spatial package; the ROTA core only guarantees per-channel linearity and builds in no spherical-harmonic convention.
+25. Spherical-harmonic conventions (ACN/SN3D, Condon–Shortley phase, N3D scaling) are inconsistent between codes, which can rotate a directional pattern by 180° or weight it per order. This is a lesson for the companion spatial package; the rota-order core only guarantees per-channel linearity and builds in no spherical-harmonic convention.
 
 **Sound manipulation**
 
@@ -397,4 +400,4 @@ Entries marked "to be verified" are checked against their bibliographic records 
 
 ## 8. Author and acknowledgements
 
-ROTA is designed, implemented and maintained by Zhenxian Li. Claude (Anthropic) was used as an assistant during development.
+rota-order is designed, implemented and maintained by Zhenxian Li. Claude (Anthropic) was used as an assistant during development.

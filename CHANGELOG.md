@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-28
+
+One name everywhere: `rota-order`, imported as `rota_order`.
+
+### Changed
+
+- Breaking: the import name is now `rota_order`, the same as the project and distribution name `rota-order` (`import rota_order as ro`; the recommended short alias). The package `rota` no longer exists and there is no compatibility package. Replace `import rota` by `import rota_order as ro` and `rota.` by `ro.` (or `from rota.` by `from rota_order.`). Nothing else changes: functions, arguments and results are the same.
+- The project is called `rota-order` (all lowercase) in the documentation, docstrings and examples.
+- Breaking: environment variables `ROTA_SQAT_PATH`, `ROTA_MATLAB_ENGINE_NAME` and `ROTA_REF_PART` are now `ROTA_ORDER_SQAT_PATH`, `ROTA_ORDER_MATLAB_ENGINE_NAME` and `ROTA_ORDER_REF_PART` (the old names are not read); in the MATLAB reference script the internal variable `ROTA_REF_LOG` is now `ROTA_ORDER_REF_LOG`, and the shared MATLAB engine of the CI is named `rota_order_ci`.
+- Breaking: the key `"rota_version"` of the provenance and configuration sidecars (`synth` configurations, `OrderTable.config`, `provenance`) is now `"rota_order_version"`; the old key is not read.
+- `rota_order.plot.order_prominence`: with `rpm_bins=` a single speed bin without frames between two prominent bins is now bridged, so a prominent range is shaded as one span (a gap of several bins, or a bin with a point below the criterion, stays open).
+- The plotting gallery (`examples/11_plot_gallery.py`, `docs/plotting.md`, `docs/images/plot_*.png`) uses realistic synthetic recordings (`synth_scenario("ice_runup")` and `"ev_runup"`) instead of a textbook signal.
+- `rota_order.tonal.order_prominence` documents that all orders share one frame length (the one the lowest order needs) and how to get the speed resolution of a high order (one call per order).
+
+### Fixed
+
+- `rota_order.maps.rpm_order_map(min_rpm=...)`: frames in which the speed falls below `min_rpm` were placed at `min_rpm` with a wrong shaft angle (their order content smeared). They are now left out of the map, so `rpm_min >= min_rpm`; `ValueError` if no frame remains. This also removes frames below the default floor (2 % of the maximum speed) near standstill. `rota_order.tonal.order_prominence` passes `min_rpm` through and is affected in the same way, and `rota_order.metrics.order_residual_energy`, which builds order maps with the default floor, may change slightly for records that start near standstill.
+- `rota_order.plot.compare_maps`: when the changed cells lie below the colour floor of the level panels (e.g. an order next to a dominant low-order rumble), the difference scale collapsed to rounding noise. It is now set by the changed cells near their own row maximum, per difference panel, and a `UserWarning` suggests a larger `dynamic_range` when a coherent change lies below the colour floor.
+
 ## [0.7.0] - 2026-10-28
 
 Figures of ROTA results.
@@ -131,7 +150,8 @@ Core chain for the analysis of a run-up with a tachometer. Development milestone
 - Package metadata, `README.md`, `CONTRIBUTING.md`, `CITATION.cff`, issue and pull request templates, and a GitHub Actions workflow that runs the tests on Python 3.10 to 3.13.
 - Licence: GPL-3.0-or-later.
 
-[Unreleased]: https://github.com/ZhenxianLi/rota-order/compare/v0.7.0...main
+[Unreleased]: https://github.com/ZhenxianLi/rota-order/compare/v0.8.0...main
+[0.8.0]: https://github.com/ZhenxianLi/rota-order/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/ZhenxianLi/rota-order/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/ZhenxianLi/rota-order/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/ZhenxianLi/rota-order/compare/v0.4.0...v0.5.0
