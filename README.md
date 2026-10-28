@@ -27,7 +27,7 @@ Pre-alpha. The current release is 0.6.0; functions and signatures may still chan
 | `rota.synth` | Speed profiles and run-up signals with analytic ground truth; tone-plus-noise listening stimuli; realistic scenarios (engine run-up, electric drive, cruise) with transfer paths, background noise and recorder impairments | 0.1, 0.3, 0.4 |
 | `rota.metrics` | Speed-track error, waveform similarity (energy-weighted), residual order energy, window and pumping checks, envelope statistics | 0.1–0.3 |
 | `rota.tonal` | Bridge to open-source psychoacoustic tools: A/C weighting (IEC 61672-1), calibrated levels and resampling to 48 kHz, octave and 1/3-octave bands (IEC 61260-1) and band levels along rpm, tone-to-noise ratio and prominence ratio of orders (ECMA-418-1, 3rd edition) | 0.5 |
-| `rota.bridges` | Optional thin wrappers for MoSQITo, the Sottek hearing model (ECMA-418-2) and SQAT (MATLAB, through the MATLAB Engine API for Python): one-line time-varying loudness, sharpness, roughness and tonality on ROTA's conventions, binned along rpm; the toolboxes are not installed with ROTA and are imported lazily | 0.6 |
+| `rota.bridges` | Optional thin wrappers for MoSQITo, the Sottek hearing model (ECMA-418-2) and SQAT (MATLAB, through the MATLAB Engine API for Python): one-line time-varying loudness, sharpness, roughness and tonality on ROTA's conventions; the result's `vs_rpm` method bins it along rpm (`bridges.mosqito.loudness(x, fs).vs_rpm(rpm, t_rpm)`) and keeps its name, unit and source; the toolboxes are not installed with ROTA and are imported lazily | 0.6 |
 | `rota.plot` | Plotting helpers, kept separate from computation | v0.7 (planned) |
 
 Planned for v1.0: full validation report, complete documentation, Zenodo DOI.
@@ -41,8 +41,6 @@ Python 3.10 or later, NumPy 1.23 or later, SciPy 1.9 or later. From PyPI:
 ```
 pip install rota-order
 ```
-
-The distribution is called `rota-order` because the name `rota` is taken on PyPI; the import name is `rota` (`import rota`).
 
 From source:
 
@@ -59,7 +57,7 @@ pip install -e ".[test]"
 pytest
 ```
 
-Matplotlib is an optional extra for `rota.plot` and the examples: `pip install -e ".[plot]"`. The psychoacoustic toolboxes behind `rota.bridges` are optional extras too: `pip install -e ".[mosqito]"` (MoSQITo, Apache-2.0) and `pip install -e ".[shm]"` (sottek-hearing-model, AGPL-3.0-only, Python 3.11 or later; mind its licence). A plain `pip install rota-order` installs only NumPy and SciPy.
+Matplotlib is an optional extra for `rota.plot` and the examples: `pip install -e ".[plot]"`. The psychoacoustic toolboxes behind `rota.bridges` are optional extras too: `pip install -e ".[mosqito]"` (MoSQITo, Apache-2.0) and `pip install -e ".[sottek-hearing-model]"` (sottek-hearing-model, AGPL-3.0-only, Python 3.11 or later; mind its licence); the extras are named like the toolboxes. There is no extra for SQAT: the MATLAB Engine API for Python (`matlabengine`) must match your MATLAB release. A plain `pip install rota-order` installs only NumPy and SciPy.
 
 ## Quick start
 
@@ -89,7 +87,7 @@ The amplitude convention of every function is stated in its docstring.
 
 ## Examples
 
-Scripts in [examples/](https://github.com/ZhenxianLi/rota-order/tree/main/examples) cover order maps and slices, tachometer and tacholess speed, order extraction and removal, order-table resynthesis, and two complete synthetic recordings that you can listen to, an engine run-up and an electric drive (01 to 06); three bridges to open-source psychoacoustic toolboxes (07 to 09); and a worked analysis (10). Each builds its signal with `rota.synth` and prints its results against the known truth.
+Scripts in [examples/](https://github.com/ZhenxianLi/rota-order/tree/main/examples) cover order maps and slices, tachometer and tacholess speed, order extraction and removal, order-table resynthesis, and two complete synthetic recordings that you can listen to, an engine run-up and an electric drive (01 to 06); three bridges to open-source psychoacoustic toolboxes (07 to 09; 07, 08 and 10 call them through `rota.bridges`); and a worked analysis (10). Each builds its signal with `rota.synth` and prints its results against the known truth.
 
 ![Campbell diagram, order map, engine speed and firing-order level of a synthetic engine run-up](https://raw.githubusercontent.com/ZhenxianLi/rota-order/main/docs/images/realistic_runup.png)
 
@@ -103,25 +101,27 @@ Scripts in [examples/](https://github.com/ZhenxianLi/rota-order/tree/main/exampl
 
 ### Psychoacoustic toolboxes (optional)
 
-`rota.bridges` calls MoSQITo, the Sottek hearing model or SQAT in one line, on ROTA's conventions (sound pressure in Pa, any sampling rate, calibration factor), and bins the result along rpm:
+`rota.bridges` calls MoSQITo, the Sottek hearing model or SQAT in one line, on ROTA's conventions (sound pressure in Pa, any sampling rate, calibration factor), and the `vs_rpm` method of the result bins it along rpm:
 
 ```python
-from rota.bridges import along_rpm, mosqito, shm
+from rota import bridges
 
-loud = mosqito.loudness(x, fs, calibration=cal)             # ISO 532-1:2017, sone
-res = along_rpm(loud, rpm, t, bin_width=250.0)              # N5 per rpm bin, start-up skipped
-ton = shm.tonality(x, fs, calibration=cal)                  # ECMA-418-2:2025, tu_HMS
+loud = bridges.mosqito.loudness(x, fs, calibration=cal)        # ISO 532-1:2017, sone
+n5 = loud.vs_rpm(rpm, t_rpm, bin_width=250.0)                  # N5 per rpm bin, start-up skipped
+ton = bridges.sottek_hearing_model.tonality(x, fs, calibration=cal).vs_rpm(rpm, t_rpm)   # ECMA-418-2:2025, tu_HMS
 ```
+
+A bridge module is named exactly like the toolbox it wraps (`mosqito`, `sottek_hearing_model`, `sqat`), so the quantity and the toolbox are visible in the same line; a short alias is up to you (`from rota.bridges import sottek_hearing_model as shm`). `rpm` is the speed in rpm at the times `t_rpm` in s, on the time axis of `x`. `vs_rpm` applies the start-up exclusion and the aggregation recommended for the metric (any keyword of `rota.slices.metric_vs_rpm` overrides them), and the binned result carries the `name`, `unit` and `source` of the metric. For full control call `rota.slices.metric_vs_rpm(m.values, m.t, rpm, t_rpm, ...)` on the metric `m` yourself.
 
 The toolboxes are never vendored or required; without one, the call raises `ImportError` with the install command. ROTA does not include, copy or redistribute any of their code: each keeps its own licence, and you install it yourself. Please cite the toolbox you use as its authors ask:
 
 | Module | Toolbox | Licence | Needs | Cite |
 |---|---|---|---|---|
 | `rota.bridges.mosqito` | [MoSQITo](https://github.com/Eomys/MoSQITo) 1.2.1: ISO 532-1 loudness, DIN 45692 sharpness, Daniel & Weber roughness | Apache-2.0 | `pip install mosqito` (and matplotlib) | Green Forge Coop (2024). MOSQITO, version 1.2.1. Zenodo. [doi:10.5281/zenodo.11026796](https://doi.org/10.5281/zenodo.11026796) |
-| `rota.bridges.shm` | [sottek-hearing-model](https://github.com/mlotinga/sottek-hearing-model) 0.1.14: ECMA-418-2:2025 tonality, loudness, roughness | AGPL-3.0-only | `pip install sottek-hearing-model`, Python 3.11 or later | Lotinga, M. J. B., Torjussen, M., & Felix Greco, G. (2025). Verified implementations of the Sottek psychoacoustic Hearing Model standardised sound quality metrics (ECMA-418-2 loudness, tonality and roughness). Forum Acusticum / Euronoise 2025, Malaga |
+| `rota.bridges.sottek_hearing_model` | [sottek-hearing-model](https://github.com/mlotinga/sottek-hearing-model) 0.1.14: ECMA-418-2:2025 tonality, loudness, roughness | AGPL-3.0-only | `pip install sottek-hearing-model`, Python 3.11 or later | Lotinga, M. J. B., Torjussen, M., & Felix Greco, G. (2025). Verified implementations of the Sottek psychoacoustic Hearing Model standardised sound quality metrics (ECMA-418-2 loudness, tonality and roughness). Forum Acusticum / Euronoise 2025, Malaga. [doi:10.61782/fa.2025.0951](https://doi.org/10.61782/fa.2025.0951) |
 | `rota.bridges.sqat` | [SQAT](https://github.com/ggrecow/SQAT) v2.0 (MATLAB): ISO 532-1 loudness, DIN 45692 sharpness, Daniel & Weber roughness, ECMA-418-2:2025 tonality | GPL-3.0 (some files BSD-3-Clause or MIT) | a licensed MATLAB with the Signal Processing Toolbox, `pip install matlabengine` matching your MATLAB release, a SQAT checkout in `ROTA_SQAT_PATH` | Felix Greco, G., Merino-Martínez, R., Osses, A., & Lotinga, M. J. B. (2026). SQAT: a sound quality analysis toolbox for MATLAB. Zenodo. [doi:10.5281/zenodo.7934709](https://doi.org/10.5281/zenodo.7934709); Felix Greco, G., Merino-Martínez, R., Osses, A., & Langer, S. C. (2023). INTER-NOISE 2023. [doi:10.3397/IN_2023_1075](https://doi.org/10.3397/IN_2023_1075) |
 
-The Sottek hearing model is AGPL-3.0-only: ROTA (GPL-3.0-or-later) may be used together with it, but whoever distributes the combination, or offers it to others over a network, must meet the AGPL-3.0 terms for the model's part. Open-source implementations of psychoacoustic metrics, with the standard and edition each follows, are listed in [LISQM](https://zhenxianli.github.io/LISQM/).
+The Sottek hearing model is AGPL-3.0-only: ROTA (GPL-3.0-or-later) may be used together with it, but whoever distributes the combination, or offers it to others over a network, must meet the AGPL-3.0 terms for the model's part. Examples 07, 08 and 10 use these bridges; example 09 runs SQAT in MATLAB in CI, and its README shows `rota.bridges.sqat` on a local MATLAB. Open-source implementations of psychoacoustic metrics, with the standard and edition each follows, are listed in [LISQM](https://zhenxianli.github.io/LISQM/).
 
 ### Listen
 

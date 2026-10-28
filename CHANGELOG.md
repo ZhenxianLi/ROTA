@@ -6,21 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.6.0] - 2026-10-27
+## [0.6.0] - 2026-10-28
 
 Optional bridges to psychoacoustic toolboxes.
 
 ### Added
 
-- `rota.bridges`: optional thin wrappers for open-source psychoacoustic toolboxes, imported lazily inside the functions (never vendored, never required; `ImportError` with the install command when missing). `rota.bridges.mosqito`: ISO 532-1:2017 time-varying loudness, DIN 45692:2009 sharpness (optionally from a loudness result) and Daniel and Weber roughness. `rota.bridges.shm`: ECMA-418-2:2025 (4th edition) tonality, loudness (optionally from a tonality result) and roughness of the Sottek hearing model, with the Matplotlib `rcParams` it changes on import restored. `TimeMetric` result container and `along_rpm`, which bins a result along rpm with `metric_vs_rpm` using the recommended start-up exclusion and aggregation and holds the speed for a last frame one sample past the end of the record.
+- `rota.bridges`: optional thin wrappers for open-source psychoacoustic toolboxes, imported lazily inside the functions (never vendored, never required; `ImportError` with the install command when missing). A bridge module is named exactly like the toolbox it wraps. `rota.bridges.mosqito`: ISO 532-1:2017 time-varying loudness, DIN 45692:2009 sharpness (optionally from a loudness result) and Daniel and Weber roughness. `rota.bridges.sottek_hearing_model`: ECMA-418-2:2025 (4th edition) tonality, loudness (optionally from a tonality result) and roughness of the Sottek hearing model, with the Matplotlib `rcParams` it changes on import restored. The functions return a `TimeMetric` result container whose method `vs_rpm(rpm, t_rpm, **kwargs)` bins the result along rpm with `metric_vs_rpm`, so that the quantity and the toolbox are visible in one line (`bridges.mosqito.loudness(x, fs).vs_rpm(rpm, t_rpm)`): it uses the recommended start-up exclusion, aggregation and threshold of the metric (keyword arguments override them), holds the last speed for frames that lie after the last speed sample by no more than the speed-sample interval plus the frame step of the metric (the Sottek hearing model puts its last tonality and loudness frame at the signal length rounded up to a multiple of 256 samples at 48 kHz, up to 5.33 ms after the last sample), warns about the frames it cannot assign a speed (outside the speed record, or where the speed is NaN; only frames that would otherwise be used are counted), says so in the `ValueError` when every frame after the start-up exclusion is at or below the threshold (`threshold=None` means none), and fills `name`, `unit` and `source` of the binned result from the metric. For full control, call `rota.slices.metric_vs_rpm(m.values, m.t, rpm, t_rpm, ...)` yourself.
 - `rota.bridges.sqat`: optional wrappers that call SQAT v2.0 (loudness, sharpness, roughness, tonality) in a local, licensed MATLAB through the MATLAB Engine API for Python; tested with a stub engine, the tests against a real MATLAB are skipped unless `matlab.engine` and `ROTA_SQAT_PATH` are available (hosted runners cannot license an engine started from Python; the `sqat-engine` workflow is a manual probe).
-- Optional dependency extras `mosqito` and `shm` (no extra for SQAT: `matlabengine` must match the user's MATLAB release).
+- Optional dependency extras `mosqito` and `sottek-hearing-model`, named like the toolbox (no extra for SQAT: `matlabengine` must match the user's MATLAB release).
 - Each wrapper states the licence of its toolbox and the citation its authors ask for; the README lists them.
 
 ### Changed
 
+- `rota.slices.MetricVsRpm` gains the optional fields `name`, `unit` and `source` (default: empty strings; filled by `TimeMetric.vs_rpm` from the metric, left empty by `metric_vs_rpm`). Backward compatible: construction by keyword and attribute access are unchanged.
 - The repository is renamed `rota-order` (github.com/ZhenxianLi/rota-order), the same name as the PyPI package; links are updated and the old address redirects. The import name stays `rota`.
+- Examples 07, 08 and 10 use `rota.bridges`: MoSQITo and the Sottek hearing model are called through `rota.bridges.mosqito` and `rota.bridges.sottek_hearing_model`, and the results are binned with `TimeMetric.vs_rpm`, which replaces the resampling to 48 kHz, start-up exclusions, aggregations, tonality threshold, last-frame speed hold, silencing of MoSQITo and restoring of Matplotlib's settings that the examples did by hand; example 07 still calls MoSQITo's `tnr_ecma_st` directly (not wrapped: ROTA has its own tone-to-noise ratio). The printed numbers, figures and audio files of the examples are unchanged. The install notes of the examples use the extras `mosqito` and `sottek-hearing-model`, and `examples/09_sqat_bridge/README.md` shows `rota.bridges.sqat` with a licensed local MATLAB (CI keeps `run_sqat.m`, since a MATLAB engine started from Python is not licensed on hosted runners).
 - Roadmap: `rota.plot` moves to v0.7.
+- Releases are published by continuous integration: a commit `Release X.Y.Z` on `main` runs the tests, uploads to PyPI, tags `vX.Y.Z` and creates the GitHub release with the CHANGELOG section as notes (`.github/workflows/publish.yml`; see CONTRIBUTING.md).
 
 ## [0.5.0] - 2026-10-27
 

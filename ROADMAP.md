@@ -6,7 +6,7 @@ Latin *rota* means "wheel", from the same root as rotate, rotation and rotor.
 
 ROTA is a lightweight, open-source, validated Python library for order analysis of noise and vibration signals from rotating machinery (engines, electric motors, gearboxes, etc.), with tools for order-based sound resynthesis. It depends only on NumPy and SciPy. Each function is implemented independently from the published literature and comes with a validation script.
 
-Naming convention: the project is written ROTA in running text; the import name in code is lowercase `rota` (`import rota`); the distribution on PyPI is `rota-order` (`pip install rota-order`), because the name `rota` is taken on PyPI.
+Naming convention: the project is written ROTA in running text; the import name in code is lowercase `rota` (`import rota`); the repository and the distribution on PyPI are `rota-order` (`pip install rota-order`).
 
 Licence: GPL-3.0-or-later (decided 2026-10-25).
 
@@ -157,8 +157,8 @@ All of `rota.resynth`, `angular_to_time`, `stationarize`, `virtual_rpm`, `synth_
 **v0.5 Application layer and psychoacoustic bridges** (released 2026-10-27):
 `frequency_slice`, `overall_level`, `metric_vs_rpm`, `frequency_to_order`, `order_share`, Δrpm binning, `align_signals`, `rota.tonal` (A/C weighting, levels, calibrated 48 kHz resampling, octave and 1/3-octave band levels, `order_prominence`). Examples linking ROTA to three open-source psychoacoustic toolboxes as optional, external dependencies (never vendored; from 0.6 `rota.bridges` offers thin wrappers, imported lazily): MoSQITo (Python), the Sottek hearing model implementation of ECMA-418-2 (Python) and SQAT (MATLAB, run in CI like the black-box reference) — for example how loudness, tonality or roughness vary with rpm after an order is removed or boosted. A complete worked analysis example: preparation, order analysis, extraction, psychoacoustics along rpm, order contributions with audio, and an engineering conclusion.
 
-**v0.6 Optional toolbox bridges** (released 2026-10-27):
-`rota.bridges`: thin wrappers that call the documented public functions of MoSQITo (ISO 532-1 loudness, DIN 45692 sharpness, Daniel and Weber roughness), the Sottek hearing model (ECMA-418-2:2025 tonality, loudness, roughness) and SQAT via the MATLAB Engine on ROTA's conventions (Pa, calibration factor, 48 kHz), and `along_rpm` to bin the results along rpm. The toolboxes are imported lazily inside the functions, are never vendored and never required (extras `mosqito` and `shm`); without them the wrappers raise `ImportError` with the install command.
+**v0.6 Optional toolbox bridges** (released 2026-10-28):
+`rota.bridges`: thin wrappers that call the documented public functions of MoSQITo (ISO 532-1 loudness, DIN 45692 sharpness, Daniel and Weber roughness), the Sottek hearing model (ECMA-418-2:2025 tonality, loudness, roughness) and SQAT via the MATLAB Engine on ROTA's conventions (Pa, calibration factor, 48 kHz). A bridge module and its extra are named exactly like the toolbox (`mosqito`, `sottek_hearing_model` / `sottek-hearing-model`, `sqat`). Each function returns a `TimeMetric`, whose method `vs_rpm` bins it along rpm with `metric_vs_rpm` (`bridges.mosqito.loudness(x, fs).vs_rpm(rpm, t_rpm)`) and hands the metric's name, unit and source on to the binned `MetricVsRpm`. The toolboxes are imported lazily inside the functions, are never vendored and never required (extras `mosqito` and `sottek-hearing-model`; none for SQAT); without them the wrappers raise `ImportError` with the install command.
 
 **v0.7 Plotting**:
 `rota.plot` (moved from v0.6).
