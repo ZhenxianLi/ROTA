@@ -18,6 +18,13 @@ name: publish
 # 2. Publish a GitHub release by hand whose tag is v + rota.__version__. The workflow
 #    runs the tests, builds the distributions and uploads them to PyPI.
 #
+# 3. Run the workflow by hand with a version X.Y.Z: it only rewrites the notes of the
+#    existing GitHub release vX.Y.Z from the current main (nothing is built or
+#    uploaded), for example after adding .github/release-highlights/X.Y.Z.md.
+#
+# Release notes = .github/release-highlights/X.Y.Z.md if present (figures, a short
+# tour), then the CHANGELOG section of X.Y.Z.
+#
 # Any other push to main stops at the first job. A release that this workflow creates
 # with its own GITHUB_TOKEN does not start the workflow again (GitHub starts no
 # workflow for events caused by GITHUB_TOKEN), and files already on PyPI are skipped
@@ -29,6 +36,11 @@ on:
     branches: [main]
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      notes_for:
+        description: "Rewrite the notes of the existing release vX.Y.Z from the current main (version X.Y.Z)"
+        required: true
 
 permissions: {}
 
@@ -160,3 +172,22 @@ jobs:
         run: |
           gh release create "v${VERSION}" --target "${GITHUB_SHA}" \
             --title "ROTA v${VERSION}" --notes-file "${RUNNER_TEMP}/notes.md"
+
+  refresh-notes:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Rewrite the notes of the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ inputs.notes_for }}
+        run: |
+          printf '%s\n' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "not a version: ${VERSION}"; exit 1; }
+          python3 .github/scripts/release_notes.py "${VERSION}" > "${RUNNER_TEMP}/notes.md"
+          gh release edit "v${VERSION}" --notes-file "${RUNNER_TEMP}/notes.md"
