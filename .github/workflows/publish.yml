@@ -19,8 +19,9 @@ name: publish
 #    runs the tests, builds the distributions and uploads them to PyPI.
 #
 # 3. Run the workflow by hand with a version X.Y.Z: it only rewrites the notes of the
-#    existing GitHub release vX.Y.Z from the current main (nothing is built or
-#    uploaded), for example after adding .github/release-highlights/X.Y.Z.md.
+#    existing GitHub release vX.Y.Z from the current main and sets its title to
+#    "rota-order vX.Y.Z" (nothing is built or uploaded), for example after adding
+#    .github/release-highlights/X.Y.Z.md; with title_only, only the title is set.
 #
 # Release notes = .github/release-highlights/X.Y.Z.md if present (figures, a short
 # tour), then the CHANGELOG section of X.Y.Z.
@@ -39,8 +40,12 @@ on:
   workflow_dispatch:
     inputs:
       notes_for:
-        description: "Rewrite the notes of the existing release vX.Y.Z from the current main (version X.Y.Z)"
+        description: "Rewrite the existing release vX.Y.Z from the current main (version X.Y.Z)"
         required: true
+      title_only:
+        description: "Only set the title to 'rota-order vX.Y.Z' and keep the notes"
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -171,7 +176,7 @@ jobs:
           VERSION: ${{ needs.check.outputs.version }}
         run: |
           gh release create "v${VERSION}" --target "${GITHUB_SHA}" \
-            --title "ROTA v${VERSION}" --notes-file "${RUNNER_TEMP}/notes.md"
+            --title "rota-order v${VERSION}" --notes-file "${RUNNER_TEMP}/notes.md"
 
   refresh-notes:
     if: github.event_name == 'workflow_dispatch'
@@ -182,12 +187,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Rewrite the notes of the release
+      - name: Rewrite the release title and notes
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           VERSION: ${{ inputs.notes_for }}
+          TITLE_ONLY: ${{ inputs.title_only }}
         run: |
           printf '%s\n' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "not a version: ${VERSION}"; exit 1; }
-          python3 .github/scripts/release_notes.py "${VERSION}" > "${RUNNER_TEMP}/notes.md"
-          gh release edit "v${VERSION}" --notes-file "${RUNNER_TEMP}/notes.md"
+          if [ "$TITLE_ONLY" = "true" ]; then
+            gh release edit "v${VERSION}" --title "rota-order v${VERSION}"
+          else
+            python3 .github/scripts/release_notes.py "${VERSION}" > "${RUNNER_TEMP}/notes.md"
+            gh release edit "v${VERSION}" --title "rota-order v${VERSION}" --notes-file "${RUNNER_TEMP}/notes.md"
+          fi
