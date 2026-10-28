@@ -1,13 +1,13 @@
-"""Tests of rota.slices against analytic signals (no rota.synth dependency)."""
+"""Tests of rota_order.slices against analytic signals (no rota_order.synth dependency)."""
 
 import dataclasses
 
 import numpy as np
 import pytest
 
-from rota.maps import rpm_frequency_map, rpm_order_map
-from rota.slices import OrderSlice, Spectrum, order_slice, order_spectrum
-from rota.speed import rpm_to_phase
+from rota_order.maps import rpm_frequency_map, rpm_order_map
+from rota_order.slices import OrderSlice, Spectrum, order_slice, order_spectrum
+from rota_order.speed import rpm_to_phase
 
 FS = 8000.0
 TRIM = 3  # frames dropped at each end (filter and window edge effects)

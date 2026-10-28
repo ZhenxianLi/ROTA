@@ -6,11 +6,11 @@ the analysis alone:
 
 1. Order slices of an order map (RMS, Pa) are binned on a 50 rpm grid with
    ``OrderTable.from_slices``.
-2. ``rota.resynth.synthesize_orders`` renders the table along another speed profile,
+2. ``rota_order.resynth.synthesize_orders`` renders the table along another speed profile,
    an S-shaped run-down from 4200 to 1100 rpm (random start phases, seeded).
-3. The Welch PSD of the residual left by ``rota.extract.remove_orders`` drives
-   ``rota.resynth.synthesize_broadband``.
-4. The sum is analysed again and compared with a reference: ``rota.synth`` rendering
+3. The Welch PSD of the residual left by ``rota_order.extract.remove_orders`` drives
+   ``rota_order.resynth.synthesize_broadband``.
+4. The sum is analysed again and compared with a reference: ``rota_order.synth`` rendering
    the same orders along the same run-down.
 
 The resonance has a fixed frequency, so the gain of each order is a function of speed
@@ -42,7 +42,7 @@ import numpy as np
 from scipy import signal
 from scipy.integrate import trapezoid
 
-import rota
+import rota_order as ro
 
 P_REF = 20e-6  # reference pressure in Pa (dB re 20 uPa), passed explicitly
 FS = 8000.0  # sampling rate, Hz
@@ -96,40 +96,40 @@ def main():
     plt.switch_backend("Agg")  # file output only; no display needed
     # ---- the run-up that is analysed ---------------------------------------------------------
     t_up = np.arange(round(DURATION * FS)) / FS
-    rpm_up = rota.synth.rpm_profiles(
+    rpm_up = ro.synth.rpm_profiles(
         t_up, "linear", start=IDLE_RPM, stop=TOP_RPM, t_start=T_RUNUP, t_stop=DURATION
     )
-    up = rota.synth.synth_runup(FS, rpm_up, ORDERS, seed=7, **SCENE)
+    up = ro.synth.synth_runup(FS, rpm_up, ORDERS, seed=7, **SCENE)
     orders = up.orders
 
     # Order table: order slices of an order map, binned on a speed grid. A dense overlap
     # gives enough frames in every 50 rpm bin at low speed, where a frame spans many seconds of angle.
-    omap_up = rota.maps.rpm_order_map(
+    omap_up = ro.maps.rpm_order_map(
         up.x, FS, up.rpm, order_resolution=0.125, max_order=8.0, overlap=0.9, amplitude="rms"
     )
-    slices = [rota.slices.order_slice(omap_up, o) for o in orders]
-    table = rota.resynth.OrderTable.from_slices(
+    slices = [ro.slices.order_slice(omap_up, o) for o in orders]
+    table = ro.resynth.OrderTable.from_slices(
         slices, GRID, unit="Pa", meta={"source": "synthetic run-up, seed 7"}
     )
 
     # Residual of the run-up and its PSD (edges of the extractor left out).
-    residual, _ = rota.extract.remove_orders(up.x, FS, up.rpm, orders, bandwidth=2.0)
+    residual, _ = ro.extract.remove_orders(up.x, FS, up.rpm, orders, bandwidth=2.0)
     inner = slice(round(0.6 * FS), round((DURATION - 0.2) * FS))
     f_psd, psd = signal.welch(residual[inner], FS, nperseg=NPERSEG)  # Pa^2/Hz, one-sided
 
     # ---- the new signal, rendered from the analysis only --------------------------------------
     t_dn = np.arange(round(RUNDOWN["duration"] * FS)) / FS
-    rpm_dn = rota.synth.rpm_profiles(t_dn, "s_curve", start=RUNDOWN["start"], stop=RUNDOWN["stop"])
-    x_orders, info = rota.resynth.synthesize_orders(table, rpm_dn, FS, phase="random", seed=11)
-    x_noise = rota.resynth.synthesize_broadband(psd, f_psd, FS, t_dn.size, grain=0.05, seed=12)
+    rpm_dn = ro.synth.rpm_profiles(t_dn, "s_curve", start=RUNDOWN["start"], stop=RUNDOWN["stop"])
+    x_orders, info = ro.resynth.synthesize_orders(table, rpm_dn, FS, phase="random", seed=11)
+    x_noise = ro.resynth.synthesize_broadband(psd, f_psd, FS, t_dn.size, grain=0.05, seed=12)
     x_new = x_orders + x_noise
 
-    # Reference: rota.synth on the same run-down (what the resynthesis should contain).
-    ref = rota.synth.synth_runup(FS, rpm_dn, ORDERS, seed=8, **SCENE)
+    # Reference: rota_order.synth on the same run-down (what the resynthesis should contain).
+    ref = ro.synth.synth_runup(FS, rpm_dn, ORDERS, seed=8, **SCENE)
 
-    omap_new = rota.maps.rpm_order_map(x_new, FS, rpm_dn, order_resolution=0.125, max_order=8.0,
+    omap_new = ro.maps.rpm_order_map(x_new, FS, rpm_dn, order_resolution=0.125, max_order=8.0,
                                        amplitude="rms")
-    omap_ref = rota.maps.rpm_order_map(ref.x, FS, rpm_dn, order_resolution=0.125, max_order=8.0,
+    omap_ref = ro.maps.rpm_order_map(ref.x, FS, rpm_dn, order_resolution=0.125, max_order=8.0,
                                        amplitude="rms")
 
     # ---- numbers ----------------------------------------------------------------------------
@@ -144,7 +144,7 @@ def main():
     print("  order |  against the table (round trip) |  against the reference (truth)")
     errors = {}
     for k, order in enumerate(orders):
-        s = rota.slices.order_slice(omap_new, order)
+        s = ro.slices.order_slice(omap_new, order)
         use = (s.t > 0.3) & (s.t < RUNDOWN["duration"] - 0.3)  # frames clear of the record ends
         in_table = table.magnitude_at(s.rpm)[k]  # RMS, Pa
         truth = np.interp(s.t, ref.t, ref.order_amplitude[:, k]) / np.sqrt(2.0)  # peak -> RMS
@@ -201,7 +201,7 @@ def main():
     cb = fig.colorbar(im, ax=[ax_c, ax_d], location="bottom", fraction=0.05, pad=0.02)
     cb.set_label("Level per bin, dB re 20 µPa (RMS)")
     ax_c.set_title("(c) Order map of the resynthesis", loc="left")
-    ax_d.set_title("(d) Order map of the reference (rota.synth)", loc="left")
+    ax_d.set_title("(d) Order map of the reference (rota_order.synth)", loc="left")
     for ax in (ax_c, ax_d):
         ax.set_xlabel("Time (s)")
         ax.set_xlim(0.0, RUNDOWN["duration"])
@@ -213,7 +213,7 @@ def main():
     for order in (3.0, 4.5):
         k = int(np.flatnonzero(orders == order)[0])
         colour = colours[k]  # same colour as in (a)
-        s = rota.slices.order_slice(omap_new, order)
+        s = ro.slices.order_slice(omap_new, order)
         ax_e.plot(s.t, to_db(s.amplitude), color=colour, lw=2.2, label=f"order {order:g}, resynthesis")
         ax_e.plot(ref.t, to_db(ref.order_amplitude[:, k] / np.sqrt(2.0)), color="k", lw=0.8,
                   ls=(0, (4, 3)), label="truth (synth)" if order == 3.0 else None)

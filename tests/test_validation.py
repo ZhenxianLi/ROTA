@@ -2,7 +2,7 @@
 
 The signals come from ``validation/make_signals.py`` (built here in memory,
 nothing is read from disk). Every expected amplitude is read from the truth
-stored in the :class:`rota.synth.SynthSignal` (``order_amplitude``, ``stems``,
+stored in the :class:`rota_order.synth.SynthSignal` (``order_amplitude``, ``stems``,
 ``rpm``, ``pulse_times``), never from the parameter lists that built the
 signal (ROADMAP section 6, item 19).
 
@@ -27,10 +27,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from rota.maps import rpm_frequency_map, rpm_order_map
-from rota.metrics import track_error
-from rota.slices import order_slice, order_spectrum
-from rota.speed import tacho_to_rpm
+from rota_order.maps import rpm_frequency_map, rpm_order_map
+from rota_order.metrics import track_error
+from rota_order.slices import order_slice, order_spectrum
+from rota_order.speed import tacho_to_rpm
 
 # --------------------------------------------------------------------------
 # Signals: validation/make_signals.py is a script, not part of the package.

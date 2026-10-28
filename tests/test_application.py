@@ -1,17 +1,17 @@
-"""Tests of rota._application against analytic ground truth from rota.synth."""
+"""Tests of rota_order._application against analytic ground truth from rota_order.synth."""
 
 import numpy as np
 import pytest
 
-from rota._application import (
+from rota_order._application import (
     frequency_slice,
     frequency_to_order,
     metric_vs_rpm,
     order_share,
     overall_level,
 )
-from rota.maps import rpm_frequency_map, rpm_order_map
-from rota.synth import rpm_profiles, synth_runup
+from rota_order.maps import rpm_frequency_map, rpm_order_map
+from rota_order.synth import rpm_profiles, synth_runup
 
 FS = 8000.0
 
@@ -172,7 +172,7 @@ def test_overall_level_validation():
 
 @pytest.mark.parametrize("weighting", ["A", "C"])
 def test_overall_level_weighting(weighting):
-    tonal = pytest.importorskip("rota.tonal")
+    tonal = pytest.importorskip("rota_order.tonal")
     # the digital weighting filters are specified for audio sampling rates (>= 44.1 kHz)
     fs = 48000.0
     amp = 1.0

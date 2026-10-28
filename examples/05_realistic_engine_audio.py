@@ -1,6 +1,6 @@
 """A realistic engine run-up you can listen to: analysis, order removal and a faster engine.
 
-The recording comes from ``rota.synth.synth_scenario("ice_runup")``: a synthetic
+The recording comes from ``rota_order.synth.synth_scenario("ice_runup")``: a synthetic
 four-stroke four-cylinder engine (firing order 2) in a vehicle that pulls away from
 idle with clutch slip and accelerates at full load through two upshifts. Order 2
 dominates; orders 4, 6 and 8 follow 15, 24 and 30 dB below it, the odd and half
@@ -54,7 +54,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.io import wavfile
 
-import rota
+import rota_order as ro
 
 P_REF = 20e-6  # reference pressure in Pa (dB re 20 uPa), passed explicitly
 FULL_SCALE_PA = 4.0  # sound pressure in Pa that maps to digital full scale in every WAV file
@@ -117,7 +117,7 @@ def masked_stats(err, mask):
 
 def main():
     plt.switch_backend("Agg")  # file output only; no display needed
-    sc = rota.synth.synth_scenario(
+    sc = ro.synth.synth_scenario(
         "ice_runup", fs=FS, duration=DURATION, seed=SEED, n_channels=N_CHANNELS, **SCENARIO_OVERRIDES
     )
     par = sc.config["parameters"]
@@ -136,7 +136,7 @@ def main():
     # ---- speed from the tachometer -------------------------------------------------------
     # The tacho lags the audio by the conditioning delay, so the speed at audio time t is
     # read from the tacho at t + delay.
-    rpm = rota.speed.tacho_to_rpm(sc.tacho, FS, ppr=ppr, t_out=sc.t + delay)
+    rpm = ro.speed.tacho_to_rpm(sc.tacho, FS, ppr=ppr, t_out=sc.t + delay)
     rel = np.abs(rpm / sc.rpm_mean - 1.0)
     calm = ~(sc.events["in_shift"] | sc.events["slip"])
     print(f"Speed from {ppr}-pulse tacho (delay {delay * 1e3:g} ms compensated) against the true mean speed: "
@@ -144,9 +144,9 @@ def main():
           f"max {100 * rel.max():.2f} % overall")
 
     # ---- maps and the firing-order slice --------------------------------------------------
-    fmap = rota.maps.rpm_frequency_map(sc.x, FS, rpm, resolution=4.0, amplitude="rms", max_freq=700.0)
-    omap = rota.maps.rpm_order_map(sc.x, FS, rpm, order_resolution=0.125, max_order=10.0, amplitude="rms")
-    s_fire = rota.slices.order_slice(omap, firing)
+    fmap = ro.maps.rpm_frequency_map(sc.x, FS, rpm, resolution=4.0, amplitude="rms", max_freq=700.0)
+    omap = ro.maps.rpm_order_map(sc.x, FS, rpm, order_resolution=0.125, max_order=10.0, amplitude="rms")
+    s_fire = ro.slices.order_slice(omap, firing)
     frame_calm = (np.interp(s_fire.t, sc.t, calm.astype(float)) == 1.0) & (s_fire.t > EDGE_S)
     truth_fire = []
     print(f"Order {firing:g} slice against the quasi-static truth at the receiver (RMS, dB), "
@@ -160,7 +160,7 @@ def main():
 
     # ---- order removal ----------------------------------------------------------------------
     orders = np.union1d(sc.orders, firing * np.arange(1, int(MAX_ORDER / firing) + 1))
-    residual, comp = rota.extract.remove_orders(
+    residual, comp = ro.extract.remove_orders(
         sc.x, FS, rpm, orders, method="tracked-harmonics", window_revs=WINDOW_REVS
     )
     sel = sc.t > EDGE_S
@@ -168,12 +168,12 @@ def main():
     rest = sc.x_clean - engine  # broadband, road, rumble, transients: an ideal removal leaves this
     print(f"remove_orders (tracked harmonics, {WINDOW_REVS:g} revolutions): {orders.size} orders, "
           f"{orders.min():g} to {orders.max():g}")
-    e_fire = [rota.metrics.order_residual_energy(r[sel, 0], sc.x[sel, 0], FS, rpm[sel], firing)
+    e_fire = [ro.metrics.order_residual_energy(r[sel, 0], sc.x[sel, 0], FS, rpm[sel], firing)
               for r in (residual, rest)]
     print(f"  energy left at order {firing:g}, dB re the recording (channel 1): {e_fire[0]:.1f} "
           f"(true non-engine content: {e_fire[1]:.1f})")
-    sim_o = rota.metrics.waveform_similarity(comp.total[sel], engine[sel])
-    sim_r = rota.metrics.waveform_similarity(residual[sel], rest[sel])
+    sim_o = ro.metrics.waveform_similarity(comp.total[sel], engine[sel])
+    sim_r = ro.metrics.waveform_similarity(residual[sel], rest[sel])
     print(f"  extracted orders against the true engine stems (orders + combustion): corr {sim_o['corr']:.4f}, "
           f"nrmse {sim_o['nrmse']:.3f}")
     print(f"  residual against the true non-engine content: corr {sim_r['corr']:.4f}, nrmse {sim_r['nrmse']:.3f}")
@@ -185,8 +185,8 @@ def main():
     # than the true non-engine content (see the module docstring).
 
     # ---- faster engine ------------------------------------------------------------------------
-    fast, info = rota.resynth.remap_rpm(comp, SPEED_FACTOR * rpm, FS, rpm_old=rpm, mode="time", phase="table")
-    mix = rota.resynth.resynthesize(fast, residual)
+    fast, info = ro.resynth.remap_rpm(comp, SPEED_FACTOR * rpm, FS, rpm_old=rpm, mode="time", phase="table")
+    mix = ro.resynth.resynthesize(fast, residual)
     print(f"remap_rpm: speed ratio {info['speed_ratio']['median']:.3f}, top speed "
           f"{SPEED_FACTOR * rpm.max():.0f} rpm; orders muted above Nyquist: "
           f"{100 * float(np.max(info['muted_fraction'])):.1f} % of samples at most")
@@ -256,7 +256,7 @@ def main():
                   label=f"order_slice, channel {c + 1}")
         ax_s.plot(sc.t, to_db(truth_fire[c]), color="k", lw=0.8, ls=(0, (4, 3)) if c == 0 else (0, (1, 2)),
                   label=f"truth, channel {c + 1} (quasi-static)")
-    s_res = rota.slices.order_slice(rota.maps.rpm_order_map(residual[:, 0], FS, rpm, order_resolution=0.125,
+    s_res = ro.slices.order_slice(ro.maps.rpm_order_map(residual[:, 0], FS, rpm, order_resolution=0.125,
                                                             max_order=10.0, amplitude="rms"), firing)
     ax_s.plot(s_res.t, to_db(s_res.amplitude), color="#D55E00", lw=1.0, label="after remove_orders, channel 1")
     # Path modes swept by the firing order in first gear (frequencies from the scenario).

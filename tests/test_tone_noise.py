@@ -1,4 +1,4 @@
-"""Tests of rota.synth.synth_tone_noise: levels, ratios, spectra, determinism, validation."""
+"""Tests of rota_order.synth.synth_tone_noise: levels, ratios, spectra, determinism, validation."""
 
 import json
 
@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from scipy import signal
 
-from rota.synth import ToneNoiseSignal, synth_tone_noise
+from rota_order.synth import ToneNoiseSignal, synth_tone_noise
 
 FS = 48000.0
 TWO_PI = 2 * np.pi
@@ -295,7 +295,7 @@ def test_config_is_json_serialisable_and_records_the_inputs():
         assert back["seed"] == 4 and back["fs"] == FS and back["n"] == 12000
         assert back["level_rms"] == 0.02 and back["noise"] == "hump" and back["hump_fc"] == 500.0
         assert back["tnr_db"] == (tnr if np.isfinite(tnr) else ("inf" if tnr > 0 else "-inf"))
-        assert isinstance(back["rota_version"], str)
+        assert isinstance(back["rota_order_version"], str)
     s = synth_tone_noise(FS, 0.25, 0.02, 0.0, tone_freq=1000.0, seed=1)
     assert s.config["hump_fc"] is None and s.config["hump_sigma_oct"] is None
     assert s.config["tone_freq"] == 1000.0 and s.config["harmonics"] == [1.0]

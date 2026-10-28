@@ -1,22 +1,22 @@
-"""Tests of rota.extract.remove_orders and rota.extract.residual, both extractors.
+"""Tests of rota_order.extract.remove_orders and rota_order.extract.residual, both extractors.
 
-The signals are rendered by rota.synth.synth_runup, so the truth of what was
+The signals are rendered by rota_order.synth.synth_runup, so the truth of what was
 put in is stored with them: ``order_stems`` (each order as rendered),
 ``stems["orders"]``, ``stems["tones"]`` and ``stems["noise"]``. After removing
 some orders the residual must equal "everything else", that is the signal minus
 the truth stems of the removed orders, which is noise plus tones plus the
 orders that were kept.
 
-Amplitudes are peak (rota.synth convention); the checks below are ratios or
+Amplitudes are peak (rota_order.synth convention); the checks below are ratios or
 correlations and do not depend on the convention.
 """
 
 import numpy as np
 import pytest
 
-from rota.extract import OrderComponents, remove_orders, residual
-from rota.metrics import order_residual_energy, waveform_similarity
-from rota.synth import rpm_profiles, synth_runup
+from rota_order.extract import OrderComponents, remove_orders, residual
+from rota_order.metrics import order_residual_energy, waveform_similarity
+from rota_order.synth import rpm_profiles, synth_runup
 
 FS = 4000.0
 DURATION = 6.0

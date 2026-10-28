@@ -1,7 +1,7 @@
-"""Tests of the speed, extraction and tonal figures of rota.plot against analytic truth.
+"""Tests of the speed, extraction and tonal figures of rota_order.plot against analytic truth.
 
 Needs Matplotlib (Agg backend, no pixel comparison); skipped without it. Signals come
-from rota.synth; the tests read the artists back from the Axes (lines, patches, the
+from rota_order.synth; the tests read the artists back from the Axes (lines, patches, the
 mesh) and compare the drawn data with the known truth: a tachometer speed with the
 profile that was synthesised, a ridge on a known run-up, extracted orders of known
 amplitude, the values the result holds.
@@ -14,15 +14,15 @@ import warnings
 import numpy as np
 import pytest
 
-import rota
-import rota.plot._analysis as ra
-from rota.extract import order_waveform
-from rota.plot._core import SOUND_PRESSURE, to_db
-from rota.resynth import OrderTable
-from rota.slices import order_slice
-from rota.speed import rpm_from_ridge, tacho_to_rpm
-from rota.synth import rpm_profiles, synth_runup
-from rota.tonal import band_levels_vs_rpm, order_prominence
+import rota_order as ro
+import rota_order.plot._analysis as ra
+from rota_order.extract import order_waveform
+from rota_order.plot._core import SOUND_PRESSURE, to_db
+from rota_order.resynth import OrderTable
+from rota_order.slices import order_slice
+from rota_order.speed import rpm_from_ridge, tacho_to_rpm
+from rota_order.synth import rpm_profiles, synth_runup
+from rota_order.tonal import band_levels_vs_rpm, order_prominence
 
 matplotlib = pytest.importorskip("matplotlib")
 matplotlib.use("Agg")
@@ -43,7 +43,7 @@ def _close_figures():
 
 
 # --------------------------------------------------------------------------
-# Signals and results (rota.synth supplies the truth)
+# Signals and results (rota_order.synth supplies the truth)
 # --------------------------------------------------------------------------
 
 
@@ -513,7 +513,7 @@ def test_order_table_label_carries_convention_and_unit(amplitude, text):
 
 
 def test_order_table_from_slices_of_a_map_reads_the_analytic_level(runup):
-    omap = rota.maps.rpm_order_map(runup.x, FS, runup.rpm, order_resolution=0.25, max_order=8.0, amplitude="rms")
+    omap = ro.maps.rpm_order_map(runup.x, FS, runup.rpm, order_resolution=0.25, max_order=8.0, amplitude="rms")
     grid = np.arange(1500.0, 2701.0, 300.0)
     tbl = OrderTable.from_slices([order_slice(omap, 2.0), order_slice(omap, 4.0)], grid, unit="Pa")
     ax = ra.order_table(tbl, **SOUND_PRESSURE)
@@ -622,7 +622,7 @@ def test_prominent_ranges_are_shaded_on_the_speed_bins(prominence):
     assert p.method == "tnr" and 0 < p.prominent[:, 0].sum() < p.rpm.size  # order 4 becomes prominent
     ax = ra.order_prominence(p, kind="tnr")
     spans = _spans(ax)
-    assert len(spans) == 3  # order 4: one run; order 8: two, the bin 2100 to 2400 rpm has no point (no frames)
+    assert len(spans) == 2  # order 4: one run; order 8: one, across the bin 2100 to 2400 rpm without frames
     colours = {label: matplotlib.colors.to_rgb(_line(ax, label).get_color()) for label in ("Order 4", "Order 8")}
     first = int(np.argmax(p.prominent[:, 0]))
     assert (p.prominent[first:, 0]).all() and not p.prominent[:first, 0].any()
@@ -632,7 +632,7 @@ def test_prominent_ranges_are_shaded_on_the_speed_bins(prominence):
     assert (lo4, hi4) == (bin_lo(p.rpm[first]), bin_lo(p.rpm[-1]) + 300.0)  # from the edge of the first prominent bin
     c8 = tuple(np.round(colours["Order 8"], 6))
     runs8 = sorted((c[0], c[1]) for c in spans if tuple(np.round(c[2][:3], 6)) == c8)
-    assert runs8 == [(1500.0, 2100.0), (2400.0, bin_lo(p.rpm[-1]) + 300.0)]  # adjacent bins merge, a missing bin splits
+    assert 2100.0 + 150.0 not in p.rpm and runs8 == [(1500.0, bin_lo(p.rpm[-1]) + 300.0)]  # one empty bin is bridged
     assert all(c[2][3] == pytest.approx(0.12) for c in spans)  # light shading: overlapping orders stay distinct
     # the prominence ratio gives its own ranges (order 4 is not prominent in the lowest bins)
     ax = ra.order_prominence(p, kind="pr", orders=4)
@@ -640,6 +640,26 @@ def test_prominent_ranges_are_shaded_on_the_speed_bins(prominence):
     ok = p.pr[:, 0] >= p.pr_criterion[:, 0]
     assert not ok.all() and ok[-1]
     assert (lo, hi) == (bin_lo(p.rpm[int(np.argmax(ok))]), bin_lo(p.rpm[-1]) + 300.0)
+
+
+def test_prominent_shading_bridges_a_single_empty_speed_bin_only_between_prominent_bins(prominence):
+    edges = np.arange(1000.0, 2001.0, 100.0)  # ten bins
+    occupied = [0, 1, 3, 4, 5, 6, 9]  # empty: 2 (single), 7 and 8 (two in a row)
+    prominent = {0, 1, 3, 4, 6, 9}  # bin 5 has a point below the criterion
+    rpm = edges[occupied] + 50.0
+    ratio = np.array([[20.0 if b in prominent else 0.0] for b in occupied])
+    p = type(prominence)(**{
+        **prominence.__dict__, "orders": np.array([4.0]), "rpm": rpm, "rpm_bins": edges,
+        "tnr": ratio, "tnr_criterion": np.full_like(ratio, 8.0),
+    })
+    spans = sorted((lo, hi) for lo, hi, _ in _spans(ra.order_prominence(p)))
+    # bins 0 to 4 are one range (bin 2 is empty between prominent bins); bin 5 holds a point that is
+    # not prominent, so it is no bridge; two empty bins in a row (7, 8) are not bridged either
+    assert spans == [(1000.0, 1500.0), (1600.0, 1700.0), (1900.0, 2000.0)]
+    # without the neighbour on one side nothing is bridged
+    lone = type(prominence)(**{**p.__dict__, "tnr": np.where(np.arange(7)[:, None] == 1, 0.0, ratio)})
+    spans = sorted((lo, hi) for lo, hi, _ in _spans(ra.order_prominence(lone)))
+    assert spans[:2] == [(1000.0, 1100.0), (1300.0, 1500.0)]  # bin 1 is not prominent: bin 2 is no bridge
 
 
 def test_prominent_shading_has_one_legend_entry_per_order_in_the_colour_of_the_order(prominence):
@@ -982,15 +1002,15 @@ def test_the_functions_run_on_a_figure_without_pyplot_in_a_subprocess():
     code = (
         "import io, sys\n"
         "import numpy as np\n"
-        "import rota\n"
-        "import rota.plot._analysis as ra\n"
+        "import rota_order\n"
+        "import rota_order.plot._analysis as ra\n"
         "from matplotlib.figure import Figure\n"
         "fs = 2000.0\n"
         "t = np.arange(round(1.5 * fs)) / fs\n"
-        "rpm = rota.synth.rpm_profiles(t, 'linear', start=900.0, stop=2400.0)\n"
-        "sig = rota.synth.synth_runup(fs, rpm, [{'order': 2.0, 'amplitude': 1.0}], tacho_ppr=1, seed=1)\n"
-        "c = rota.extract.order_waveform(sig.x, fs, rpm, [2.0])\n"
-        "b = rota.tonal.band_levels_vs_rpm(sig.x, fs, rpm, rpm_bins=[900.0, 1600.0, 2400.0], frame=0.1, fmax=500.0)\n"
+        "rpm = rota_order.synth.rpm_profiles(t, 'linear', start=900.0, stop=2400.0)\n"
+        "sig = rota_order.synth.synth_runup(fs, rpm, [{'order': 2.0, 'amplitude': 1.0}], tacho_ppr=1, seed=1)\n"
+        "c = rota_order.extract.order_waveform(sig.x, fs, rpm, [2.0])\n"
+        "b = rota_order.tonal.band_levels_vs_rpm(sig.x, fs, rpm, rpm_bins=[900.0, 1600.0, 2400.0], frame=0.1, fmax=500.0)\n"
         "fig = Figure()\n"
         "ax = fig.subplots(1, 3)\n"
         "assert ra.rpm_vs_time(t, rpm, ax=ax[0], label='x') is ax[0]\n"

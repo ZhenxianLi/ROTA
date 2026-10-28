@@ -1,9 +1,9 @@
-"""Tests of rota.speed against analytic truth (rota.synth supplies the signals)."""
+"""Tests of rota_order.speed against analytic truth (rota_order.synth supplies the signals)."""
 
 import numpy as np
 import pytest
 
-from rota.speed import (
+from rota_order.speed import (
     Segment,
     fit_speed_to_rpm,
     regularize_control,
@@ -12,7 +12,7 @@ from rota.speed import (
     steady_segments,
     tacho_to_rpm,
 )
-from rota.synth import rpm_profiles, synth_runup
+from rota_order.synth import rpm_profiles, synth_runup
 
 # Linear speed curve used for closed-form checks: rpm(t) = R0 + ACC * t.
 R0, ACC = 600.0, 400.0  # rpm, rpm/s

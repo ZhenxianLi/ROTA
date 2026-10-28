@@ -1,6 +1,6 @@
 """An electric drive run-up you can listen to: motor orders, gear whine, inverter carrier.
 
-The recording comes from ``rota.synth.synth_scenario("ev_runup")``: a synthetic
+The recording comes from ``rota_order.synth.synth_scenario("ev_runup")``: a synthetic
 permanent-magnet motor with four pole pairs behind a single-speed 12:1 reduction, in a
 vehicle that accelerates at full load from walking pace to about 110 km/h. The motor
 orders are the electromagnetic family 2, 4, 8, 10, 12 and 14 (shaft orders; order 4 is
@@ -55,7 +55,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.io import wavfile
 
-import rota
+import rota_order as ro
 
 P_REF = 20e-6  # reference pressure in Pa (dB re 20 uPa), passed explicitly
 FULL_SCALE_PA = 4.0  # sound pressure in Pa that maps to digital full scale in every WAV file
@@ -143,7 +143,7 @@ def track_level(fmap, t, freq):
 
 def main():
     plt.switch_backend("Agg")  # file output only; no display needed
-    sc = rota.synth.synth_scenario("ev_runup", fs=FS, duration=DURATION, seed=SEED, **SCENARIO_OVERRIDES)
+    sc = ro.synth.synth_scenario("ev_runup", fs=FS, duration=DURATION, seed=SEED, **SCENARIO_OVERRIDES)
     par = sc.config["parameters"]
     p = int(par["pole_pairs"])
     fc_track = np.asarray(sc.carrier["carrier_hz"])
@@ -160,7 +160,7 @@ def main():
           + ", ".join(f"{tone['freq']:g} Hz" for tone in par["tones"]))
     print("  source orders: " + ", ".join(f"{o:g} ({n})" for o, n in zip(sc.orders, sc.order_names)))
 
-    rpm = rota.speed.tacho_to_rpm(sc.tacho, FS, ppr=ppr, t_out=sc.t + delay)
+    rpm = ro.speed.tacho_to_rpm(sc.tacho, FS, ppr=ppr, t_out=sc.t + delay)
     rel = np.abs(rpm / sc.rpm_mean - 1.0)
     print(f"Speed from {ppr}-pulse tacho (delay {delay * 1e3:g} ms compensated) against the true mean speed: "
           f"median {100 * np.median(rel):.3f} %, max {100 * rel[sc.t > EDGE_S].max():.2f} %")
@@ -172,14 +172,14 @@ def main():
     whine = sc.stem_sum(["motor", "gear"])
     rest = sc.x_clean - whine  # inverter, tones, transients, road and rumble
     okw = {"order_resolution": ORDER_RES, "max_order": MAX_ORDER_MAP, "amplitude": "rms"}
-    omap = rota.maps.rpm_order_map(sc.x, FS, rpm, **okw)
-    omap_rest = rota.maps.rpm_order_map(rest, FS, rpm, **okw)
+    omap = ro.maps.rpm_order_map(sc.x, FS, rpm, **okw)
+    omap_rest = ro.maps.rpm_order_map(rest, FS, rpm, **okw)
     show = {}  # name -> (order, slice, truth RMS, band noise)
     print(f"Order slices ({ORDER_RES:g} order bins) against the quasi-static truth at the receiver (RMS, dB), "
           f"frames after {EDGE_S:g} s above {MIN_RPM_STATS:g} rpm:")
     for k, name in enumerate(sc.order_names):
-        s = rota.slices.order_slice(omap, sc.orders[k])
-        noise = rota.slices.order_slice(omap_rest, sc.orders[k]).amplitude
+        s = ro.slices.order_slice(omap, sc.orders[k])
+        noise = ro.slices.order_slice(omap_rest, sc.orders[k]).amplitude
         truth = sc.quasi_static_amplitude(k) / np.sqrt(2.0)  # peak -> RMS
         tr = np.interp(s.t, sc.t, truth)
         err, snr = 20.0 * np.log10(s.amplitude / tr), 20.0 * np.log10(tr / noise)
@@ -191,7 +191,7 @@ def main():
         show[name] = (sc.orders[k], s, truth, noise)
 
     # ---- inverter carrier and sidebands from the Campbell diagram ------------------------------
-    fmap = rota.maps.rpm_frequency_map(sc.x, FS, rpm, resolution=CAMPBELL_HZ, amplitude="rms")
+    fmap = ro.maps.rpm_frequency_map(sc.x, FS, rpm, resolution=CAMPBELL_HZ, amplitude="rms")
     tg = np.arange(0.0, DURATION, 0.01)
     q = np.asarray(sc.carrier["q"])
     # Lines that must stay out of the band and the floor ring: orders, tones, other inverter lines.
@@ -232,17 +232,17 @@ def main():
     # ---- removal of the motor-shaft orders ---------------------------------------------------
     k_whine = sc.order_names.index(f"gear_mesh_{par['gear_mesh']['teeth']:g}")
     others = np.delete(sc.orders, k_whine)
-    res_1, comp_1 = rota.extract.remove_orders(
+    res_1, comp_1 = ro.extract.remove_orders(
         sc.x, FS, rpm, [sc.orders[k_whine]], method="tracked-harmonics", window_revs=WHINE_WINDOW_REVS
     )
-    residual, comp_2 = rota.extract.remove_orders(
+    residual, comp_2 = ro.extract.remove_orders(
         res_1, FS, rpm, others, method="tracked-harmonics", window_revs=MOTOR_WINDOW_REVS
     )
     extracted = comp_1.total + comp_2.total
     sel = sc.t > EDGE_S
-    sim_w = rota.metrics.waveform_similarity(extracted[sel], whine[sel])
-    sim_1 = rota.metrics.waveform_similarity(comp_1.total[sel], sc.through_path(sc.order_stems[:, k_whine])[sel])
-    sim_r = rota.metrics.waveform_similarity(residual[sel], rest[sel])
+    sim_w = ro.metrics.waveform_similarity(extracted[sel], whine[sel])
+    sim_1 = ro.metrics.waveform_similarity(comp_1.total[sel], sc.through_path(sc.order_stems[:, k_whine])[sel])
+    sim_r = ro.metrics.waveform_similarity(residual[sel], rest[sel])
     print(f"remove_orders (tracked harmonics): order {sc.orders[k_whine]:g} with {WHINE_WINDOW_REVS:g} revolutions, "
           f"then the other {others.size} orders with {MOTOR_WINDOW_REVS:g}:")
     print(f"  extracted whine against its true stem (order {sc.orders[k_whine]:g} through the path): "
@@ -252,7 +252,7 @@ def main():
     print(f"  residual against the true inverter, tone, road, rumble and transient stems: "
           f"corr {sim_r['corr']:.4f}, nrmse {sim_r['nrmse']:.3f}")
     for o in (2.0, 12.0, 40.0):
-        e = [rota.metrics.order_residual_energy(r[sel], sc.x[sel], FS, rpm[sel], o, order_resolution=ORDER_RES)
+        e = [ro.metrics.order_residual_energy(r[sel], sc.x[sel], FS, rpm[sel], o, order_resolution=ORDER_RES)
              for r in (residual, rest)]
         print(f"  energy left at order {o:g}: {e[0]:.1f} dB re the recording (true non-order content {e[1]:.1f} dB)")
 
@@ -262,7 +262,7 @@ def main():
     write_wav("electric_runup_whine_only.wav", extracted, FS)
 
     # ---- figure ------------------------------------------------------------------------------
-    fmap_res = rota.maps.rpm_frequency_map(residual, FS, rpm, resolution=CAMPBELL_HZ, amplitude="rms")
+    fmap_res = ro.maps.rpm_frequency_map(residual, FS, rpm, resolution=CAMPBELL_HZ, amplitude="rms")
     plt.rcParams.update({"font.size": 8, "axes.titlesize": 9, "axes.labelsize": 8})
     fig = plt.figure(figsize=(8.0, 10.6), dpi=150, constrained_layout=True)
     gs = fig.add_gridspec(3, 2, height_ratios=[1.0, 1.0, 0.8])

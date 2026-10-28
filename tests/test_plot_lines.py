@@ -1,4 +1,4 @@
-"""Tests of the line figures of rota.plot against analytic truth (rota.synth supplies the signals).
+"""Tests of the line figures of rota_order.plot against analytic truth (rota_order.synth supplies the signals).
 
 Needs Matplotlib (Agg backend, no pixel comparison); skipped without it. The tests read the
 drawn data back from the Axes (Line2D data, the polygons of the bands and shaded spans, the
@@ -10,13 +10,13 @@ import dataclasses
 import numpy as np
 import pytest
 
-import rota.plot._lines as lines
-from rota.bridges import TimeMetric
-from rota.maps import rpm_frequency_map, rpm_order_map
-from rota.plot._core import SOUND_PRESSURE, to_db
-from rota.slices import frequency_slice as compute_frequency_slice
-from rota.slices import metric_vs_rpm, order_slice, order_spectrum, overall_level
-from rota.synth import rpm_profiles, synth_runup
+import rota_order.plot._lines as lines
+from rota_order.bridges import TimeMetric
+from rota_order.maps import rpm_frequency_map, rpm_order_map
+from rota_order.plot._core import SOUND_PRESSURE, to_db
+from rota_order.slices import frequency_slice as compute_frequency_slice
+from rota_order.slices import metric_vs_rpm, order_slice, order_spectrum, overall_level
+from rota_order.synth import rpm_profiles, synth_runup
 
 matplotlib = pytest.importorskip("matplotlib")
 matplotlib.use("Agg")
@@ -285,7 +285,7 @@ def test_truth_is_drawn_above_the_data_and_thinner(slice2, fmap):
 
 
 def test_truth_is_drawn_like_the_reference_of_the_speed_figures(slice2):
-    from rota.plot import _analysis as analysis
+    from rota_order.plot import _analysis as analysis
 
     t = np.linspace(0.0, DUR, 5)
     ax = lines.order_slice(slice2, x="time", truth=(t, np.ones(5)))

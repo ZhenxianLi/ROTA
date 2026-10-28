@@ -10,8 +10,8 @@ import numpy as np
 import pytest
 import scipy
 
-import rota
-from rota._provenance import jsonable, provenance, stable_seed
+import rota_order as ro
+from rota_order._provenance import jsonable, provenance, stable_seed
 
 # --------------------------------------------------------------------------
 # provenance
@@ -29,7 +29,7 @@ def test_sidecar_is_written_with_versions_params_and_seed(tmp_path):
     assert path.exists()
     on_disk = json.loads(path.read_text(encoding="utf-8"))
     assert on_disk == rec  # the returned dict is what was written
-    assert rec["rota_version"] == rota.__version__
+    assert rec["rota_order_version"] == ro.__version__
     assert rec["python"] == platform.python_version()
     assert rec["numpy"] == np.__version__ and rec["scipy"] == scipy.__version__
     assert rec["platform"] == platform.platform()
@@ -222,7 +222,7 @@ def test_stable_seed_feeds_numpy_and_rejects_bad_keys():
 
 def test_seed_from_name_reproduces_a_synthesised_stimulus(tmp_path):
     """The workflow of ROADMAP section 6, item 15: name -> seed -> stimulus -> sidecar."""
-    from rota._ordertable import OrderTable, synthesize_orders
+    from rota_order._ordertable import OrderTable, synthesize_orders
 
     table = OrderTable([2.0, 4.0], [500.0, 3000.0], np.ones((2, 2)), "peak", unit="Pa")
     rpm = np.linspace(800.0, 2500.0, 4000)

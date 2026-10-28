@@ -1,6 +1,6 @@
-"""Tests of rota.synth.synth_scenario: complete drive-train recordings with exact truth.
+"""Tests of rota_order.synth.synth_scenario: complete drive-train recordings with exact truth.
 
-The scenarios chain the building blocks of rota._sources and rota._channel (each
+The scenarios chain the building blocks of rota_order._sources and rota_order._channel (each
 tested on its own). What is checked here is the assembly:
 
 * the stems add up to the recording (bit for bit with an ideal recorder), the
@@ -25,9 +25,9 @@ import numpy as np
 import pytest
 from scipy import signal
 
-from rota import synth
-from rota.speed import rpm_to_phase, speed_to_rpm, tacho_to_rpm
-from rota.synth import (
+from rota_order import synth
+from rota_order.speed import rpm_to_phase, speed_to_rpm, tacho_to_rpm
+from rota_order.synth import (
     SCENARIO_KINDS,
     ScenarioSignal,
     scenario_defaults,
@@ -100,7 +100,7 @@ def cruise_ev():
 
 
 def test_building_blocks_are_reexported():
-    from rota import _channel, _sources
+    from rota_order import _channel, _sources
 
     names = [
         "drive_rpm", "angular_speed_ripple", "angle_impulses", "sideband_orders",
@@ -731,7 +731,7 @@ def test_config_is_strict_json_and_complete(ice, ev, cruise, cruise_ev):
         text = json.dumps(sc.config, allow_nan=False)
         assert json.loads(text) == sc.config
         assert sc.config["kind"] == sc.kind and sc.config["fs"] == sc.fs
-        assert isinstance(sc.config["seed"], int) and sc.config["rota_version"]
+        assert isinstance(sc.config["seed"], int) and sc.config["rota_order_version"]
         assert sc.config["parameters"]["duration"] == sc.t.size / sc.fs
         assert sc.config["n"] == sc.n and sc.config["n_channels"] == 1
         assert "blocks" in sc.config and "resolved" in sc.config

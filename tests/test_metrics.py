@@ -1,17 +1,17 @@
-"""Tests of rota.metrics against hand-computed and rota.synth ground truth.
+"""Tests of rota_order.metrics against hand-computed and rota_order.synth ground truth.
 
 track_error: hand-computed cases. waveform_similarity and order_residual_energy:
-analytic values from components rendered by rota.synth (orthogonal order stems
+analytic values from components rendered by rota_order.synth (orthogonal order stems
 at constant speed, scaled copies of a run-up). window_checks: closed-form
 sums of the Hann window; modulation_peak and envelope_stats: tones, two-tone
-beats and white Gaussian noise from rota.synth with analytic envelope laws.
+beats and white Gaussian noise from rota_order.synth with analytic envelope laws.
 """
 
 import numpy as np
 import pytest
 from scipy import signal
 
-from rota.metrics import (
+from rota_order.metrics import (
     envelope_stats,
     modulation_peak,
     order_residual_energy,
@@ -19,7 +19,7 @@ from rota.metrics import (
     waveform_similarity,
     window_checks,
 )
-from rota.synth import synth_runup
+from rota_order.synth import synth_runup
 
 
 def test_hand_computed_case():

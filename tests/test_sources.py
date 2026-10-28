@@ -1,4 +1,4 @@
-"""Tests for rota._sources: driveline speed, angle-periodic ripple, angle-locked
+"""Tests for rota_order._sources: driveline speed, angle-periodic ripple, angle-locked
 impulses, modulation sidebands and carrier components, all against analytic truth."""
 
 import inspect
@@ -9,12 +9,12 @@ from scipy import signal, special
 from scipy.integrate import solve_ivp
 from scipy.interpolate import CubicHermiteSpline
 
-from rota import _sources
-from rota.angle import angular_resample
-from rota.maps import rpm_order_map
-from rota.speed import rpm_to_phase, speed_to_rpm
-from rota.synth import rpm_profiles, synth_runup
-from rota._sources import (
+from rota_order import _sources
+from rota_order.angle import angular_resample
+from rota_order.maps import rpm_order_map
+from rota_order.speed import rpm_to_phase, speed_to_rpm
+from rota_order.synth import rpm_profiles, synth_runup
+from rota_order._sources import (
     angle_impulses,
     angular_speed_ripple,
     carrier_components,

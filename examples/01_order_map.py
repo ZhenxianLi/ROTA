@@ -1,6 +1,6 @@
 """Campbell diagram, order map and order slices of a synthetic engine run-up.
 
-The 6 s signal from ``rota.synth`` holds 900 rpm for 1.2 s and then runs up linearly
+The 6 s signal from ``rota_order.synth`` holds 900 rpm for 1.2 s and then runs up linearly
 to 4500 rpm. It contains six orders (including the half order 0.5), a 180 Hz
 resonance that amplifies whichever order passes through it, a fixed 250 Hz tone and
 white noise, and is read as sound pressure in Pa.
@@ -11,7 +11,7 @@ spans several of them; (b) rpm-order map: orders are horizontal lines and stay
 separated down to half an order at idle, the tone bends into a hyperbola and each
 order brightens where it passes the resonance; (c) order slices of orders 1.5 and 3
 against the amplitude put into the signal (analytic truth). The panels are drawn with
-``rota.plot`` (``rpm_frequency_map`` with the orders marked, ``rpm_order_map``,
+``rota_order.plot`` (``rpm_frequency_map`` with the orders marked, ``rpm_order_map``,
 ``order_slice`` with ``truth=``), against time so that the idle hold stays visible.
 
 Amplitude convention: RMS, in Pa (a line that falls on a bin reads its peak
@@ -27,8 +27,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-import rota
-import rota.plot as rp
+import rota_order as ro
+import rota_order.plot as rp
 
 FS = 8000.0  # sampling rate, Hz
 DURATION = 6.0  # s
@@ -50,10 +50,10 @@ ORDERS = [
 def build_signal():
     """Idle hold, then linear run-up; orders, resonance, tone and noise (peak amplitudes in Pa)."""
     t = np.arange(round(DURATION * FS)) / FS
-    rpm = rota.synth.rpm_profiles(
+    rpm = ro.synth.rpm_profiles(
         t, "linear", start=IDLE_RPM, stop=TOP_RPM, t_start=T_RUNUP, t_stop=DURATION
     )
-    return rota.synth.synth_runup(
+    return ro.synth.synth_runup(
         FS,
         rpm,
         ORDERS,
@@ -86,7 +86,7 @@ def slice_errors(sig, omap):
     runup = omap.rpm_min > IDLE_RPM + 1e-6  # frames entirely inside the run-up
     rows = []
     for k, order in enumerate(sig.orders):
-        s = rota.slices.order_slice(omap, order)
+        s = ro.slices.order_slice(omap, order)
         truth = np.interp(s.t, sig.t, sig.order_amplitude[:, k]) / np.sqrt(2.0)  # peak -> RMS
         err = 20.0 * np.log10(s.amplitude / truth)
         # The tone adds to an order slice while it is inside the band (+-0.5 order); leave it out.
@@ -108,11 +108,11 @@ def main():
     sig = build_signal()
 
     # Campbell diagram: STFT over time, 4 Hz bins (0.25 s frames).
-    fmap = rota.maps.rpm_frequency_map(
+    fmap = ro.maps.rpm_frequency_map(
         sig.x, FS, sig.rpm, resolution=4.0, amplitude="rms", max_freq=600.0
     )
     # Order map: STFT over shaft angle, 0.125 order bins (frames of 8 revolutions).
-    omap = rota.maps.rpm_order_map(
+    omap = ro.maps.rpm_order_map(
         sig.x, FS, sig.rpm, order_resolution=0.125, max_order=8.0, amplitude="rms"
     )
 
@@ -128,7 +128,7 @@ def main():
                  if r["n_tone"] else ""))
 
     # ---- figure ----------------------------------------------------------------------------
-    # rota.plot draws the two maps and the slices with their labels; the top speed axis, the shared
+    # rota_order.plot draws the two maps and the slices with their labels; the top speed axis, the shared
     # colour bar, titles, limits and annotations are plain Matplotlib.
     plt.rcdefaults()  # Matplotlib's default style, whatever a local matplotlibrc sets
     plt.rcParams.update({"font.size": 8, "axes.titlesize": 9, "axes.labelsize": 8})
@@ -161,7 +161,7 @@ def main():
     slices, truths = {}, {}
     for order in (1.5, 3.0):
         k = int(np.flatnonzero(sig.orders == order)[0])
-        slices[f"order {order:g}"] = rota.slices.order_slice(omap, order)
+        slices[f"order {order:g}"] = ro.slices.order_slice(omap, order)
         truths[f"order {order:g}"] = (sig.t, sig.order_amplitude[:, k] / np.sqrt(2.0))  # peak -> RMS
     rp.order_slice(slices, ax=ax_s, x="time", truth=truths, **rp.SOUND_PRESSURE)
     ax_s.legend(loc="upper left", ncol=2)

@@ -1,4 +1,4 @@
-"""Tests for rota.synth: profiles, order truth, resonances, noise and tachometer."""
+"""Tests for rota_order.synth: profiles, order truth, resonances, noise and tachometer."""
 
 import json
 
@@ -6,9 +6,9 @@ import numpy as np
 import pytest
 from scipy import signal
 
-import rota
-from rota import speed, synth
-from rota.synth import SynthSignal, rpm_profiles, synth_runup
+import rota_order as ro
+from rota_order import speed, synth
+from rota_order.synth import SynthSignal, rpm_profiles, synth_runup
 
 TWO_PI = 2 * np.pi
 
@@ -678,7 +678,7 @@ def test_config_is_json_serialisable_and_complete():
     text = json.dumps(s.config)
     cfg = json.loads(text)
     assert cfg == s.config
-    assert cfg["rota_version"] == rota.__version__
+    assert cfg["rota_order_version"] == ro.__version__
     assert cfg["seed"] == 42
     assert cfg["fs"] == 4000.0 and cfg["n"] == 12000
     assert cfg["noise_rms"] == 0.05 and cfg["noise_band"] == [100.0, 900.0]

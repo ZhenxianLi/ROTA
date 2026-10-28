@@ -1,11 +1,11 @@
-"""Tests of rota.angle against analytic truth (rota.synth supplies the signals)."""
+"""Tests of rota_order.angle against analytic truth (rota_order.synth supplies the signals)."""
 
 import numpy as np
 import pytest
 
-from rota.angle import AngularSignal, angular_resample
-from rota.speed import rpm_to_phase
-from rota.synth import rpm_profiles, synth_runup
+from rota_order.angle import AngularSignal, angular_resample
+from rota_order.speed import rpm_to_phase
+from rota_order.synth import rpm_profiles, synth_runup
 
 FS = 16000.0
 R0, ACC = 1000.0, 1000.0  # rpm and rpm/s: 1000 -> 4000 rpm in 3 s

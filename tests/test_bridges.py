@@ -1,8 +1,8 @@
-"""rota.bridges: lazy optional wrappers for MoSQITo and the Sottek hearing model.
+"""rota_order.bridges: lazy optional wrappers for MoSQITo and the Sottek hearing model.
 
 Tests without the toolboxes always run (they simulate the missing packages). Tests with a toolbox
 are skipped when it is not installed (every one of them takes the ``mq`` or the ``sh`` fixture,
-directly or through a fixture built on it). Data come from rota.synth only. The models are slow, so
+directly or through a fixture built on it). Data come from rota_order.synth only. The models are slow, so
 the signals are short and the results are computed once per module.
 """
 
@@ -17,28 +17,28 @@ import warnings
 import numpy as np
 import pytest
 
-import rota
-from rota import bridges
-from rota.bridges import TimeMetric, mosqito
-from rota.bridges import sottek_hearing_model as shm
-from rota.slices import MetricVsRpm, metric_vs_rpm
+import rota_order as ro
+from rota_order import bridges
+from rota_order.bridges import TimeMetric, mosqito
+from rota_order.bridges import sottek_hearing_model as shm
+from rota_order.slices import MetricVsRpm, metric_vs_rpm
 
 FS = 48000.0
 RMS_PA = 0.1  # 71 dB re 20 uPa
 FRAME = 256 / FS  # frame step of the Sottek hearing model tonality and loudness, s (5.33 ms)
 
-# Modules that importing rota and rota.bridges must not load: the bridges import the toolboxes, and
+# Modules that importing rota_order and rota_order.bridges must not load: the bridges import the toolboxes, and
 # Matplotlib that MoSQITo and the Sottek hearing model need, lazily inside their functions.
 LAZY_MODULES = ("matplotlib", "mosqito", "sottek_hearing_model", "matlab")
 
 # Names that 0.6.0 never released. They are written in parts so that a search of the repository
 # for the old spelling finds only what still needs to be changed.
 REMOVED_FUNCTION = "along" + "_rpm"  # became the method TimeMetric.vs_rpm
-REMOVED_MODULE = "s" + "hm"  # became rota.bridges.sottek_hearing_model
+REMOVED_MODULE = "s" + "hm"  # became rota_order.bridges.sottek_hearing_model
 
 
 def _signal(fs, duration, seed=1):
-    s = rota.synth.synth_tone_noise(fs, duration, RMS_PA, 6.0, tone_freq=500.0, seed=seed)
+    s = ro.synth.synth_tone_noise(fs, duration, RMS_PA, 6.0, tone_freq=500.0, seed=seed)
     # amplitude-modulated so that roughness and loudness are not constant
     return s.x * (1.0 + 0.5 * np.sin(2 * np.pi * 70.0 * s.t))
 
@@ -72,10 +72,10 @@ def test_import_without_toolboxes_in_subprocess():
         "import sys\n"
         "for m in ('mosqito', 'sottek_hearing_model'):\n"
         "    sys.modules[m] = None\n"  # None blocks the import; it is not a loaded module
-        "import rota, rota.bridges\n"
+        "import rota_order, rota_order.bridges\n"
         f"loaded = [m for m in {LAZY_MODULES!r} if sys.modules.get(m) is not None]\n"
-        "assert not loaded, f'imported by rota.bridges: {loaded}'\n"
-        "for f in (rota.bridges.mosqito.loudness, rota.bridges.sottek_hearing_model.tonality):\n"
+        "assert not loaded, f'imported by rota_order.bridges: {loaded}'\n"
+        "for f in (rota_order.bridges.mosqito.loudness, rota_order.bridges.sottek_hearing_model.tonality):\n"
         "    try:\n"
         "        f([0.0, 1.0, 0.0, 1.0], 48000.0)\n"
         "    except ImportError as e:\n"
@@ -91,9 +91,9 @@ def test_import_without_toolboxes_in_subprocess():
 def test_import_does_not_import_matplotlib_or_toolboxes_in_subprocess():
     # a clean interpreter, with or without the toolboxes installed: nothing is loaded before a call
     code = (
-        "import sys, rota, rota.bridges\n"
+        "import sys, rota_order, rota_order.bridges\n"
         f"loaded = [m for m in {LAZY_MODULES!r} if m in sys.modules]\n"
-        "assert not loaded, f'imported by rota.bridges: {loaded}'\n"
+        "assert not loaded, f'imported by rota_order.bridges: {loaded}'\n"
     )
     r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)
     assert r.returncode == 0, r.stderr
@@ -102,7 +102,7 @@ def test_import_does_not_import_matplotlib_or_toolboxes_in_subprocess():
 def test_bridge_modules_are_named_like_the_toolboxes():
     assert bridges.__all__ == ["TimeMetric", "mosqito", "sottek_hearing_model", "sqat"]
     for name in ("mosqito", "sottek_hearing_model", "sqat"):
-        assert getattr(bridges, name).__name__ == f"rota.bridges.{name}"
+        assert getattr(bridges, name).__name__ == f"rota_order.bridges.{name}"
     assert bridges.TimeMetric is TimeMetric
 
 
@@ -113,7 +113,7 @@ def test_removed_names_are_gone_without_aliases():
     assert not hasattr(bridges._common, REMOVED_FUNCTION)
     assert REMOVED_FUNCTION not in bridges._common.__all__
     with pytest.raises(ModuleNotFoundError):
-        importlib.import_module(f"rota.bridges.{REMOVED_MODULE}")
+        importlib.import_module(f"rota_order.bridges.{REMOVED_MODULE}")
     assert callable(TimeMetric.vs_rpm)
 
 
@@ -146,7 +146,7 @@ def test_mosqito_missing_raises_import_error(call, monkeypatch):
     with pytest.raises(ImportError, match="pip install mosqito") as e:
         call(np.zeros(4800))
     assert "does not depend" in str(e.value)
-    assert "rota.bridges.mosqito" in str(e.value)
+    assert "rota_order.bridges.mosqito" in str(e.value)
 
 
 @pytest.mark.parametrize("call", SHM_CALLS)
@@ -155,7 +155,7 @@ def test_shm_missing_raises_import_error(call, monkeypatch):
     with pytest.raises(ImportError, match="pip install sottek-hearing-model") as e:
         call(np.zeros(4800))
     assert "does not depend" in str(e.value) and "3.11" in str(e.value)
-    assert "rota.bridges.sottek_hearing_model" in str(e.value)
+    assert "rota_order.bridges.sottek_hearing_model" in str(e.value)
 
 
 def test_shm_bridge_imports_the_top_level_package_not_itself(tmp_path):
@@ -167,13 +167,13 @@ def test_shm_bridge_imports_the_top_level_package_not_itself(tmp_path):
     code = (
         "import sys\n"
         f"sys.path.insert(0, {str(tmp_path)!r})\n"
-        "from rota.bridges import sottek_hearing_model as bridge\n"
-        "assert bridge.__name__ == 'rota.bridges.sottek_hearing_model'\n"
+        "from rota_order.bridges import sottek_hearing_model as bridge\n"
+        "assert bridge.__name__ == 'rota_order.bridges.sottek_hearing_model'\n"
         "model = bridge._model()\n"
         "assert model is not bridge and model.__name__ == 'sottek_hearing_model', model\n"
         "assert model.MARKER == 'external stub' and not hasattr(bridge, 'MARKER')\n"
         "assert sys.modules['sottek_hearing_model'] is model\n"
-        "assert sys.modules['rota.bridges.sottek_hearing_model'] is bridge\n"
+        "assert sys.modules['rota_order.bridges.sottek_hearing_model'] is bridge\n"
         "print('ok')\n"
     )
     r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)
@@ -200,7 +200,7 @@ def test_invalid_options():
         mosqito.sharpness(None, None)
     with pytest.raises(ValueError, match="TimeMetric"):
         mosqito.sharpness(x, FS, loudness=_fake())
-    with pytest.raises(ValueError, match=r"TimeMetric returned by rota\.bridges\.sottek_hearing_model\.tonality"):
+    with pytest.raises(ValueError, match=r"TimeMetric returned by rota_order\.bridges\.sottek_hearing_model\.tonality"):
         shm.loudness(x, FS, tonality=_fake())
 
 
@@ -647,7 +647,7 @@ def test_mosqito_sharpness_from_signal_equals_from_loudness(mq_results, x48):
 def test_mosqito_resampling_path(mq):
     fs = 32000.0
     x = _signal(fs, 1.5, seed=2)
-    x48 = rota.tonal.to_calibrated_48k(x, fs)
+    x48 = ro.tonal.to_calibrated_48k(x, fs)
     n, *_ = mq.loudness_zwtv(x48, FS, field_type="free")
     loud = mosqito.loudness(x, fs)
     np.testing.assert_array_equal(loud.values, n)
@@ -722,22 +722,22 @@ def test_shm_bridge_imports_the_external_package_not_itself(sh):
     # reach the package, never the bridge
     model = shm._model()
     assert model is sh and model is not shm
-    assert model.__name__ == "sottek_hearing_model" and shm.__name__ == "rota.bridges.sottek_hearing_model"
+    assert model.__name__ == "sottek_hearing_model" and shm.__name__ == "rota_order.bridges.sottek_hearing_model"
     assert model.__file__ != shm.__file__
     assert hasattr(model, "shm_tonality_ecma") and not hasattr(shm, "shm_tonality_ecma")
     assert sys.modules["sottek_hearing_model"] is model
-    assert sys.modules["rota.bridges.sottek_hearing_model"] is shm
+    assert sys.modules["rota_order.bridges.sottek_hearing_model"] is shm
     # the same in a fresh interpreter, in which the package is not imported before the bridge asks for it
     code = (
         "import sys\n"
-        "from rota.bridges import sottek_hearing_model as bridge\n"
+        "from rota_order.bridges import sottek_hearing_model as bridge\n"
         "assert 'sottek_hearing_model' not in sys.modules\n"
         "model = bridge._model()\n"
         "assert model is not bridge and model.__name__ == 'sottek_hearing_model'\n"
         "assert model.__file__ != bridge.__file__\n"
         "assert hasattr(model, 'shm_tonality_ecma') and not hasattr(bridge, 'shm_tonality_ecma')\n"
         "assert sys.modules['sottek_hearing_model'] is model\n"
-        "assert sys.modules['rota.bridges.sottek_hearing_model'] is bridge\n"
+        "assert sys.modules['rota_order.bridges.sottek_hearing_model'] is bridge\n"
         "print('ok')\n"
     )
     r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)
@@ -812,7 +812,7 @@ def test_shm_import_restores_matplotlib_rcparams(sh):  # sh: skip without the pa
     code = (
         "import matplotlib\n"
         "before = matplotlib.rcParams.copy()\n"
-        "from rota.bridges import sottek_hearing_model as shm\n"
+        "from rota_order.bridges import sottek_hearing_model as shm\n"
         "shm._model()\n"
         "diff = [k for k in before if dict.__getitem__(before, k) != dict.__getitem__(matplotlib.rcParams, k)]\n"
         "assert not diff, diff\n"

@@ -4,9 +4,9 @@ Step 1 of the SQAT bridge (see README.md in this folder):
 
 1. ``export_signals.py`` (this script) writes the signals, their speed and metadata,
 2. ``run_sqat.m`` runs SQAT on them in MATLAB,
-3. ``import_results.py`` bins the SQAT time series along rpm with ROTA.
+3. ``import_results.py`` bins the SQAT time series along rpm with rota-order.
 
-Scenarios, both from ``rota.synth.synth_scenario`` with a fixed seed, one receiver channel and
+Scenarios, both from ``rota_order.synth.synth_scenario`` with a fixed seed, one receiver channel and
 an ideal recorder (``measurement=None``, so the signal is the exact sum of its stems):
 
 * ``ice_runup``: four-cylinder engine at full load in second gear, 1200 to about 5800 rpm.
@@ -22,7 +22,7 @@ Files written to ``build/sqat_bridge/signals/`` (``build/`` is git-ignored), for
   ``rpm`` (speed in rpm without the angle-locked ripple, ``rpm_mean``, at 1 kHz), ``speed_kmh``
   and ``gear`` (same 1 kHz grid), ``name``, ``seed``, ``duration``.
 * ``<name>.json``: the same metadata plus the RMS and peak sound pressure, the overall level
-  in dB re 20 uPa and the ROTA version.
+  in dB re 20 uPa and the rota-order version.
 
 Amplitude convention: ``x`` is instantaneous sound pressure in Pa (RMS and peak values in the
 JSON are stated as such). SQAT expects exactly this: a calibrated signal in Pa.
@@ -47,8 +47,8 @@ from pathlib import Path
 import numpy as np
 from scipy.io import savemat
 
-import rota
-from rota.synth import synth_scenario
+import rota_order as ro
+from rota_order.synth import synth_scenario
 
 FS = 48000.0           # Hz, the rate ECMA-418-2 and SQAT work at (no resampling needed)
 SPEED_FS = 1000.0      # Hz, rate of the exported speed track
@@ -92,8 +92,8 @@ def export(name: str, out: Path) -> dict:
         "speed_fs": SPEED_FS,
         "speed_source": "rpm_mean (driveline speed without the angle-locked ripple)",
         "overrides": {"duration": duration, **overrides},
-        "rota_version": rota.__version__,
-        "generator": "rota.synth.synth_scenario",
+        "rota_order_version": ro.__version__,
+        "generator": "rota_order.synth.synth_scenario",
     }
     out.mkdir(parents=True, exist_ok=True)
     savemat(

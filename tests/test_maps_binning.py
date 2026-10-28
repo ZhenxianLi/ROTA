@@ -1,10 +1,10 @@
-"""Tests of the rpm-bin aggregation of rota.maps against analytic truth."""
+"""Tests of the rpm-bin aggregation of rota_order.maps against analytic truth."""
 
 import numpy as np
 import pytest
 
-from rota.maps import BinnedMap, Map, bin_map, rpm_frequency_map, rpm_order_map
-from rota.synth import rpm_profiles, synth_runup
+from rota_order.maps import BinnedMap, Map, bin_map, rpm_frequency_map, rpm_order_map
+from rota_order.synth import rpm_profiles, synth_runup
 
 FS = 8000.0
 ORDER = 2.0

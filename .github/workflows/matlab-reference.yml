@@ -9,7 +9,7 @@ name: matlab-reference
 # One job per case runs the MATLAB calls in parallel; the report job collects their output and
 # runs compare.py once over all cases. MATLAB's Vold-Kalman calls take minutes per call on the
 # long multi-order cases (iterative solver), so for T2, T3 and T14 they run in jobs of their own
-# (ROTA_REF_PART: main, vkwave, vktrack); compare.py merges the parts of a case.
+# (ROTA_ORDER_REF_PART: main, vkwave, vktrack); compare.py merges the parts of a case.
 
 on:
   workflow_dispatch:
@@ -46,7 +46,7 @@ jobs:
           - { case: T14, part: vktrack }
           - { case: VKBW, part: all }
     env:
-      ROTA_REF_PART: ${{ matrix.part }}
+      ROTA_ORDER_REF_PART: ${{ matrix.part }}
     steps:
       - uses: actions/checkout@v4
 
@@ -54,7 +54,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install ROTA
+      - name: Install rota-order
         run: |
           python -m pip install --upgrade pip
           pip install -e .
@@ -96,7 +96,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install ROTA
+      - name: Install rota-order
         run: |
           python -m pip install --upgrade pip
           pip install -e .
@@ -126,7 +126,7 @@ jobs:
           done
           ls -l validation/reference
 
-      - name: Compare ROTA, truth and MATLAB
+      - name: Compare rota-order, truth and MATLAB
         run: python validation/compare.py --out validation/reference/report.md
 
       - name: Upload the reference output

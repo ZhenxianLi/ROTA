@@ -5,9 +5,9 @@ The example builds one problem into a synthetic electric-drive run-up (a structu
 This module runs the same functions on the first 3.6 s of the recording (200 to 5360 rpm, which holds
 the whole passage of the resonance; the transients keep their times of the full record) and checks that the analysis recovers what was built in: the
 order, the speed range, the excess over the ECMA-418-1 criterion and the reduction that removes it,
-all against the truth computed from the stems of ``rota.synth``. Data come from ``rota.synth`` only.
+all against the truth computed from the stems of ``rota_order.synth``. Data come from ``rota_order.synth`` only.
 
-The toolbox parts (MoSQITo loudness and sharpness, Sottek-model tonality, through ``rota.bridges``) run
+The toolbox parts (MoSQITo loudness and sharpness, Sottek-model tonality, through ``rota_order.bridges``) run
 on a 1.6 s excerpt around the passage and are skipped when the package is missing.
 """
 
@@ -20,8 +20,8 @@ import numpy as np
 import pytest
 from scipy.io import wavfile
 
-import rota
-from rota import bridges
+import rota_order as ro
+from rota_order import bridges
 
 SCRIPT = Path(__file__).resolve().parents[1] / "examples" / "10_worked_analysis.py"
 DURATION = 3.6  # s of the scenario; the passage of the resonance is at 2.9 to 3.1 s
@@ -132,7 +132,7 @@ def test_strongest_line_is_on_the_problem_order(run):
 
 def test_extraction_follows_the_true_stem(worked, run):
     sel = run["sc"].t > worked.EDGE_S
-    sim = rota.metrics.waveform_similarity(run["comp"].waveforms[sel, 0], run["stem"][sel])
+    sim = ro.metrics.waveform_similarity(run["comp"].waveforms[sel, 0], run["stem"][sel])
     assert sim["corr"] > 0.98
     assert np.allclose(run["resid"] + run["comp"].total, run["x"])  # extract.residual: x = residual + orders
 
@@ -197,7 +197,7 @@ def test_missing_toolboxes_are_skipped_with_a_message(worked, run, monkeypatch, 
     assert "MoSQITo is not installed or cannot be imported" in text
     assert "sottek-hearing-model is not installed or cannot be imported" in text
     assert "pip install mosqito" in text and "pip install sottek-hearing-model" in text  # the bridges' messages
-    S = worked.summary(run, out)  # the summary and the conclusion still work, with ROTA's numbers only
+    S = worked.summary(run, out)  # the summary and the conclusion still work, with rota-order's numbers only
     assert set(S["required"]) == {"L_A"}
     printed = []
     worked.print_conclusion(run, S, log=printed.append)

@@ -1,0 +1,37 @@
+"""rota-order: rotational order tracking and analysis.
+
+Submodules
+----------
+speed    Speed references: tachometer pulses, tacholess estimation, phase,
+         control signals.
+angle    Angle-domain (computed order tracking) resampling.
+maps     RPM-frequency and RPM-order maps.
+slices   Order spectra and order slices.
+extract  Order extraction (Vold-Kalman, tracked harmonics), removal, residual.
+resynth  Order tables, order and broadband resynthesis, provenance.
+tonal    Weighting, calibrated levels, octave bands, order prominence.
+synth    Synthetic test signals with analytic ground truth.
+metrics  Validation metrics.
+bridges  Optional thin wrappers for MoSQITo, the Sottek hearing model (ECMA-418-2) and
+         SQAT (MATLAB, through the MATLAB Engine API for Python); the toolboxes are
+         not required and are imported lazily.
+plot     Figures of the results above, one call per result (optional Matplotlib,
+         imported lazily).
+
+Conventions
+-----------
+Time in seconds, sampling rates in Hz, rotational speed in rev/min (rpm),
+shaft angle in revolutions, vehicle speed in km/h. Signals are arrays of
+shape ``(n,)`` or ``(n, ch)``; every operator acts on each channel
+independently and linearly. Amplitude conventions (peak or RMS) are stated
+in each docstring and selected explicitly where a choice exists.
+"""
+
+__version__ = "0.8.0"
+
+from . import angle, bridges, extract, maps, metrics, plot, resynth, slices, speed, synth, tonal  # noqa: F401
+
+__all__ = [
+    "angle", "bridges", "extract", "maps", "metrics", "plot", "resynth", "slices", "speed", "synth", "tonal",
+    "__version__",
+]

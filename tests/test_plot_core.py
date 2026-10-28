@@ -1,4 +1,4 @@
-"""Tests of the shared helpers of rota.plot and of its optional Matplotlib dependency.
+"""Tests of the shared helpers of rota_order.plot and of its optional Matplotlib dependency.
 
 The helpers are pure NumPy and run without Matplotlib; the tests that need it skip,
 and the two subprocess tests (import without Matplotlib, ImportError hint) run
@@ -12,9 +12,9 @@ import warnings
 import numpy as np
 import pytest
 
-import rota.plot as rp
-from rota.plot import _core
-from rota.plot._core import (
+import rota_order.plot as rp
+from rota_order.plot import _core
+from rota_order.plot._core import (
     SOUND_PRESSURE,
     as_items,
     check_finite,
@@ -267,7 +267,7 @@ def test_colour_limits_errors():
 
 
 class _Result:
-    """Stands for any result object (a dataclass of ROTA)."""
+    """Stands for any result object (a dataclass of rota-order)."""
 
 
 def test_as_items_one_result_a_list_a_tuple_and_a_dict():
@@ -642,12 +642,12 @@ def _run(code):
     return subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)
 
 
-def test_import_rota_plot_does_not_import_matplotlib_in_subprocess():
-    # Hidden: any import of Matplotlib while importing rota.plot would raise.
+def test_import_rota_order_plot_does_not_import_matplotlib_in_subprocess():
+    # Hidden: any import of Matplotlib while importing rota_order.plot would raise.
     code = (
         "import sys\n"
         "sys.modules['matplotlib'] = None\n"
-        "import rota, rota.plot as rp\n"
+        "import rota_order, rota_order.plot as rp\n"
         "assert {'SOUND_PRESSURE', 'rpm_order_map', 'rpm_frequency_map', 'compare_maps'} <= set(rp.__all__)\n"
         "assert sys.modules['matplotlib'] is None\n"
         "assert not [m for m in sys.modules if m.startswith('matplotlib.')]\n"
@@ -655,8 +655,8 @@ def test_import_rota_plot_does_not_import_matplotlib_in_subprocess():
     )
     r = _run(code)
     assert r.returncode == 0 and "ok" in r.stdout, r.stderr
-    # Not hidden: still not imported (importing rota and rota.plot loads no Matplotlib).
-    code = "import sys, rota, rota.plot\nassert 'matplotlib' not in sys.modules\nprint('ok')\n"
+    # Not hidden: still not imported (importing rota_order and rota_order.plot loads no Matplotlib).
+    code = "import sys, rota_order, rota_order.plot\nassert 'matplotlib' not in sys.modules\nprint('ok')\n"
     r = _run(code)
     assert r.returncode == 0 and "ok" in r.stdout, r.stderr
 
@@ -666,14 +666,14 @@ def test_figure_functions_raise_the_install_hint_without_matplotlib_in_subproces
         "import sys\n"
         "sys.modules['matplotlib'] = None\n"
         "import numpy as np\n"
-        "import rota, rota.plot as rp\n"
-        "from rota.plot import _core\n"
+        "import rota_order, rota_order.plot as rp\n"
+        "from rota_order.plot import _core\n"
         "fs = 2000.0\n"
         "t = np.arange(round(1.5 * fs)) / fs\n"
-        "rpm = rota.synth.rpm_profiles(t, 'linear', start=900.0, stop=2400.0)\n"
-        "sig = rota.synth.synth_runup(fs, rpm, [{'order': 2.0, 'amplitude': 1.0}], seed=1)\n"
-        "omap = rota.maps.rpm_order_map(sig.x, fs, sig.rpm, order_resolution=0.5, max_order=6.0)\n"
-        "fmap = rota.maps.rpm_frequency_map(sig.x, fs, sig.rpm, resolution=10.0, max_freq=500.0)\n"
+        "rpm = rota_order.synth.rpm_profiles(t, 'linear', start=900.0, stop=2400.0)\n"
+        "sig = rota_order.synth.synth_runup(fs, rpm, [{'order': 2.0, 'amplitude': 1.0}], seed=1)\n"
+        "omap = rota_order.maps.rpm_order_map(sig.x, fs, sig.rpm, order_resolution=0.5, max_order=6.0)\n"
+        "fmap = rota_order.maps.rpm_frequency_map(sig.x, fs, sig.rpm, resolution=10.0, max_freq=500.0)\n"
         "calls = [_core.pyplot, lambda: _core.get_ax(None), lambda: rp.rpm_order_map(omap),\n"
         "         lambda: rp.rpm_frequency_map(fmap), lambda: rp.compare_maps({'a': omap, 'b': omap})]\n"
         "for call in calls:\n"
@@ -681,7 +681,7 @@ def test_figure_functions_raise_the_install_hint_without_matplotlib_in_subproces
         "        call()\n"
         "    except ImportError as e:\n"
         "        assert \"pip install 'rota-order[plot]'\" in str(e), str(e)\n"
-        "        assert 'rota.plot needs Matplotlib' in str(e), str(e)\n"
+        "        assert 'rota_order.plot needs Matplotlib' in str(e), str(e)\n"
         "        assert 'does not depend on it' in str(e), str(e)\n"
         "        assert isinstance(e.__cause__, ImportError), repr(e.__cause__)\n"
         "    else:\n"
@@ -699,7 +699,7 @@ PLOT_FUNCTIONS = [
 ]
 
 
-def test_all_of_rota_plot_is_documented_and_present():
+def test_all_of_rota_order_plot_is_documented_and_present():
     assert PLOT_FUNCTIONS == sorted(PLOT_FUNCTIONS)
     assert rp.__all__ == ["SOUND_PRESSURE", *PLOT_FUNCTIONS]  # alphabetical after the constant
     for name in PLOT_FUNCTIONS:

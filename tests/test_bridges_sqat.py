@@ -7,13 +7,13 @@ Two groups of tests:
   stub engine (a small class that records the calls and returns fixed arrays, with a stub
   ``matlab`` module providing ``matlab.double``) checks the argument marshalling (calibrated
   Pa at 48 kHz as a column vector, explicit parameters), the conversion of SQAT's output
-  struct into :class:`rota.bridges.TimeMetric`, and the ownership of the engine.
-* With MATLAB: run only when ``matlab.engine`` is importable and ``ROTA_SQAT_PATH`` points
+  struct into :class:`rota_order.bridges.TimeMetric`, and the ownership of the engine.
+* With MATLAB: run only when ``matlab.engine`` is importable and ``ROTA_ORDER_SQAT_PATH`` points
   to a SQAT checkout (release v2.0). The wrappers must return exactly what the same SQAT
   call made directly through the engine returns on the same signal, and
-  ``rota.bridges.TimeMetric.vs_rpm`` must bin the results.
+  ``rota_order.bridges.TimeMetric.vs_rpm`` must bin the results.
 
-Data come from ``rota.synth`` only. No MATLAB output is stored.
+Data come from ``rota_order.synth`` only. No MATLAB output is stored.
 """
 
 import os
@@ -24,9 +24,9 @@ import types
 import numpy as np
 import pytest
 
-import rota
-from rota.bridges import _common, sqat
-from rota.bridges._common import TimeMetric
+import rota_order as ro
+from rota_order.bridges import _common, sqat
+from rota_order.bridges._common import TimeMetric
 
 FS = 16000.0  # Hz, rate of the synthetic signal (resampled to 48 kHz by the bridge)
 DURATION = 0.5  # s, stub tests
@@ -36,8 +36,8 @@ N_T, N_BARK = 50, 240
 
 def _signal(duration=DURATION, fs=FS, seed=3):
     t = np.arange(round(duration * fs)) / fs
-    rpm = rota.synth.rpm_profiles(t, "linear", start=2000.0, stop=4000.0)
-    sig = rota.synth.synth_runup(
+    rpm = ro.synth.rpm_profiles(t, "linear", start=2000.0, stop=4000.0)
+    sig = ro.synth.synth_runup(
         fs, rpm, orders=[{"order": 6.0, "amplitude": 0.2, "phase": 0.0}], noise_rms=0.02, seed=seed
     )
     return sig
@@ -170,7 +170,7 @@ def stub(fake_matlab, sqat_dir):
 def test_import_without_matlabengine():
     code = (
         "import sys; sys.modules['matlab'] = None; sys.modules['matlab.engine'] = None; "
-        "import rota, rota.bridges.sqat as s; "
+        "import rota_order, rota_order.bridges.sqat as s; "
         "assert sys.modules['matlab'] is None; print(s.SQAT_RELEASE)"
     )
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
@@ -196,14 +196,14 @@ def test_call_without_matlabengine_raises_with_hint(monkeypatch, sqat_dir):
 
 def test_missing_sqat_path(fake_matlab, monkeypatch, tmp_path):
     monkeypatch.delenv(sqat.ENV_PATH, raising=False)
-    with pytest.raises(ValueError, match="ROTA_SQAT_PATH"):
+    with pytest.raises(ValueError, match="ROTA_ORDER_SQAT_PATH"):
         sqat.start()
-    with pytest.raises(ValueError, match="ROTA_SQAT_PATH"):
+    with pytest.raises(ValueError, match="ROTA_ORDER_SQAT_PATH"):
         sqat.loudness(_signal().x, FS)
     with pytest.raises(FileNotFoundError, match="startup_SQAT.m"):
         sqat.start(tmp_path)
     monkeypatch.setenv(sqat.ENV_PATH, str(tmp_path))
-    with pytest.raises(FileNotFoundError, match="ROTA_SQAT_PATH"):
+    with pytest.raises(FileNotFoundError, match="ROTA_ORDER_SQAT_PATH"):
         sqat.start()
     assert fake_matlab == []  # no engine started before the folder is known
 
@@ -265,7 +265,7 @@ def test_failed_call_raises_runtime_error(fake_matlab, sqat_dir):
 def _check_signal_arg(arg, x):
     """The signal reaches MATLAB as an (n, 1) double column: calibrated, Pa, at 48 kHz."""
     assert isinstance(arg, FakeDouble)
-    expected = rota.tonal.to_calibrated_48k(x, FS, calibration=CAL, fs_out=48000.0)
+    expected = ro.tonal.to_calibrated_48k(x, FS, calibration=CAL, fs_out=48000.0)
     assert arg.size == (expected.size, 1)
     assert expected.size == round(x.size * 48000.0 / FS)
     np.testing.assert_array_equal(arg.data[:, 0], expected)
@@ -323,7 +323,7 @@ def test_sharpness_from_loudness(stub):
     with pytest.raises(ValueError, match="weight_type"):
         sqat.sharpness(x, FS, weight_type="din", session=s)
     foreign = TimeMetric("loudness", n.t, n.values, "sone", extra=dict(n.extra), source="MoSQITo 1.2.1")
-    with pytest.raises(ValueError, match="rota.bridges.sqat.loudness"):
+    with pytest.raises(ValueError, match="rota_order.bridges.sqat.loudness"):
         sqat.sharpness(None, None, loudness=foreign, session=s)
 
 
@@ -453,12 +453,12 @@ def real_run():
     import matlab.engine
 
     sig = _signal(DURATION_REAL, FS_REAL, seed=5)
-    # ROTA_MATLAB_ENGINE_NAME: connect to a shared engine (matlab.engine.shareEngine) instead
+    # ROTA_ORDER_MATLAB_ENGINE_NAME: connect to a shared engine (matlab.engine.shareEngine) instead
     # of starting one, as the CI workflow does when only its run-command session is licensed.
-    name = os.environ.get("ROTA_MATLAB_ENGINE_NAME")
+    name = os.environ.get("ROTA_ORDER_MATLAB_ENGINE_NAME")
     engine = matlab.engine.connect_matlab(name) if name else None
     with sqat.start(engine=engine) as s:
-        p = rota.tonal.to_calibrated_48k(sig.x, FS_REAL, calibration=1.0, fs_out=48000.0)
+        p = ro.tonal.to_calibrated_48k(sig.x, FS_REAL, calibration=1.0, fs_out=48000.0)
         col = matlab.double(p.reshape(-1, 1).tolist())  # independent route: nested lists
         eng = s.engine
         direct = {

@@ -1,4 +1,4 @@
-"""Tests for modify_orders, remap_rpm and resynthesize against analytic truth (rota.synth)."""
+"""Tests for modify_orders, remap_rpm and resynthesize against analytic truth (rota_order.synth)."""
 
 import json
 
@@ -6,15 +6,15 @@ import numpy as np
 import pytest
 from scipy import signal
 
-import rota.resynth as rs
-from rota._components import OrderComponents
-from rota._provenance import jsonable
-from rota.extract import residual as extract_residual
-from rota.extract import tracked_harmonics
-from rota.maps import rpm_order_map
-from rota.resynth import OrderTable, modify_orders, remap_rpm, resynthesize, synthesize_orders
-from rota.slices import order_slice
-from rota.synth import rpm_profiles, synth_runup
+import rota_order.resynth as rs
+from rota_order._components import OrderComponents
+from rota_order._provenance import jsonable
+from rota_order.extract import residual as extract_residual
+from rota_order.extract import tracked_harmonics
+from rota_order.maps import rpm_order_map
+from rota_order.resynth import OrderTable, modify_orders, remap_rpm, resynthesize, synthesize_orders
+from rota_order.slices import order_slice
+from rota_order.synth import rpm_profiles, synth_runup
 
 TWO_PI = 2 * np.pi
 FS = 8000.0
@@ -368,7 +368,10 @@ def test_remap_time_random_phase_is_seeded_and_keeps_the_amplitude_course(run):
     y1, i1 = remap_rpm(comp, new, FS, seed=7)
     y2, _ = remap_rpm(comp, new, FS, seed=7)
     y3, _ = remap_rpm(comp, new, FS, seed=8)
-    assert np.array_equal(y1, y2) and not np.allclose(y1, y3)
+    # same seed, same result up to rounding: on NumPy 1.x the magnitude of a strided complex
+    # array may differ by one ulp between calls, so bit equality is not required
+    assert np.allclose(y1, y2, rtol=0.0, atol=1e-12 * np.max(np.abs(y1)))
+    assert not np.allclose(y1, y3)
     assert i1["phase_mode"] == "random" and i1["seed"] == 7 and i1["phases"].shape == (3,)
     # the envelope magnitude of every order keeps its time course (same recording, other speed)
     c = tracked_harmonics(y1, FS, new, ORDERS)

@@ -1,6 +1,6 @@
 """Tests of angular_to_time, stationarize and destationarize against analytic truth.
 
-rota.synth supplies the signals: every order is a cosine of the exact shaft
+rota_order.synth supplies the signals: every order is a cosine of the exact shaft
 angle, so the forward transform, its inverse and the time warp can be checked
 against closed forms.
 """
@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 from scipy import signal
 
-from rota.angle import (
+from rota_order.angle import (
     AngularSignal,
     StationarizedSignal,
     angular_resample,
@@ -17,8 +17,8 @@ from rota.angle import (
     destationarize,
     stationarize,
 )
-from rota.speed import rpm_to_phase
-from rota.synth import rpm_profiles, synth_runup
+from rota_order.speed import rpm_to_phase
+from rota_order.synth import rpm_profiles, synth_runup
 
 FS = 16000.0
 R0, ACC = 1000.0, 1000.0  # rpm and rpm/s: 1000 -> 4000 rpm in 3 s

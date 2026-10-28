@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The validation cases (`README.md` in this directory) check each method on a signal built for it: one effect at a time, against analytic truth. The stress tests (`tests/test_stress.py`) run the same methods on the complete synthetic recordings of `rota.synth.synth_scenario`. Those recordings combine:
+The validation cases (`README.md` in this directory) check each method on a signal built for it: one effect at a time, against analytic truth. The stress tests (`tests/test_stress.py`) run the same methods on the complete synthetic recordings of `rota_order.synth.synth_scenario`. Those recordings combine:
 
 * a speed ripple locked to the shaft angle, a gear shift and a clutch-slip launch;
 * half orders and angle-locked combustion bursts;
@@ -12,7 +12,7 @@ The validation cases (`README.md` in this directory) check each method on a sign
 
 The tests answer two questions. How far do the results move from the ideal case? And which of those moves come from the method, and which from the physics of the signal?
 
-All signals come from `rota.synth` with fixed seeds and the scenario defaults. Only the sampling rate and the duration are set:
+All signals come from `rota_order.synth` with fixed seeds and the scenario defaults. Only the sampling rate and the duration are set:
 
 | Scenario | Call | Content |
 |---|---|---|

@@ -1,12 +1,12 @@
 name: sqat-bridge
 
-# SQAT bridge example (examples/09_sqat_bridge, ROADMAP v0.5): two rota.synth run-ups are
+# SQAT bridge example (examples/09_sqat_bridge, ROADMAP v0.5): two rota_order.synth run-ups are
 # analysed with SQAT, the open-source MATLAB Sound Quality Analysis Toolbox
 # (github.com/ggrecow/SQAT, GPL-3.0), and the SQAT time series are binned along rpm with
-# rota.slices.metric_vs_rpm. Run it by hand from Actions -> sqat-bridge -> Run workflow, or by
+# rota_order.slices.metric_vs_rpm. Run it by hand from Actions -> sqat-bridge -> Run workflow, or by
 # pushing a change to the files below.
 #
-# SQAT is cloned at a pinned commit and never vendored in ROTA; only its documented public
+# SQAT is cloned at a pinned commit and never vendored in rota-order; only its documented public
 # functions are called (examples/09_sqat_bridge/run_sqat.m). As for the MATLAB reference
 # (validation/README.md), the output stays in the workflow artifact `sqat-bridge` and is not
 # committed.
@@ -37,7 +37,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install ROTA
+      - name: Install rota-order
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[plot]"

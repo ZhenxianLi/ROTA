@@ -1,7 +1,7 @@
 % run_sqat.m -- step 2 of the SQAT bridge (examples/09_sqat_bridge/README.md).
 %
 % What this script does, and nothing else:
-%   1. adds a clone of SQAT (github.com/ggrecow/SQAT, GPL-3.0; never vendored in ROTA) to the
+%   1. adds a clone of SQAT (github.com/ggrecow/SQAT, GPL-3.0; never vendored in rota-order) to the
 %      MATLAB path with its documented initialiser startup_SQAT,
 %   2. loads the signals written by export_signals.py (build/sqat_bridge/signals/*.mat:
 %      calibrated sound pressure in Pa at 48 kHz),
@@ -16,7 +16,7 @@
 %      scipy.io.loadmat), and writes results/versions.txt and results/log.txt.
 %
 % SQAT is used as a black box: only documented inputs and outputs appear here. No SQAT code is
-% copied into ROTA. Binning along rpm happens in import_results.py.
+% copied into rota-order. Binning along rpm happens in import_results.py.
 %
 % Units and conventions: time in s; loudness in sone (and loudness level in phon), sharpness in
 % acum, roughness in asper, tonality in tu_HMS, tonal frequency in Hz. Input: sound pressure in

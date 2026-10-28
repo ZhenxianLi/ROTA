@@ -1,6 +1,6 @@
 """Tests of the tacholess speed estimator against analytic truth.
 
-All signals come from ``rota.synth.synth_runup``; the truth is the speed curve
+All signals come from ``rota_order.synth.synth_runup``; the truth is the speed curve
 that was put into the signal, evaluated at the frame times of the estimate.
 """
 
@@ -10,7 +10,7 @@ import warnings
 import numpy as np
 import pytest
 
-from rota._ridge import (
+from rota_order._ridge import (
     RidgeQualityWarning,
     RidgeResult,
     WhiteningWarning,
@@ -21,8 +21,8 @@ from rota._ridge import (
     _viterbi,
     rpm_from_ridge,
 )
-from rota.metrics import track_error
-from rota.synth import rpm_profiles, synth_runup
+from rota_order.metrics import track_error
+from rota_order.synth import rpm_profiles, synth_runup
 
 FS = 8000.0  # Hz
 AMPS = (1.0, 0.7, 0.5, 0.35)  # peak amplitudes of orders 1..4
@@ -957,8 +957,8 @@ def _interior(rpm, *, onr_db=5.0, tilt=-8.5, seed=0):
     """
     from scipy import signal as sps
 
-    from rota._channel import speed_noise
-    from rota.synth import _resonance_sos
+    from rota_order._channel import speed_noise
+    from rota_order.synth import _resonance_sos
 
     specs = [dict(order=o, amplitude=10 ** (a / 20)) for o, a in FOUR_CYL]
     s = synth_runup(FS, rpm, specs, resonances=[BOOM], seed=seed)
@@ -1051,7 +1051,7 @@ def test_single_line_comb_locked_on_a_rational_neighbour_has_low_confidence():
     # the tone) the track falls onto the order 7 line, 7/6 of the speed; the
     # rival at the true speed is counted, so the confidence of those frames is
     # low and the track is reported as unreliable.
-    from rota._channel import speed_noise
+    from rota_order._channel import speed_noise
 
     t = np.arange(round(8.0 * FS)) / FS
     rpm = rpm_profiles(t, "linear", start=2000.0, stop=8000.0, t_start=0.5, t_stop=7.5)

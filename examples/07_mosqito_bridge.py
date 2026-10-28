@@ -1,14 +1,14 @@
-"""ROTA and MoSQITo: psychoacoustic metrics of a run-up along rpm, and what an order contributes.
+"""rota-order and MoSQITo: psychoacoustic metrics of a run-up along rpm, and what an order contributes.
 
-ROTA does not compute loudness, sharpness or roughness (they are out of scope); the open-source
+rota-order does not compute loudness, sharpness or roughness (they are out of scope); the open-source
 toolbox MoSQITo (Apache-2.0, https://github.com/Eomys/MoSQITo) does. This script shows the hand-over
-through ``rota.bridges.mosqito``: ROTA prepares the signal and the speed, the bridge calls MoSQITo,
-the ``vs_rpm`` method of each result bins the metric along rpm, and ROTA attributes the metrics to an
-order. MoSQITo stays an optional, external dependency (``pip install "rota-order[mosqito]"``): ROTA
+through ``rota_order.bridges.mosqito``: rota-order prepares the signal and the speed, the bridge calls MoSQITo,
+the ``vs_rpm`` method of each result bins the metric along rpm, and rota-order attributes the metrics to an
+order. MoSQITo stays an optional, external dependency (``pip install "rota-order[mosqito]"``): rota-order
 does not depend on it, the bridge imports it only inside its functions, and only documented public
 functions of MoSQITo are called.
 
-The recording is ``rota.synth.synth_scenario("ice_runup")`` (a synthetic four-cylinder engine in a
+The recording is ``rota_order.synth.synth_scenario("ice_runup")`` (a synthetic four-cylinder engine in a
 vehicle, firing order 2), the first 6 s of the default full-load run-up (about 1200 to 4400 rpm in
 second gear; the first upshift comes later), one receiver channel, seed fixed. Nothing is measured.
 
@@ -22,61 +22,61 @@ catalogued at https://zhenxianli.github.io/LISQM/ (projects/mosqito.html):
   is identical to ``sharpness_din_tv``, which would compute the loudness a second time).
 * ``roughness_dw`` (``bridges.mosqito.roughness``): Daniel & Weber roughness, in asper, one value per
   0.1 s (200 ms windows, 50 % overlap).
-* ``tnr_ecma_st``, called directly (``rota.bridges`` does not wrap it, since ROTA has its own
-  tone-to-noise ratio in ``rota.tonal``): tone-to-noise ratio of the ECMA-74 Annex D method (the
+* ``tnr_ecma_st``, called directly (``rota_order.bridges`` does not wrap it, since rota-order has its own
+  tone-to-noise ratio in ``rota_order.tonal``): tone-to-noise ratio of the ECMA-74 Annex D method (the
   catalogue gives ECMA-74:2019, 17th edition; the docstring says "ECMA 418-1" without an edition).
-* Not used here, nor wrapped by ``rota.bridges``: ``loudness_ecma`` and ``roughness_ecma`` implement
+* Not used here, nor wrapped by ``rota_order.bridges``: ``loudness_ecma`` and ``roughness_ecma`` implement
   ECMA-418-2 in its 2nd edition (2022) only, which is not the current edition (the 4th); its Clause 8
   loudness is missing. A result must not be quoted as "ECMA-418-2" without that qualification.
 
 The script follows the steps below.
 
-1. Preparation with ROTA. ``tacho_to_rpm`` gives the speed from the tachometer channel; the bridge
-   brings the signal in Pa to 48 kHz with ``rota.tonal.to_calibrated_48k`` (the rate MoSQITo's
+1. Preparation with rota-order. ``tacho_to_rpm`` gives the speed from the tachometer channel; the bridge
+   brings the signal in Pa to 48 kHz with ``rota_order.tonal.to_calibrated_48k`` (the rate MoSQITo's
    time-varying loudness requires; the polyphase filter keeps the level, which is checked).
 2. MoSQITo computes loudness, sharpness and roughness of the run-up (``field_type="free"``).
 3. The ``vs_rpm`` method of each result bins it along the speed in 250 rpm bins on the monotonic
-   run-up (``rota.slices.metric_vs_rpm``), after the start-up that the bridge recommends: 0.6 s for
+   run-up (``rota_order.slices.metric_vs_rpm``), after the start-up that the bridge recommends: 0.6 s for
    loudness and sharpness (which comes from the same filters) and 1.5 s for roughness, the rules of
    thumb in the docstring of ``metric_vs_rpm``. The aggregation, also the bridge's, follows the usage
    for time-varying sounds: the 95th percentile of loudness (N5, the loudness exceeded in 5 % of the
    time; Fastl and Zwicker), the median of the sharpness and the 90th percentile of the roughness
    (R10). A metric is never averaged in dB.
 4. Order contribution. Step 2 and 3 are repeated on the signal with order 2 removed
-   (``rota.extract.remove_orders``, tracked harmonics) and with order 2 raised by 6 dB
-   (``rota.resynth.modify_orders`` on the extracted components, then ``rota.resynth.resynthesize``
+   (``rota_order.extract.remove_orders``, tracked harmonics) and with order 2 raised by 6 dB
+   (``rota_order.resynth.modify_orders`` on the extracted components, then ``rota_order.resynth.resynthesize``
    with the unchanged residual), and the differences to the original are plotted against the speed.
    Order 2 is checked with an order slice (RMS, Pa) before MoSQITo sees the signals.
-5. Tone prominence of order 2 against the speed: ROTA's ``order_prominence`` works in the angle
+5. Tone prominence of order 2 against the speed: rota-order's ``order_prominence`` works in the angle
    domain on the run-up; MoSQITo's ``tnr_ecma_st`` is run on steady excerpts at three speeds, because
    it takes a signal of fixed duration as one spectrum and has no speed input. The two differ in
    method, not only in implementation:
 
-   * ROTA resamples to uniform shaft angle (computed order tracking) and transforms frames of 50
+   * rota-order resamples to uniform shaft angle (computed order tracking) and transforms frames of 50
      revolutions (the 1 % line spacing that ECMA-418-1 requires for the tone frequency), so order 2
      is one stationary line in every frame although the speed rises by about 500 rpm/s. It evaluates
      the critical band of each frame at the frame's mean speed (ECMA-418-1, clauses 10 and 11) and
      averages frames in speed bins. A fixed time window with the same line spacing at 100 Hz lasts
      1 s, and order 2 then sweeps 17 to 18 Hz, which is more than the 15 % of the critical band
-     below which the standard regards a tone as resolved: ROTA flags such a window ("resolved: no"
+     below which the standard regards a tone as resolved: rota-order flags such a window ("resolved: no"
      in the table; its TNR comes out close here only because ``tone_prominence`` gathers the swept
      lines into the tone, a choice that the standard leaves to the analyst).
    * MoSQITo takes the whole signal as one spectrum and finds the tones itself. It therefore needs a
-     steady signal: ``rota.resynth.stationary_excerpt`` renders the orders as steady sinusoids with
+     steady signal: ``rota_order.resynth.stationary_excerpt`` renders the orders as steady sinusoids with
      the amplitudes found at the reference speed, plus the broadband residual of the recording (2 s,
-     five seeds, so that the scatter of the noise shows). ROTA's ``tone_prominence`` is run on the
+     five seeds, so that the scatter of the noise shows). rota-order's ``tone_prominence`` is run on the
      same excerpts.
-   * Editions: ROTA follows ECMA-418-1 (3rd edition, 2024); MoSQITo is catalogued against
+   * Editions: rota-order follows ECMA-418-1 (3rd edition, 2024); MoSQITo is catalogued against
      ECMA-74:2019 (17th edition, Annex D), whose method is that of the 2nd edition of ECMA-418-1.
      Both define the TNR as the tone power over the noise power of the critical band, rescaled to
      the critical bandwidth, but the 3rd edition changed how the tone band is delimited and how the
      masking noise is estimated, so the two need not agree on noisy or sloping spectra. On a steady
      tone in noise with an exact flat spectrum they agree within about 0.5 dB from 130 Hz to 4 kHz
-     (``tests/test_bridge_mosqito.py``). ROTA is given the tone frequency; MoSQITo detects the peaks
+     (``tests/test_bridge_mosqito.py``). rota-order is given the tone frequency; MoSQITo detects the peaks
      itself.
 
    On the excerpts of this run-up, which are noisy and have a sloping spectrum, the two do not agree
-   (see the table): ROTA reads 10 to 20 dB, as the excerpts are built, while MoSQITo 1.2.1 returns
+   (see the table): rota-order reads 10 to 20 dB, as the excerpts are built, while MoSQITo 1.2.1 returns
    0.1 to 1 dB in most of them and about 11 dB in the rest, with the same tone and a different noise
    seed. Pure sinusoids without any noise give about 0.2 dB, as if the lines next to the peak were
    counted as noise. A tone of 12 dB in white Gaussian noise between about 130 and 380 Hz gives
@@ -92,7 +92,7 @@ gains (ratios) are applied to them. The bridge takes the signal in Pa and return
 Run:  python examples/07_mosqito_bridge.py     (needs matplotlib and mosqito; about 1 minute on 4 cores, 2 on one)
 Writes docs/images/07_mosqito_bridge.png.
 
-Toolboxes used (cite them as their authors ask; ROTA does not include or redistribute
+Toolboxes used (cite them as their authors ask; rota-order does not include or redistribute
 their code, which keeps its own licence):
 
 * Green Forge Coop (2024). MOSQITO (version 1.2.1) [software]. Zenodo.
@@ -109,12 +109,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy import signal
 
-import rota
-from rota import bridges
+import rota_order as ro
+from rota_order import bridges
 
-# MoSQITo is an optional, external dependency of this example and of rota.bridges.mosqito (pip extra
-# rota-order[mosqito]); ROTA itself does not depend on it. tnr_ecma_st is called directly:
-# rota.bridges does not wrap it, as ROTA has its own (rota.tonal, ECMA-418-1:2024), compared in step 5.
+# MoSQITo is an optional, external dependency of this example and of rota_order.bridges.mosqito (pip extra
+# rota-order[mosqito]); rota-order itself does not depend on it. tnr_ecma_st is called directly:
+# rota_order.bridges does not wrap it, as rota-order has its own (rota_order.tonal, ECMA-418-1:2024), compared in step 5.
 try:
     import mosqito
     from mosqito.sq_metrics import tnr_ecma_st
@@ -142,7 +142,7 @@ COLOURS = {VARIANTS[0]: "#0072B2", VARIANTS[1]: "#D55E00", VARIANTS[2]: "#009E73
 
 
 def mosqito_metrics(x):
-    """Loudness, sharpness and roughness of a signal in Pa at ``FS``, with ``rota.bridges.mosqito``.
+    """Loudness, sharpness and roughness of a signal in Pa at ``FS``, with ``rota_order.bridges.mosqito``.
 
     Module-level so that it can run in a worker process. The bridge resamples the signal to 48 kHz,
     calls MoSQITo and silences its output (its warning about the first points of the sharpness
@@ -162,7 +162,7 @@ def bin_metrics(metrics, t, rpm):
 
 def mosqito_tnr(x, fs, f0, tol_hz=2.0):
     """TNR in dB of the tone MoSQITo finds nearest to ``f0`` (NaN if it finds none within ``tol_hz``)."""
-    x48 = rota.tonal.to_calibrated_48k(x, fs)
+    x48 = ro.tonal.to_calibrated_48k(x, fs)
     _t_tnr, tnr, _prominent, freqs = tnr_ecma_st(x48, FS_MQ, prominence=False)
     tnr, freqs = np.asarray(tnr, dtype=float).ravel(), np.asarray(freqs, dtype=float).ravel()
     if freqs.size == 0:
@@ -171,16 +171,16 @@ def mosqito_tnr(x, fs, f0, tol_hz=2.0):
     return float(tnr[k]) if abs(freqs[k] - f0) <= tol_hz else np.nan
 
 
-def rota_tone(x, fs, f0, search_hz=None):
-    """ROTA's ``tone_prominence`` of the tone at ``f0`` on a Hann periodogram (PSD) of ``x``."""
+def ro_tone(x, fs, f0, search_hz=None):
+    """rota-order's ``tone_prominence`` of the tone at ``f0`` on a Hann periodogram (PSD) of ``x``."""
     f, psd = signal.welch(x, fs, window="hann", nperseg=min(x.size, int(fs)), scaling="density")
-    return rota.tonal.tone_prominence(f, psd, f0, search_hz=search_hz)
+    return ro.tonal.tone_prominence(f, psd, f0, search_hz=search_hz)
 
 
 def order_level_change(variant, reference, fs, rpm, order, t_min):
     """Median change of the order's RMS level (dB) from ``reference`` to ``variant`` over the run-up."""
-    sl = [rota.slices.order_slice(
-        rota.maps.rpm_order_map(v, fs, rpm, order_resolution=0.125, max_order=6.0, amplitude="rms"), order)
+    sl = [ro.slices.order_slice(
+        ro.maps.rpm_order_map(v, fs, rpm, order_resolution=0.125, max_order=6.0, amplitude="rms"), order)
         for v in (variant, reference)]
     keep = sl[0].t > t_min
     return float(np.median(20.0 * np.log10(sl[0].amplitude[keep] / sl[1].amplitude[keep])))
@@ -189,26 +189,26 @@ def order_level_change(variant, reference, fs, rpm, order, t_min):
 def main():
     plt.switch_backend("Agg")  # file output only; no display needed
     t0 = time.time()
-    print(f"MoSQITo {mosqito.__version__}, ROTA {rota.__version__}")
+    print(f"MoSQITo {mosqito.__version__}, rota-order {ro.__version__}")
 
-    # ---- 1. the signal, prepared with ROTA ----------------------------------------------------
-    sc = rota.synth.synth_scenario("ice_runup", fs=FS, duration=DURATION, seed=SEED)
+    # ---- 1. the signal, prepared with rota-order ----------------------------------------------------
+    sc = ro.synth.synth_scenario("ice_runup", fs=FS, duration=DURATION, seed=SEED)
     ppr = int(sc.config["parameters"]["tacho"]["ppr"])
     delay = float(sc.config["resolved"]["tacho_delay"])
-    rpm = rota.speed.tacho_to_rpm(sc.tacho, FS, ppr=ppr, t_out=sc.t + delay)  # delay compensated
+    rpm = ro.speed.tacho_to_rpm(sc.tacho, FS, ppr=ppr, t_out=sc.t + delay)  # delay compensated
     err = np.abs(rpm / sc.rpm_mean - 1.0)
     x = sc.x  # Pa, one channel
     print(f"Scenario ice_runup: {DURATION:g} s at {FS:g} Hz, seed {SEED}, {rpm[0]:.0f} -> {rpm[-1]:.0f} rpm "
           f"(tacho, median error {100 * np.median(err):.3f} %), firing order {ORDER:g}")
 
     # ---- 4a. the variants (built first, so that MoSQITo can start on all of them at once) ------------
-    y, comp = rota.extract.remove_orders(x, FS, rpm, [ORDER], method="tracked-harmonics", window_revs=WINDOW_REVS)
-    raised = rota.resynth.resynthesize(rota.resynth.modify_orders(comp, gain_db={ORDER: BOOST_DB}), y)["mix"]
+    y, comp = ro.extract.remove_orders(x, FS, rpm, [ORDER], method="tracked-harmonics", window_revs=WINDOW_REVS)
+    raised = ro.resynth.resynthesize(ro.resynth.modify_orders(comp, gain_db={ORDER: BOOST_DB}), y)["mix"]
     signals = dict(zip(VARIANTS, (x, y, raised)))
     # mix = 2 * order + (x - order) = x + order in amplitude: +6 dB means a factor 10**(6/20) = 1.995
     gain = 10.0 ** (BOOST_DB / 20.0)
     assert np.allclose(raised, x + (gain - 1.0) * comp.total, atol=1e-9)
-    x48 = rota.tonal.to_calibrated_48k(x, FS)  # the conversion the bridge makes before calling MoSQITo
+    x48 = ro.tonal.to_calibrated_48k(x, FS)  # the conversion the bridge makes before calling MoSQITo
     rms_in, rms_out = np.sqrt(np.mean(x ** 2)), np.sqrt(np.mean(x48 ** 2))
     print(f"to_calibrated_48k: {FS:g} -> {FS_MQ:g} Hz, RMS {20 * np.log10(rms_in / P_REF):.2f} -> "
           f"{20 * np.log10(rms_out / P_REF):.2f} dB re 20 uPa")
@@ -217,11 +217,11 @@ def main():
     pool = ProcessPoolExecutor(max_workers=workers)
     futures = {k: pool.submit(mosqito_metrics, v) for k, v in signals.items()}  # one process per variant
 
-    # ---- 4b. what the variants are, in ROTA's terms (while MoSQITo works) ------------------------
-    print("Order 2 and the overall level of the three signals (ROTA, RMS, run-up after 1 s):")
+    # ---- 4b. what the variants are, in rota-order's terms (while MoSQITo works) ------------------------
+    print("Order 2 and the overall level of the three signals (rota-order, RMS, run-up after 1 s):")
     lvl = {}
     for k, v in signals.items():
-        ol = rota.slices.overall_level(v, FS, rpm, frame=0.1, weighting="A", ref=P_REF)
+        ol = ro.slices.overall_level(v, FS, rpm, frame=0.1, weighting="A", ref=P_REF)
         sel = ol.t > 1.0
         lvl[k] = float(10.0 * np.log10(np.mean(10.0 ** (ol.level[sel] / 10.0))))
         d_ord = "" if k == VARIANTS[0] else (
@@ -229,7 +229,7 @@ def main():
         print(f"  {k:18s} L_A {lvl[k]:5.1f} dB ({lvl[k] - lvl[VARIANTS[0]]:+5.1f}){d_ord}")
 
     # ---- 5. tone prominence of order 2 ---------------------------------------------------------------
-    op = rota.tonal.order_prominence(x, FS, rpm, [ORDER], rpm_bins=250.0)
+    op = ro.tonal.order_prominence(x, FS, rpm, [ORDER], rpm_bins=250.0)
     print(f"order_prominence (angle domain): frames of {op.frame_revs:g} revolutions "
           f"({op.order_resolution:g} order lines), {op.rpm.size} speed bins, ECMA-418-1 TNR criterion defined above "
           f"89.1 Hz")
@@ -241,28 +241,28 @@ def main():
         h = int(WINDOW_S * FS / 2)
         w = x[i - h:i + h]
         sweep_hz = ORDER * (rpm[i + h] - rpm[i - h]) / 60.0
-        win = rota_tone(w, FS, f0, search_hz=0.5 * sweep_hz + 2.0)
-        ex_rota, ex_mq = [], []
+        win = ro_tone(w, FS, f0, search_hz=0.5 * sweep_hz + 2.0)
+        ex_ro, ex_mq = [], []
         for seed in range(N_EXC):
-            ex = rota.resynth.stationary_excerpt(x, FS, rpm, r_ref, EXC_DURATION, orders=sc.orders, seed=seed)
-            ex_rota.append(rota_tone(ex.x, FS, f0).tnr)
+            ex = ro.resynth.stationary_excerpt(x, FS, rpm, r_ref, EXC_DURATION, orders=sc.orders, seed=seed)
+            ex_ro.append(ro_tone(ex.x, FS, f0).tnr)
             ex_mq.append(mosqito_tnr(ex.x, FS, f0))
         rows.append({"rpm": r_ref, "f0": f0, "angle": tnr_angle, "window": float(win.tnr), "sweep": sweep_hz,
                      "unresolved": bool(win.tone_band_exceeded), "cb": float(win.critical_bandwidth),
-                     "rota": np.array(ex_rota), "mq": np.array(ex_mq)})
-    print(f"TNR of order {ORDER:g} in dB (ROTA: tone_prominence / order_prominence; MoSQITo: tnr_ecma_st):")
+                     "own": np.array(ex_ro), "mq": np.array(ex_mq)})
+    print(f"TNR of order {ORDER:g} in dB (rota-order: tone_prominence / order_prominence; MoSQITo: tnr_ecma_st):")
     print(f"  {'rpm':>5s} {'Hz':>4s} | {'angle domain':>12s} | {f'{WINDOW_S:g} s window':>11s} {'sweep':>6s} {'of band':>7s} "
-          f"{'resolved':>8s} | {f'ROTA, {N_EXC} steady excerpts':>27s} | {f'MoSQITo, same {N_EXC}':>27s} | agree")
+          f"{'resolved':>8s} | {f'rota-order, {N_EXC} steady excerpts':>27s} | {f'MoSQITo, same {N_EXC}':>27s} | agree")
     def fmt(a):
         return " ".join("  -  " if np.isnan(v) else f"{v:5.1f}" for v in a)
 
     for r in rows:
-        agree = int(np.sum(np.abs(r["mq"] - r["rota"]) <= AGREE_DB))
+        agree = int(np.sum(np.abs(r["mq"] - r["own"]) <= AGREE_DB))
         print(f"  {r['rpm']:5.0f} {r['f0']:4.0f} | {r['angle']:12.1f} | {r['window']:11.1f} {r['sweep']:4.0f} Hz "
-              f"{100 * r['sweep'] / r['cb']:6.0f}% {'no' if r['unresolved'] else 'yes':>8s} | {fmt(r['rota']):>27s} | "
+              f"{100 * r['sweep'] / r['cb']:6.0f}% {'no' if r['unresolved'] else 'yes':>8s} | {fmt(r['own']):>27s} | "
               f"{fmt(r['mq']):>27s} | {agree}/{N_EXC}")
     print(f"  (sweep: how far order {ORDER:g} moves during the window, as a share of the critical band; the standard "
-          f"calls a tone wider than 15 % unresolved; '-': MoSQITo found no tone within 2 Hz; agree: |MoSQITo - ROTA| "
+          f"calls a tone wider than 15 % unresolved; '-': MoSQITo found no tone within 2 Hz; agree: |MoSQITo - rota-order| "
           f"<= {AGREE_DB:g} dB on the same excerpt)")
 
     # ---- 2. + 3. MoSQITo metrics, binned along rpm -------------------------------------------------
@@ -326,13 +326,13 @@ def main():
     crit = op.tnr_criterion[:, 0]
     ok = np.isfinite(crit)
     ax.plot(op.rpm, op.tnr[:, 0], "o-", color="#0072B2", lw=1.8, ms=4,
-            label="ROTA order_prominence, angle domain, run-up")
+            label="rota-order order_prominence, angle domain, run-up")
     ax.plot(op.rpm[ok], crit[ok], color="0.3", lw=1.0, ls="--", label="ECMA-418-1 criterion (defined above 89.1 Hz)")
     ax.plot([r["rpm"] for r in rows], [r["window"] for r in rows], "s", mfc="none", mec="#D55E00", ms=7, mew=1.3,
-            label=f"ROTA tone_prominence, fixed {WINDOW_S:g} s window of the run-up")
-    ax.plot([r["rpm"] for r in rows], [np.mean(r["rota"]) for r in rows], "x", color="k", ms=8, mew=1.5,
-            label=f"ROTA tone_prominence, steady excerpts (mean of {N_EXC})")
-    floor = np.floor(min(np.nanmin(op.tnr), min(np.nanmin(r["rota"]) for r in rows),
+            label=f"rota-order tone_prominence, fixed {WINDOW_S:g} s window of the run-up")
+    ax.plot([r["rpm"] for r in rows], [np.mean(r["own"]) for r in rows], "x", color="k", ms=8, mew=1.5,
+            label=f"rota-order tone_prominence, steady excerpts (mean of {N_EXC})")
+    floor = np.floor(min(np.nanmin(op.tnr), min(np.nanmin(r["own"]) for r in rows),
                          min(np.nanmin(r["mq"]) if np.isfinite(r["mq"]).any() else 99.0 for r in rows),
                          min(r["window"] for r in rows)) / 5.0) * 5.0 - 5.0
     missing = False
@@ -345,7 +345,7 @@ def main():
         missing |= bool((~found).any())
     if missing:
         ax.plot([], [], "v", color="#CC79A7", ms=5, mec="k", mew=0.4, label="MoSQITo found no tone (drawn at the bottom)")
-    ax.set_ylim(floor, np.ceil(max(np.nanmax(op.tnr), max(np.nanmax(r["rota"]) for r in rows)) / 5.0) * 5.0 + 12.0)
+    ax.set_ylim(floor, np.ceil(max(np.nanmax(op.tnr), max(np.nanmax(r["own"]) for r in rows)) / 5.0) * 5.0 + 12.0)
     ax.set_xlim(EDGES[0], EDGES[-1])
     ax.set_xlabel("Engine speed (rpm); frequency of order 2 = rpm / 30 Hz")
     ax.set_ylabel("Tone-to-noise ratio of order 2 (dB)")

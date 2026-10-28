@@ -1,9 +1,9 @@
-"""Tests of rota._broadband.synthesize_broadband (ROADMAP case T11).
+"""Tests of rota_order._broadband.synthesize_broadband (ROADMAP case T11).
 
 Ground truth is the target PSD itself (Welch estimate of the output against
 it), the analytic power sum of the overlap-add window (a power-complementary
 window gives a constant long-term power, an amplitude-COLA window pumps by
-3 dB), and white Gaussian noise from rota.synth as the reference for the
+3 dB), and white Gaussian noise from rota_order.synth as the reference for the
 statistical spread of block levels and of the modulation detector.
 """
 
@@ -11,10 +11,10 @@ import numpy as np
 import pytest
 from scipy import signal, stats
 
-from rota import _broadband
-from rota._broadband import _synthesize, synthesize_broadband
-from rota.metrics import envelope_stats, modulation_peak
-from rota.synth import synth_runup
+from rota_order import _broadband
+from rota_order._broadband import _synthesize, synthesize_broadband
+from rota_order.metrics import envelope_stats, modulation_peak
+from rota_order.synth import synth_runup
 
 FS = 16000.0
 N = 160000  # 10 s

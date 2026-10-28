@@ -1,9 +1,9 @@
-"""Tests of rota._resolution.resolution_check against analytic frequencies.
+"""Tests of rota_order._resolution.resolution_check against analytic frequencies.
 
 The check works on frequencies f = order * rpm / 60, so the truth is analytic:
 separations, beat frequencies and crossing times follow from the speed curves.
 Where a signal is involved (beat frequency of twin lines), it is rendered by
-rota.synth.synth_runup and the check is compared with what was synthesised.
+rota_order.synth.synth_runup and the check is compared with what was synthesised.
 """
 
 import warnings
@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 from scipy import signal
 
-from rota._resolution import (
+from rota_order._resolution import (
     HANN_ENVELOPE_CUTOFF,
     HANN_MAINLOBE_HALF_WIDTH,
     VK_SEPARATION_FACTOR,
@@ -20,8 +20,8 @@ from rota._resolution import (
     ResolutionWarning,
     resolution_check,
 )
-from rota.extract import order_waveform
-from rota.synth import rpm_profiles, synth_runup
+from rota_order.extract import order_waveform
+from rota_order.synth import rpm_profiles, synth_runup
 
 FS = 2000.0
 ORDER = 10.0  # order of the twin lines

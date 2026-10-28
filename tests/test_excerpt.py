@@ -1,4 +1,4 @@
-"""Tests for stationary_excerpt against analytic truth (rota.synth)."""
+"""Tests for stationary_excerpt against analytic truth (rota_order.synth)."""
 
 import json
 
@@ -6,8 +6,8 @@ import numpy as np
 import pytest
 from scipy import signal
 
-from rota.resynth import ExcerptResult, stationary_excerpt
-from rota.synth import rpm_profiles, synth_runup
+from rota_order.resynth import ExcerptResult, stationary_excerpt
+from rota_order.synth import rpm_profiles, synth_runup
 
 FS = 16000.0
 RPM_REF = 2500.0

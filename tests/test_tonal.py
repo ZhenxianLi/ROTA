@@ -1,4 +1,4 @@
-"""Tests of rota.tonal against analytic truth and the limits of IEC 61672-1 / IEC 61260-1.
+"""Tests of rota_order.tonal against analytic truth and the limits of IEC 61672-1 / IEC 61260-1.
 
 Signals are analytic sines, periodic flat-spectrum multisines and seeded
 Gaussian noise; expected values are closed-form (weighting expressions,
@@ -9,8 +9,8 @@ import numpy as np
 import pytest
 from scipy import signal
 
-from rota import tonal
-from rota.tonal import (
+from rota_order import tonal
+from rota_order.tonal import (
     band_levels_vs_rpm,
     combine_channels,
     level_db,

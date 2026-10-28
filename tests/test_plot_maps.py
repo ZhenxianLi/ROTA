@@ -1,4 +1,4 @@
-"""Tests of the map figures of rota.plot against analytic truth (rota.synth supplies the signals).
+"""Tests of the map figures of rota_order.plot against analytic truth (rota_order.synth supplies the signals).
 
 Needs Matplotlib (Agg backend, no pixel comparison); skipped without it. The
 tests read the artists back from the Axes: the QuadMesh holds the drawn levels
@@ -13,12 +13,12 @@ import warnings
 import numpy as np
 import pytest
 
-import rota.plot as rp
-from rota.maps import Map, bin_map, rpm_frequency_map, rpm_order_map
-from rota.plot._core import edges_from_centres, speed_envelope, to_db
-from rota.slices import order_slice
-from rota.speed import rpm_from_ridge, tacho_to_rpm
-from rota.synth import rpm_profiles, synth_runup, synth_scenario
+import rota_order.plot as rp
+from rota_order.maps import Map, bin_map, rpm_frequency_map, rpm_order_map
+from rota_order.plot._core import edges_from_centres, speed_envelope, to_db
+from rota_order.slices import order_slice
+from rota_order.speed import rpm_from_ridge, tacho_to_rpm
+from rota_order.synth import rpm_profiles, synth_runup, synth_scenario
 
 matplotlib = pytest.importorskip("matplotlib")
 matplotlib.use("Agg")
@@ -840,9 +840,9 @@ def test_channel_of_a_binned_multichannel_map(runup):
 
 
 def test_a_map_of_the_other_domain_names_the_right_function(omap, fmap):
-    with pytest.raises(ValueError, match=r"rota\.plot\.rpm_order_map"):
+    with pytest.raises(ValueError, match=r"rota_order\.plot\.rpm_order_map"):
         rp.rpm_frequency_map(omap)
-    with pytest.raises(ValueError, match=r"rota\.plot\.rpm_frequency_map"):
+    with pytest.raises(ValueError, match=r"rota_order\.plot\.rpm_frequency_map"):
         rp.rpm_order_map(fmap)
     bad = dataclasses.replace(omap, domain="angle")
     with pytest.raises(ValueError, match="unknown map domain"):
@@ -924,14 +924,14 @@ def test_a_given_axes_needs_no_pyplot_for_object_oriented_use_in_subprocess():
     code = (
         "import io, sys\n"
         "import numpy as np\n"
-        "import rota, rota.plot as rp\n"
+        "import rota_order, rota_order.plot as rp\n"
         "from matplotlib.figure import Figure\n"
         "fs = 2000.0\n"
         "t = np.arange(round(1.5 * fs)) / fs\n"
-        "rpm = rota.synth.rpm_profiles(t, 'linear', start=900.0, stop=2400.0)\n"
-        "sig = rota.synth.synth_runup(fs, rpm, [{'order': 2.0, 'amplitude': 1.0}], seed=1)\n"
-        "omap = rota.maps.rpm_order_map(sig.x, fs, sig.rpm, order_resolution=0.5, max_order=6.0)\n"
-        "fmap = rota.maps.rpm_frequency_map(sig.x, fs, sig.rpm, resolution=10.0, max_freq=500.0)\n"
+        "rpm = rota_order.synth.rpm_profiles(t, 'linear', start=900.0, stop=2400.0)\n"
+        "sig = rota_order.synth.synth_runup(fs, rpm, [{'order': 2.0, 'amplitude': 1.0}], seed=1)\n"
+        "omap = rota_order.maps.rpm_order_map(sig.x, fs, sig.rpm, order_resolution=0.5, max_order=6.0)\n"
+        "fmap = rota_order.maps.rpm_frequency_map(sig.x, fs, sig.rpm, resolution=10.0, max_freq=500.0)\n"
         "fig = Figure()\n"
         "ax = fig.subplots(1, 2)\n"
         "assert rp.rpm_order_map(omap, ax=ax[0], mark_orders=(2,), **rp.SOUND_PRESSURE) is ax[0]\n"
@@ -1302,6 +1302,84 @@ def test_the_package_exports_the_map_functions_and_the_sound_pressure_constant()
     assert set(rp.__all__) >= {"SOUND_PRESSURE", "rpm_frequency_map", "rpm_order_map", "compare_maps"}
     assert rp.SOUND_PRESSURE == {"ref": 2e-5, "unit": "Pa"}
     assert "rpm_order_map" in rp.__doc__ and "SOUND_PRESSURE" in rp.__doc__ and "Matplotlib" in rp.__doc__
+
+
+def _rumble_map(change_db=-10.0):
+    """Two order maps: a dominant order 1 (80 dB above) and order 8 changed by ``change_db`` in the second."""
+    rng = np.random.default_rng(3)
+    axis = 0.25 * np.arange(40)
+    n_frames = 30
+    t = np.arange(n_frames) / 10.0
+    rpm = np.linspace(1000.0, 3000.0, n_frames)
+    floor = 1e-6 * (1.0 + rng.random((axis.size, n_frames)))
+    floor[4] = 1e4  # order 1: rumble
+    floor[32] = 1.0  # order 8: 80 dB below the rumble
+    after = floor.copy()
+    after[32] *= 10.0 ** (change_db / 20.0)
+    make = lambda v: Map(
+        values=v.astype(complex), axis=axis, domain="order", t=t, rpm=rpm, rpm_min=rpm, rpm_max=rpm,
+        amplitude="rms", enbw_bins=1.5, window="hann", nperseg=64, hop=16,
+    )
+    return make(floor), make(after), axis
+
+
+def test_compare_maps_difference_scale_follows_a_change_below_the_colour_floor_and_warns():
+    before, after, axis = _rumble_map(-10.0)
+    with pytest.warns(UserWarning, match="dynamic_range"):
+        _fig, axes = rp.compare_maps({"before": before, "after": after}, difference=True)
+    lo, hi = _mesh(axes[2]).get_clim()
+    # the scale holds the 10 dB change of order 8, not the rounding noise of the cells that are shown
+    assert lo == -hi and 9.0 <= hi <= 11.0
+    # with a dynamic range that reaches order 8 nothing is hidden: no warning, same scale
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        _fig, axes = rp.compare_maps({"before": before, "after": after}, difference=True, dynamic_range=100.0)
+    lo, hi = _mesh(axes[2]).get_clim()
+    assert lo == -hi and 9.0 <= hi <= 11.0
+    z = _levels(_mesh(axes[2]), before.values.shape)
+    assert np.allclose(z[32], -10.0, atol=1e-6)
+
+
+def test_compare_maps_difference_scale_follows_a_weak_order_changed_over_a_short_speed_range():
+    before, _after, _axis = _rumble_map(-10.0)
+    n_rows, n_frames = 400, before.values.shape[1]
+    values = np.full((n_rows, n_frames), 1e-6)
+    values[:, 0] = 1.0  # one high cell per row: the rest of the row is 120 dB below it, outside the dynamic range
+    values[4] = 1e4  # order 1: rumble
+    values[32] = 1.0  # order 8: 80 dB below the rumble
+    after = values.copy()
+    after[40:, 1:] *= 10.0 ** (0.3 / 20.0)  # thousands of hidden cells that change a little: noise
+    short = slice(0, 5)  # 5 of 30 frames, about 17 %: less than a quarter of the row
+    after[32, short] *= 10.0 ** (-10.0 / 20.0)
+    make = lambda v: dataclasses.replace(before, values=v.astype(complex), axis=0.25 * np.arange(n_rows))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        _fig, axes = rp.compare_maps({"before": make(values), "after": make(after)}, difference=True)
+    lo, hi = _mesh(axes[2]).get_clim()
+    assert lo == -hi and hi >= 9.0
+
+
+def test_compare_maps_difference_scale_fallback_is_decided_per_panel():
+    before, after, _axis = _rumble_map(-10.0)
+    # panel 1 changes only below the colour floor; panel 2 changes a visible cell by 3 dB
+    values = before.values.copy()
+    values[4] *= 10.0 ** (3.0 / 20.0)
+    visible = dataclasses.replace(before, values=values)
+    with pytest.warns(UserWarning, match="dynamic_range"):
+        _fig, axes = rp.compare_maps({"a": before, "b": after, "c": visible}, difference=True)
+    _lo, hi = _mesh(axes[3]).get_clim()
+    assert 9.0 <= hi <= 11.0  # the hidden 10 dB of panel 1 is not lost because panel 2 has a visible change
+    # the visible 3 dB change of panel 2 is not replaced by a fallback of its own
+    _fig, axes = rp.compare_maps({"a": before, "c": visible}, difference=True)
+    assert _mesh(axes[2]).get_clim()[1] == pytest.approx(3.0, abs=0.1)
+
+
+def test_compare_maps_identical_maps_below_the_floor_do_not_warn():
+    before, _after, _ = _rumble_map(-10.0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        _fig, axes = rp.compare_maps({"a": before, "b": before}, difference=True)
+    assert _mesh(axes[2]).get_clim() == (-1.0, 1.0)
 
 
 def _large_map_with_a_narrow_change(change_db=-10.0, noise=0.03, n_rows=960, n_frames=40):

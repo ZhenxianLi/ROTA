@@ -1,9 +1,9 @@
-"""Tests of rota.speed.virtual_rpm against hand values and the closed-form step response."""
+"""Tests of rota_order.speed.virtual_rpm against hand values and the closed-form step response."""
 
 import numpy as np
 import pytest
 
-from rota.speed import speed_to_rpm, virtual_rpm
+from rota_order.speed import speed_to_rpm, virtual_rpm
 
 K, IDLE, REDLINE = 30.0, 800.0, 6000.0  # rpm per km/h, rpm, rpm
 

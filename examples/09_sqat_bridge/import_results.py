@@ -1,4 +1,4 @@
-"""Bin the SQAT time series of run_sqat.m along rpm with ROTA and draw them.
+"""Bin the SQAT time series of run_sqat.m along rpm with rota-order and draw them.
 
 Step 3 of the SQAT bridge (see README.md in this folder). For each scenario exported by
 ``export_signals.py`` it reads
@@ -8,7 +8,7 @@ Step 3 of the SQAT bridge (see README.md in this folder). For each scenario expo
   (ISO 532-1 loudness in sone, DIN 45692 sharpness in acum, Daniel & Weber roughness in asper,
   ECMA-418-2 tonality in tu_HMS),
 
-and bins every metric along rpm with ``rota.slices.metric_vs_rpm`` (arithmetic mean per bin,
+and bins every metric along rpm with ``rota_order.slices.metric_vs_rpm`` (arithmetic mean per bin,
 run-up segment, start-up transient of each model skipped, see ``METRICS``). The metrics are
 binned as SQAT returns them; no amplitude convention applies (they are not levels).
 
@@ -48,7 +48,7 @@ from pathlib import Path
 import numpy as np
 from scipy.io import loadmat
 
-from rota.slices import metric_vs_rpm
+from rota_order.slices import metric_vs_rpm
 
 ROOT = Path(__file__).resolve().parents[2]
 BASE = ROOT / "build" / "sqat_bridge"
@@ -121,7 +121,7 @@ def write_tables(results):
         for r in rows:
             w.writerow([r[0], r[1], r[2], f"{r[3]:.0f}", f"{r[4]:.6g}", f"{r[5]:.4g}", r[6]])
 
-    lines = ["# SQAT metrics binned along rpm (rota.slices.metric_vs_rpm, mean per bin)", ""]
+    lines = ["# SQAT metrics binned along rpm (rota_order.slices.metric_vs_rpm, mean per bin)", ""]
     for name, metrics in results.items():
         if not metrics:
             continue
@@ -175,7 +175,7 @@ def make_figure(results):
                 ax.set_xlabel("Speed (rpm)", fontsize=8)
             if i == 0 and j == 0:
                 ax.legend(fontsize=7, loc="upper left")
-    fig.suptitle("SQAT metrics along rpm (rota.synth scenarios)", fontsize=10)
+    fig.suptitle("SQAT metrics along rpm (rota_order.synth scenarios)", fontsize=10)
     FIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(FIG_PATH, dpi=150, facecolor="white")
     plt.close(fig)

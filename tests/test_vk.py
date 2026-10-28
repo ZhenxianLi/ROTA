@@ -1,15 +1,15 @@
-"""Tests of the Vold-Kalman order filter against analytic truth (signals from rota.synth)."""
+"""Tests of the Vold-Kalman order filter against analytic truth (signals from rota_order.synth)."""
 
 import json
 
 import numpy as np
 import pytest
 
-import rota._vk as vk
-from rota._components import OrderComponents
-from rota._vk import _bandwidth_to_weight, _weight_to_bandwidth, order_waveform
-from rota.speed import rpm_to_phase
-from rota.synth import rpm_profiles, synth_runup
+import rota_order._vk as vk
+from rota_order._components import OrderComponents
+from rota_order._vk import _bandwidth_to_weight, _weight_to_bandwidth, order_waveform
+from rota_order.speed import rpm_to_phase
+from rota_order.synth import rpm_profiles, synth_runup
 
 
 def _corr(a, b):

@@ -1,11 +1,11 @@
-"""Tests of rota.maps against analytic truth (rota.synth supplies the signals)."""
+"""Tests of rota_order.maps against analytic truth (rota_order.synth supplies the signals)."""
 
 import numpy as np
 import pytest
 
-from rota.angle import angular_resample
-from rota.maps import Map, rpm_frequency_map, rpm_order_map
-from rota.synth import rpm_profiles, synth_runup
+from rota_order.angle import angular_resample
+from rota_order.maps import Map, rpm_frequency_map, rpm_order_map
+from rota_order.synth import rpm_profiles, synth_runup
 
 FS = 8000.0
 R0, ACC = 600.0, 600.0  # rpm and rpm/s: 600 -> 3000 rpm in 4 s
@@ -326,6 +326,26 @@ def test_order_map_reads_amplitude_and_phase_of_every_order_at_every_speed(ampli
     # elsewhere the map is empty (no leakage between bins of unrelated orders)
     far = m.values[round(5.0 / 0.25), inner]
     assert np.max(np.abs(far)) < 1e-4
+
+
+def test_order_map_min_rpm_leaves_out_frames_below_it_instead_of_misplacing_them():
+    # Run-up from 600 rpm; min_rpm = 1000 floors the speed of the angle, so a frame below it would
+    # carry a wrong angle (and the floor speed). Those frames must be absent; the others exact.
+    rpm, sig = _order_run()
+    full = rpm_order_map(sig.x, FS, rpm, order_resolution=0.25, max_order=16)
+    m = rpm_order_map(sig.x, FS, rpm, order_resolution=0.25, max_order=16, min_rpm=1000.0)
+    assert m.values.shape[1] < full.values.shape[1]
+    assert m.rpm_min.min() >= 1000.0 * (1 - 1e-9)
+    assert m.t.size == m.rpm.size == m.values.shape[1]
+    inner = slice(3, m.values.shape[1] - 3)
+    for k, o in enumerate(sig.orders):
+        v = m.values[round(o / 0.25), inner]
+        amp = sig.order_amplitude[0, k] / np.sqrt(2.0)  # default amplitude is rms
+        assert np.max(np.abs(_db(np.abs(v), amp))) < 0.01
+    # the frame speed is the true speed at the frame centre (linear run-up: rpm = R0 + ACC t)
+    assert np.allclose(m.rpm[inner], R0 + ACC * m.t[inner], atol=1.0)
+    with pytest.raises(ValueError, match="min_rpm"):
+        rpm_order_map(sig.x, FS, rpm, order_resolution=0.25, max_order=16, min_rpm=5000.0)
 
 
 @pytest.mark.parametrize(

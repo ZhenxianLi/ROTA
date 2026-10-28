@@ -1,7 +1,7 @@
 """Export validation cases to MATLAB v5 files for the black-box reference run.
 
 ROADMAP section 5.5, step 2: the external implementation is run on exactly the
-signals that ROTA is validated on, through public functions with every
+signals that rota-order is validated on, through public functions with every
 parameter given explicitly (section 5.1). This script writes one
 ``validation/signals/<case>.mat`` per case (the directory is git-ignored):
 
@@ -11,12 +11,12 @@ parameter given explicitly (section 5.1). This script writes one
 
 Cases (``validation/make_signals.py``): T1, T2, T3, T5 (60 pulses per
 revolution), T6 and T14; and VKBW, a probe of the Vold-Kalman -3 dB
-bandwidth built here with ``rota.synth.synth_runup`` (constant speed, one
+bandwidth built here with ``rota_order.synth.synth_runup`` (constant speed, one
 order and fixed tones at known offsets from it, see :func:`vk_probe`).
 
 Variables in each file (units: time s, frequency Hz, speed rpm, order in
 cycles per revolution; amplitudes are PEAK values in Pa, as in the truth of
-``rota.synth``, unless a field says otherwise):
+``rota_order.synth``, unless a field says otherwise):
 
 ``x``                 signal, column (n, 1)
 ``fs``                sampling rate, Hz
@@ -34,12 +34,12 @@ frequency resolution, window, overlap, Vold-Kalman bandwidth and decoupling,
 the orders to track, the tachometer settings and the initial ridge point of
 the tacholess tracker. ``validation/compare.py`` reads the same table
 (:func:`analysis_parameters`), so the parameters cannot drift between the
-MATLAB script and the ROTA side. Flags ``par.do_*`` (0 or 1) say which
+MATLAB script and the rota-order side. Flags ``par.do_*`` (0 or 1) say which
 analyses apply to a case.
 
 References
 ----------
-ROTA ROADMAP, sections 5.1 (principles), 5.3 (test signals) and 5.5
+rota-order ROADMAP, sections 5.1 (principles), 5.3 (test signals) and 5.5
 (directory and workflow).
 """
 
@@ -52,7 +52,7 @@ import numpy as np
 from scipy.io import savemat
 from scipy.signal import get_window
 
-from rota.synth import synth_runup
+from rota_order.synth import synth_runup
 
 __all__ = ["CASE_NAMES", "SIGNALS_DIR", "VK_PROBE", "analysis_parameters", "build_case", "main", "vk_probe"]
 
@@ -75,14 +75,14 @@ VK_PROBE = {
                 0.5, 1.0, 1.5, 1.75, 2.0, 2.25, 2.5, 3.0, 4.0, 5.0),
 }
 
-# Meaning of the bandwidth arguments. ROTA's ``bandwidth`` (``par.vk_bandwidth``) is the offset
+# Meaning of the bandwidth arguments. rota-order's ``bandwidth`` (``par.vk_bandwidth``) is the offset
 # from the carrier at which the single-order filter attenuates a tone by 3 dB; its pass band is
 # twice that wide. MATLAB's ``Bandwidth`` is taken as the full width of the pass band between the
 # two -3 dB points, so it is given ``par.vk_bandwidth_matlab = 2 * par.vk_bandwidth``. The probe
-# VKBW measures both (compare.py, table 10), with this value and with the same number as ROTA.
+# VKBW measures both (compare.py, table 10), with this value and with the same number as rota-order.
 MATLAB_BANDWIDTH_FACTOR = 2.0
 
-# Meaning of the resolution arguments of the maps. ROTA's resolution (``par.order_resolution``,
+# Meaning of the resolution arguments of the maps. rota-order's resolution (``par.order_resolution``,
 # ``par.freq_resolution``) is the bin spacing, one over the window length. MATLAB's ``res`` is
 # the resolution bandwidth, the equivalent noise bandwidth of the window times the bin spacing
 # For the same window length on both sides MATLAB
@@ -123,7 +123,7 @@ def window_enbw(matlab_name, n=8192):
 #                       so no assumption on the window length of the other side is needed.
 #   overlap_percent     75 %, amplitude RMS (a unit sine of peak A reads A / sqrt(2)).
 #   vk_filter_order     MATLAB 'FilterOrder' whose response matches the second-difference
-#                       structure of rota.extract.order_waveform, |H| = 1 / (1 + c d^4) at an
+#                       structure of rota_order.extract.order_waveform, |H| = 1 / (1 + c d^4) at an
 #                       offset d from the carrier; the probe VKBW checks the response law.
 _COMMON = {
     "window_order_map": "hann",
@@ -142,7 +142,7 @@ _COMMON = {
 #   vk_bandwidth         Vold-Kalman -3 dB bandwidth, Hz (pass band about twice that)
 #   rpmtrack_order       order whose ridge the tacholess trackers follow (0: not run)
 #   rpmtrack_resolution  frequency resolution of the tacholess ridge map of the other side, Hz
-#   rpm_range            search range of rota.speed.rpm_from_ridge, rpm
+#   rpm_range            search range of rota_order.speed.rpm_from_ridge, rpm
 _SPECS = {
     "T1": {
         "order_resolution": 0.25, "freq_resolution": 8.0, "vk_bandwidth": 2.0,
@@ -203,12 +203,12 @@ def vk_probe():
 
     Returns
     -------
-    rota.synth.SynthSignal
+    rota_order.synth.SynthSignal
         Signal and analytic truth. Amplitudes are peak, in Pa.
 
     References
     ----------
-    ROTA ROADMAP, section 5.4 (Vold-Kalman -3 dB bandwidth).
+    rota-order ROADMAP, section 5.4 (Vold-Kalman -3 dB bandwidth).
     Vold, H., Mains, M., & Blough, J. (1997). Theoretical foundations for high performance
     order tracking with the Vold-Kalman tracking filter. SAE Technical Paper 972007.
     """
@@ -230,12 +230,12 @@ def build_case(name):
 
     Returns
     -------
-    rota.synth.SynthSignal
+    rota_order.synth.SynthSignal
         Signal and analytic truth. Amplitudes are peak, in Pa (noise: RMS).
 
     References
     ----------
-    ROTA ROADMAP, section 5.3.
+    rota-order ROADMAP, section 5.3.
     """
     if name not in CASE_NAMES:
         raise KeyError(f"unknown case {name!r}; available: {list(CASE_NAMES)}")
@@ -258,7 +258,7 @@ def analysis_parameters(name, sig):
     ----------
     name : str
         Case name, one of :data:`CASE_NAMES`.
-    sig : rota.synth.SynthSignal
+    sig : rota_order.synth.SynthSignal
         The case signal (used for the tachometer levels and the initial point of the
         tacholess ridge, which is read off the exact speed).
 
@@ -269,14 +269,14 @@ def analysis_parameters(name, sig):
         ``order_resolution_matlab``, ``freq_resolution_matlab`` (MATLAB ``res``: window ENBW
         times the bin spacing),
         ``window_order_map``, ``window_freq_map`` (MATLAB window names),
-        ``overlap_percent``, ``amplitude_map`` (``"rms"``), ``vk_bandwidth`` (Hz, ROTA:
+        ``overlap_percent``, ``amplitude_map`` (``"rms"``), ``vk_bandwidth`` (Hz, rota-order:
         -3 dB offset from the carrier), ``vk_bandwidth_matlab`` (Hz, MATLAB ``Bandwidth``:
         full -3 dB width, twice ``vk_bandwidth``), ``vk_filter_order``, ``vk_decouple``
         (0 or 1), ``vk_amplitude`` (``"peak"``), ``probe_order`` and ``probe_offsets``
         (row, Hz; VKBW only, else 0 and empty),
         ``track_orders`` (row), ``rpmtrack_order``, ``rpmtrack_resolution`` (Hz),
         ``rpmtrack_t0`` (s), ``rpmtrack_f0`` (Hz, ``order * rpm / 60`` of the exact
-        speed at ``t0``), ``rpm_range`` (row, rpm; ROTA search range), ``ppr``,
+        speed at ``t0``), ``rpm_range`` (row, rpm; rota-order search range), ``ppr``,
         ``state_levels`` (row, low and high level of the tachometer), ``tacho_output_fs``
         (Hz), ``fit_points``, and the flags ``do_tachorpm``, ``do_maps``, ``do_freqmap``,
         ``do_vk``, ``do_rpmtrack``, ``do_vkprobe``. Orders are cycles per revolution; speed
@@ -284,7 +284,7 @@ def analysis_parameters(name, sig):
 
     References
     ----------
-    ROTA ROADMAP, sections 5.1 and 5.4.
+    rota-order ROADMAP, sections 5.1 and 5.4.
     """
     if name not in _SPECS:
         raise KeyError(f"unknown case {name!r}; available: {list(CASE_NAMES)}")
@@ -366,7 +366,7 @@ def main(outdir=None, names=None):
 
     References
     ----------
-    ROTA ROADMAP, section 5.5.
+    rota-order ROADMAP, section 5.5.
     """
     outdir = SIGNALS_DIR if outdir is None else Path(outdir)
     names = list(CASE_NAMES) if not names else list(names)

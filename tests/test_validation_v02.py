@@ -2,7 +2,7 @@
 
 The signals come from ``validation/make_signals.py`` (built here in memory,
 nothing is read from disk). Every expected amplitude and waveform is read from
-the truth stored in the :class:`rota.synth.SynthSignal` (``order_amplitude``,
+the truth stored in the :class:`rota_order.synth.SynthSignal` (``order_amplitude``,
 ``order_stems``, ``stems``, ``rpm``), never from the parameter lists that built
 the signal (ROADMAP section 6, item 19).
 
@@ -32,17 +32,17 @@ import numpy as np
 import pytest
 from scipy import signal
 
-from rota._ridge import rpm_from_ridge
-from rota.extract import (
+from rota_order._ridge import rpm_from_ridge
+from rota_order.extract import (
     ResolutionWarning,
     order_waveform,
     remove_orders,
     resolution_check,
     tracked_harmonics,
 )
-from rota.maps import rpm_order_map
-from rota.metrics import order_residual_energy, track_error, waveform_similarity
-from rota.slices import order_slice
+from rota_order.maps import rpm_order_map
+from rota_order.metrics import order_residual_energy, track_error, waveform_similarity
+from rota_order.slices import order_slice
 
 # --------------------------------------------------------------------------
 # Signals: validation/make_signals.py is a script, not part of the package.

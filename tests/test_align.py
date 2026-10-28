@@ -1,6 +1,6 @@
-"""Tests of rota._align.align_signals against known delays, drifts and rates.
+"""Tests of rota_order._align.align_signals against known delays, drifts and rates.
 
-Truth comes from rota.synth: ``delay_signal`` (fractional delay) and
+Truth comes from rota_order.synth: ``delay_signal`` (fractional delay) and
 ``measurement_chain`` (clock drift), applied to a synthetic sound field made of
 band-limited ambient noise and two hand-clap-like clicks.
 """
@@ -11,8 +11,8 @@ import numpy as np
 import pytest
 from scipy import signal
 
-from rota._align import AlignResult, align_signals, detect_onsets
-from rota.synth import delay_signal, measurement_chain, transient_events
+from rota_order._align import AlignResult, align_signals, detect_onsets
+from rota_order.synth import delay_signal, measurement_chain, transient_events
 
 FS = 16000.0
 DUR = 20.0

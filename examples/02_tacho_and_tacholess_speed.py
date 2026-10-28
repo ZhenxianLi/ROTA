@@ -3,7 +3,7 @@
 The signal of ``01_order_map.py`` comes with a tachometer of 12 pulses per
 revolution (30 us timing jitter, about 0.3 % of the pulses lost). Two speed
 estimates are compared with the speed that went into the signal:
-``rota.speed.tacho_to_rpm`` (pulse edges to rpm) and ``rota.speed.rpm_from_ridge``
+``rota_order.speed.tacho_to_rpm`` (pulse edges to rpm) and ``rota_order.speed.rpm_from_ridge``
 (tacholess, from the signal alone, with a per-frame ``confidence`` and an
 ``at_bound`` flag).
 
@@ -11,7 +11,7 @@ Figure: (a) the speed curves, (b) their relative errors, (c, d) the tacholess
 estimator run again with a search range that is deliberately too narrow (600 to
 3500 rpm): above the limit the estimate does not sit on the bound but jumps to a
 wrong value, and only ``at_bound`` tells it reliably (``confidence`` falls in some
-of those frames, not in all). Panels (a) and (c) are drawn with ``rota.plot``
+of those frames, not in all). Panels (a) and (c) are drawn with ``rota_order.plot``
 (``rpm_vs_time`` and ``rpm_from_ridge``, which marks the frames flagged ``at_bound``
 with open dark-red circles); (b) and (d) are plain Matplotlib.
 
@@ -36,8 +36,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-import rota
-import rota.plot as rp
+import rota_order as ro
+import rota_order.plot as rp
 
 FS = 8000.0  # sampling rate, Hz
 DURATION = 6.0  # s
@@ -62,10 +62,10 @@ ORDERS = [
 def build_signal():
     """Idle hold, then linear run-up; orders, resonance, tone, noise and a tachometer."""
     t = np.arange(round(DURATION * FS)) / FS
-    rpm = rota.synth.rpm_profiles(
+    rpm = ro.synth.rpm_profiles(
         t, "linear", start=IDLE_RPM, stop=TOP_RPM, t_start=T_RUNUP, t_stop=DURATION
     )
-    return rota.synth.synth_runup(
+    return ro.synth.synth_runup(
         FS,
         rpm,
         ORDERS,
@@ -83,7 +83,7 @@ def ridge(sig, rpm_range):
     """Tacholess estimate; returns the result, the truth at the frame times and the warnings."""
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        res = rota.speed.rpm_from_ridge(sig.x, FS, rpm_range, orders=COMB, whiten=None)
+        res = ro.speed.rpm_from_ridge(sig.x, FS, rpm_range, orders=COMB, whiten=None)
     truth = np.interp(res.t, sig.t, sig.rpm)
     return res, truth, [str(w.message) for w in caught]
 
@@ -99,12 +99,12 @@ def main():
     sig = build_signal()
 
     # Tachometer to rpm, at every sample.
-    rpm_tacho, info = rota.speed.tacho_to_rpm(sig.tacho, FS, ppr=PPR, return_info=True)
-    e_tacho = rota.metrics.track_error(rpm_tacho, sig.rpm)
+    rpm_tacho, info = ro.speed.tacho_to_rpm(sig.tacho, FS, ppr=PPR, return_info=True)
+    e_tacho = ro.metrics.track_error(rpm_tacho, sig.rpm)
 
     # Tacholess, search range wide enough, and one that is too narrow.
     res, truth, warn_ok = ridge(sig, (600.0, 6000.0))
-    e_ridge = rota.metrics.track_error(res.rpm, truth, at_bound=res.at_bound)
+    e_ridge = ro.metrics.track_error(res.rpm, truth, at_bound=res.at_bound)
     narrow, truth_n, warn_narrow = ridge(sig, (600.0, 3500.0))
     outside = truth_n > narrow.rpm_range[1]  # frames where the true speed left the range
 
@@ -132,8 +132,8 @@ def main():
           f"RuntimeWarning raised: {len(warn_narrow) > 0}")
 
     # ---- figure ----------------------------------------------------------------------------
-    # rota.plot draws the speed panels (a, c): rpm_vs_time for the tachometer speed, rpm_from_ridge
-    # for the tacholess track with its doubtful frames. rota.plot has no figure for a relative
+    # rota_order.plot draws the speed panels (a, c): rpm_vs_time for the tachometer speed, rpm_from_ridge
+    # for the tacholess track with its doubtful frames. rota_order.plot has no figure for a relative
     # error or for the confidence alone, so panels (b) and (d) are plain Matplotlib.
     blue, orange, grey = "#0072B2", "#D55E00", "0.45"
     plt.rcdefaults()  # Matplotlib's default style, whatever a local matplotlibrc sets
@@ -144,7 +144,7 @@ def main():
     )
     truth_t = (sig.t, sig.rpm)  # the true speed, drawn as the "reference" (dashed grey)
 
-    # rota.plot draws with the colour cycle of the axes: tachometer blue, ridge orange in every panel.
+    # rota_order.plot draws with the colour cycle of the axes: tachometer blue, ridge orange in every panel.
     ax_a.set_prop_cycle(color=[blue, orange])
     rp.rpm_vs_time(sig.t, rpm_tacho, ax=ax_a, label="tacho_to_rpm")
     rp.rpm_from_ridge(res, ax=ax_a, reference=truth_t, label="rpm_from_ridge, 600 to 6000 rpm")

@@ -1,8 +1,8 @@
 """Order extraction and removal: Vold-Kalman filter and tracked harmonics.
 
-The signal of ``01_order_map.py`` is analysed with ``rota.extract.order_waveform``
+The signal of ``01_order_map.py`` is analysed with ``rota_order.extract.order_waveform``
 (Vold-Kalman, six orders solved jointly, 2 Hz bandwidth) and
-``rota.extract.tracked_harmonics`` (frames of 8 revolutions, much cheaper).
+``rota_order.extract.tracked_harmonics`` (frames of 8 revolutions, much cheaper).
 ``resolution_check`` first confirms that both settings separate the half orders at
 idle. The speed reference is the speed that went into the signal (see
 ``02_tacho_and_tacholess_speed.py`` for estimating it).
@@ -30,7 +30,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-import rota
+import rota_order as ro
 
 P_REF = 20e-6  # reference pressure in Pa (dB re 20 uPa), passed explicitly
 FS = 8000.0  # sampling rate, Hz
@@ -56,10 +56,10 @@ ORDERS = [
 def build_signal():
     """Idle hold, then linear run-up; orders, resonance, tone and noise (peak amplitudes in Pa)."""
     t = np.arange(round(DURATION * FS)) / FS
-    rpm = rota.synth.rpm_profiles(
+    rpm = ro.synth.rpm_profiles(
         t, "linear", start=IDLE_RPM, stop=TOP_RPM, t_start=T_RUNUP, t_stop=DURATION
     )
-    return rota.synth.synth_runup(
+    return ro.synth.synth_runup(
         FS,
         rpm,
         ORDERS,
@@ -93,11 +93,11 @@ def main():
     orders = sig.orders
 
     # Can these settings separate the orders (half orders at idle)?
-    check_vk = rota.extract.resolution_check(sig.rpm, FS, orders, bandwidth=VK_BANDWIDTH)
-    check_th = rota.extract.resolution_check(sig.rpm, FS, orders, window_revs=WINDOW_REVS)
+    check_vk = ro.extract.resolution_check(sig.rpm, FS, orders, bandwidth=VK_BANDWIDTH)
+    check_th = ro.extract.resolution_check(sig.rpm, FS, orders, window_revs=WINDOW_REVS)
 
-    vk = rota.extract.order_waveform(sig.x, FS, sig.rpm, orders, bandwidth=VK_BANDWIDTH)
-    th = rota.extract.tracked_harmonics(sig.x, FS, sig.rpm, orders, window_revs=WINDOW_REVS)
+    vk = ro.extract.order_waveform(sig.x, FS, sig.rpm, orders, bandwidth=VK_BANDWIDTH)
+    th = ro.extract.tracked_harmonics(sig.x, FS, sig.rpm, orders, window_revs=WINDOW_REVS)
 
     # Statistics over the interior, without the frames where the tone crosses an order.
     sel = (sig.t >= EDGE[0]) & (sig.t <= DURATION - EDGE[1])
@@ -111,13 +111,13 @@ def main():
         row = []
         for comp in (vk, th):
             err = np.abs(20.0 * np.log10(np.abs(comp.envelopes[use, k]) / sig.order_amplitude[use, k]))
-            sim = rota.metrics.waveform_similarity(comp.waveforms[use, k], sig.order_stems[use, k])
+            sim = ro.metrics.waveform_similarity(comp.waveforms[use, k], sig.order_stems[use, k])
             row.append(f"{np.median(err):6.3f} /{err.max():5.2f}  {sim['corr']:.4f}  {sim['nrmse']:.3f}")
         print(f"  {order:5.1f} |  {row[0]}  |  {row[1]}")
 
     # Order removal with the Vold-Kalman filter and with tracked harmonics.
-    res_vk, _ = rota.extract.remove_orders(sig.x, FS, sig.rpm, orders, bandwidth=VK_BANDWIDTH)
-    res_th, _ = rota.extract.remove_orders(
+    res_vk, _ = ro.extract.remove_orders(sig.x, FS, sig.rpm, orders, bandwidth=VK_BANDWIDTH)
+    res_th, _ = ro.extract.remove_orders(
         sig.x, FS, sig.rpm, orders, method="tracked-harmonics", window_revs=WINDOW_REVS
     )
     floor = sig.x - sig.stems["orders"]  # tone plus noise: what an ideal removal leaves
@@ -125,10 +125,10 @@ def main():
           "(order_residual_energy):")
     print("  order | Vold-Kalman | tracked harmonics | true non-order content")
     for order in orders:
-        e = [rota.metrics.order_residual_energy(r[sel], sig.x[sel], FS, sig.rpm[sel], order)
+        e = [ro.metrics.order_residual_energy(r[sel], sig.x[sel], FS, sig.rpm[sel], order)
              for r in (res_vk, res_th, floor)]
         print(f"  {order:5.1f} | {e[0]:11.1f} | {e[1]:17.1f} | {e[2]:22.1f}")
-    sim = rota.metrics.waveform_similarity(res_vk[sel], floor[sel])
+    sim = ro.metrics.waveform_similarity(res_vk[sel], floor[sel])
     print(f"Vold-Kalman residual against the true non-order content: corr {sim['corr']:.4f}, "
           f"nrmse {sim['nrmse']:.3f}; RMS {np.sqrt(np.mean(res_vk[sel] ** 2)):.4f} Pa "
           f"(truth {np.sqrt(np.mean(floor[sel] ** 2)):.4f} Pa, original "
@@ -136,11 +136,11 @@ def main():
 
     # ---- figure ----------------------------------------------------------------------------
     maps = {
-        name: rota.maps.rpm_order_map(x, FS, sig.rpm, order_resolution=0.125, max_order=8.0,
+        name: ro.maps.rpm_order_map(x, FS, sig.rpm, order_resolution=0.125, max_order=8.0,
                                       amplitude="rms")
         for name, x in (("orig", sig.x), ("vk", res_vk), ("th", res_th), ("floor", floor))
     }
-    spectra = {name: rota.slices.order_spectrum(m, rpm_range=(1000.0, None)) for name, m in maps.items()}
+    spectra = {name: ro.slices.order_spectrum(m, rpm_range=(1000.0, None)) for name, m in maps.items()}
 
     blue, orange = "#0072B2", "#D55E00"
     plt.rcParams.update({"font.size": 8, "axes.titlesize": 9, "axes.labelsize": 8})

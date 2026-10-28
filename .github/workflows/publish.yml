@@ -1,6 +1,6 @@
 name: publish
 
-# Publishes a release of ROTA: upload to PyPI, git tag and GitHub release.
+# Publishes a release of rota-order: upload to PyPI, git tag and GitHub release.
 #
 # PyPI trusted publishing (OpenID Connect): no API token is stored in the repository.
 # The PyPI project lists this repository, this workflow file (publish.yml) and the
@@ -8,14 +8,14 @@ name: publish
 #
 # Two ways to start a release:
 # 1. Push to main a commit whose message starts with the line "Release X.Y.Z" (exactly;
-#    it must be the last commit of the push), where X.Y.Z equals rota.__version__,
+#    it must be the last commit of the push), where X.Y.Z equals rota_order.__version__,
 #    CHANGELOG.md has a section "## [X.Y.Z] - date" and the tag vX.Y.Z does not exist
 #    yet (do not push the tag by hand). The workflow runs the tests, builds the
 #    distributions and uploads them to PyPI, then tags that commit vX.Y.Z and creates
 #    the GitHub release, with the CHANGELOG section of X.Y.Z as release notes. A first
 #    line that looks like a release but does not match exactly gives a warning and
 #    publishes nothing.
-# 2. Publish a GitHub release by hand whose tag is v + rota.__version__. The workflow
+# 2. Publish a GitHub release by hand whose tag is v + rota_order.__version__. The workflow
 #    runs the tests, builds the distributions and uploads them to PyPI.
 #
 # 3. Run the workflow by hand with a version X.Y.Z: it only rewrites the notes of the
@@ -69,7 +69,7 @@ jobs:
           MESSAGE: ${{ github.event.head_commit.message }}
           REF_NAME: ${{ github.ref_name }}
         run: |
-          version=$(python3 -c "import re; print(re.search(r'__version__ = \"([^\"]+)\"', open('src/rota/__init__.py').read()).group(1))")
+          version=$(python3 -c "import re; print(re.search(r'__version__ = \"([^\"]+)\"', open('src/rota_order/__init__.py').read()).group(1))")
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           if [ "$EVENT" = "release" ]; then
             test "v${version}" = "${REF_NAME}" || { echo "tag ${REF_NAME} != v${version}"; exit 1; }
@@ -77,7 +77,7 @@ jobs:
             first_line=$(printf '%s\n' "$MESSAGE" | head -n 1)
             if [ "$first_line" != "Release ${version}" ]; then
               if printf '%s\n' "$first_line" | grep -Eq '^Release [0-9]+\.[0-9]+\.[0-9]+$'; then
-                echo "'${first_line}' does not match rota.__version__ = ${version}"
+                echo "'${first_line}' does not match rota_order.__version__ = ${version}"
                 exit 1
               fi
               if printf '%s\n' "$first_line" | grep -Eiq '^release +v?[0-9]'; then

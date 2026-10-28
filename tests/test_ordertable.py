@@ -6,13 +6,13 @@ import numpy as np
 import pytest
 from scipy import signal
 
-from rota import _ordertable
-from rota._components import OrderComponents
-from rota._ordertable import OrderSynth, OrderTable, synthesize_orders
-from rota.maps import rpm_order_map
-from rota.slices import OrderSlice, order_slice
-from rota.speed import rpm_to_phase
-from rota.synth import synth_runup
+from rota_order import _ordertable
+from rota_order._components import OrderComponents
+from rota_order._ordertable import OrderSynth, OrderTable, synthesize_orders
+from rota_order.maps import rpm_order_map
+from rota_order.slices import OrderSlice, order_slice
+from rota_order.speed import rpm_to_phase
+from rota_order.synth import synth_runup
 
 TWO_PI = 2 * np.pi
 FS = 8000.0
@@ -317,7 +317,7 @@ def test_from_slices_rejects_inconsistent_input():
 
 
 # --------------------------------------------------------------------------
-# from_components, with the truth of rota.synth as input
+# from_components, with the truth of rota_order.synth as input
 # --------------------------------------------------------------------------
 
 
@@ -448,7 +448,7 @@ def test_rms_table_renders_peak_amplitude():
 
 
 def test_t9_resynthesis_reproduces_the_waveform_of_a_synth_runup():
-    """Truth from rota.synth -> order map -> table -> phase='table' synthesis -> same waveform."""
+    """Truth from rota_order.synth -> order map -> table -> phase='table' synthesis -> same waveform."""
     n = int(10 * FS)
     rpm = np.linspace(1000.0, 4000.0, n)
     spec = [
@@ -674,7 +674,7 @@ def test_synthesize_orders_rejects_bad_input():
 
 
 def test_info_is_json_convertible_with_provenance(tmp_path):
-    from rota._provenance import provenance
+    from rota_order._provenance import provenance
 
     t = _flat_table([1.0, 2.0], freq_offset=[0, 10], unit="Pa")
     _, info = synthesize_orders(t, np.full(100, 1500.0), FS, seed=8)
@@ -716,10 +716,10 @@ def test_save_load_round_trip_is_exact(tmp_path):
     assert npz2.name == "again.npz" and side2.name == "again.json"
     # The JSON sidecar describes the table (and is strict JSON).
     d = json.loads(side.read_text(encoding="utf-8"))
-    assert d["format"] == "rota.OrderTable" and d["amplitude"] == "rms" and d["unit"] == "Pa"
+    assert d["format"] == "rota_order.OrderTable" and d["amplitude"] == "rms" and d["unit"] == "Pa"
     assert d["shape"] == [3, 5, 2] and d["orders"] == [-2.0, 0.5, 6.0]
     assert d["freq_offset"] == [600.0, 0.0, -50.0] and d["meta"] == meta
-    assert isinstance(d["rota_version"], str) and d["rpm"][0] == 800.0
+    assert isinstance(d["rota_order_version"], str) and d["rpm"][0] == 800.0
     # Load needs only the NPZ.
     side.unlink()
     assert OrderTable.load(tmp_path / "table").amplitude == "rms"

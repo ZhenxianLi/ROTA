@@ -1,4 +1,4 @@
-"""Tests of the phase-locked harmonic extractor against analytic truth (rota.synth)."""
+"""Tests of the phase-locked harmonic extractor against analytic truth (rota_order.synth)."""
 
 import json
 import warnings
@@ -6,11 +6,11 @@ import warnings
 import numpy as np
 import pytest
 
-from rota import _tracked
-from rota._components import OrderComponents
-from rota._tracked import tracked_harmonics
-from rota.speed import rpm_to_phase
-from rota.synth import rpm_profiles, synth_runup
+from rota_order import _tracked
+from rota_order._components import OrderComponents
+from rota_order._tracked import tracked_harmonics
+from rota_order.speed import rpm_to_phase
+from rota_order.synth import rpm_profiles, synth_runup
 
 FS = 16000.0
 

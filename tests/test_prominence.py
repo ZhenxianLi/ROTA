@@ -1,7 +1,7 @@
 """Tests of the ECMA-418-1:2024 (ECMA-74 Annex D) tone prominence functions.
 
 Analytic truth: white noise of known one-sided PSD ``N0`` and sinusoids of
-known mean square from rota.synth, or deterministic spectra built here line
+known mean square from rota_order.synth, or deterministic spectra built here line
 by line, for which the standard's formulas (3rd edition) give the TNR and PR
 exactly.
 """
@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 from scipy import signal
 
-from rota._prominence import (
+from rota_order._prominence import (
     OrderComponent,
     OrderProminence,
     ToneProminence,
@@ -22,8 +22,8 @@ from rota._prominence import (
     prominence_criterion,
     tone_prominence,
 )
-from rota.maps import rpm_frequency_map
-from rota.synth import synth_runup, synth_tone_noise
+from rota_order.maps import rpm_frequency_map
+from rota_order.synth import synth_runup, synth_tone_noise
 
 
 def _db(x):

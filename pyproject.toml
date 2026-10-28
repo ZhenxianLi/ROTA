@@ -45,7 +45,7 @@ mosqito = ["mosqito>=1.2", "matplotlib"]
 sottek-hearing-model = ["sottek-hearing-model>=0.1.14; python_version>='3.11'"]
 
 [tool.setuptools.dynamic]
-version = { attr = "rota.__version__" }
+version = { attr = "rota_order.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]

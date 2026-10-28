@@ -1,4 +1,4 @@
-% run_reference.m -- black-box reference run for the ROTA validation (ROADMAP 5.2, 5.5).
+% run_reference.m -- black-box reference run for the rota-order validation (ROADMAP 5.2, 5.5).
 %
 % What this script does, and nothing else:
 %   1. loads the signals written by validation/export_mat.py (validation/signals/*.mat),
@@ -11,7 +11,7 @@
 %
 % The functions are used as black boxes: only their documented inputs and outputs appear
 % here. No toolbox code is opened, stepped into or reused, and no other data than the signals
-% of rota.synth / validation/make_signals.py are processed. All comparison logic lives in
+% of rota_order.synth / validation/make_signals.py are processed. All comparison logic lives in
 % validation/compare.py; nothing is evaluated here.
 %
 % Units: time in s, frequency in Hz, speed in rpm, order in cycles per revolution.
@@ -26,8 +26,8 @@
 % Run from anywhere, e.g. from the repository root:
 %     run('validation/matlab/run_reference.m')
 
-global ROTA_REF_LOG
-ROTA_REF_LOG = '';
+global ROTA_ORDER_REF_LOG
+ROTA_ORDER_REF_LOG = '';
 
 % ---- locations (found from this file's own location, so independent of the current folder) -----
 % run() changes into the folder of the script while it runs, so a path relative to the current
@@ -48,7 +48,7 @@ end
 fid = fopen(fullfile(refDir, 'log.txt'), 'w');
 if fid > 0
     fclose(fid);
-    ROTA_REF_LOG = fullfile(refDir, 'log.txt');
+    ROTA_ORDER_REF_LOG = fullfile(refDir, 'log.txt');
 end
 logmsg('run_reference.m started; root folder: %s', rootDir);
 
@@ -84,17 +84,17 @@ if isempty(files)
 end
 [~, sortIdx] = sort({files.name});
 files = files(sortIdx);
-% Part of the calls to make (environment variable ROTA_REF_PART, set by the CI matrix so that the
+% Part of the calls to make (environment variable ROTA_ORDER_REF_PART, set by the CI matrix so that the
 % slow Vold-Kalman calls of the long cases run in jobs of their own): 'all' or empty (every call),
 % 'main' (all but the Vold-Kalman calls of the case comparison), 'vkwave' (orderwaveform only) or
 % 'vktrack' (ordertrack in its Vold-Kalman form only). A part other than 'all' saves
 % <case>_ref_<part>.mat; compare.py merges the parts of a case.
-part = lower(strtrim(getenv('ROTA_REF_PART')));
+part = lower(strtrim(getenv('ROTA_ORDER_REF_PART')));
 if isempty(part)
     part = 'all';
 end
 if ~any(strcmp(part, {'all', 'main', 'vkwave', 'vktrack'}))
-    error('run_reference:part', 'Unknown ROTA_REF_PART "%s" (all, main, vkwave or vktrack).', part);
+    error('run_reference:part', 'Unknown ROTA_ORDER_REF_PART "%s" (all, main, vkwave or vktrack).', part);
 end
 logmsg('part: %s', part);
 for k = 1:numel(files)
@@ -151,7 +151,7 @@ try
     % -- order-rpm map, average order spectrum, order tracks read from the map.
     %    'res' is a resolution bandwidth (window ENBW times the bin spacing); it is given as
     %    par.order_resolution_matlab = ENBW * par.order_resolution, so that the bin spacing and
-    %    the window length are those of ROTA (export_mat.py). The same holds for rpmfreqmap.
+    %    the window length are those of rota-order (export_mat.py). The same holds for rpmfreqmap.
     if doMain && par.do_maps ~= 0
         nv = {'Window', par.window_order_map, 'OverlapPercent', par.overlap_percent, ...
               'Amplitude', par.amplitude_map, 'Scale', 'linear'};
@@ -202,7 +202,7 @@ try
 
     % -- Vold-Kalman: waveforms and tracked magnitudes, bandwidth and decoupling explicit.
     %    'Bandwidth' is given as par.vk_bandwidth_matlab, the full width between the two -3 dB
-    %    points, which is twice ROTA's bandwidth (the -3 dB offset from the carrier); the probe
+    %    points, which is twice rota-order's bandwidth (the -3 dB offset from the carrier); the probe
     %    case VKBW below measures what the argument does (compare.py, table 10).
     if par.do_vk ~= 0
         refIdx = ones(1, K);                       % every order refers to the one speed column
@@ -238,7 +238,7 @@ try
 
     % -- Vold-Kalman bandwidth probe (VKBW): one order at constant speed and fixed tones at known
     %    offsets from it. The single-order filter is run with 'Bandwidth' par.vk_bandwidth_matlab
-    %    (as in the comparisons above) and with the same number as ROTA's bandwidth; compare.py
+    %    (as in the comparisons above) and with the same number as rota-order's bandwidth; compare.py
     %    reads the gain at every offset off the returned waveforms.
     if doMain && isfield(par, 'do_vkprobe') && par.do_vkprobe ~= 0
         R = run_call(R, 'vkprobe', {'xrec'}, { ...
@@ -249,7 +249,7 @@ try
         R = run_call(R, 'vkprobe_same', {'xrec'}, { ...
             mkvariant('orderwaveform', {x, fs, rpm, par.probe_order, 1, 'FilterOrder', par.vk_filter_order, ...
                       'Bandwidth', par.vk_bandwidth, 'Decouple', false}, ...
-                      'as above with Bandwidth = par.vk_bandwidth (the number given to ROTA)')});
+                      'as above with Bandwidth = par.vk_bandwidth (the number given to rota-order)')});
         R.vkprobe_same_bandwidth = par.vk_bandwidth;
         R.vkprobe_filter_order = par.vk_filter_order;
         R.vkprobe_same_filter_order = par.vk_filter_order;
@@ -265,7 +265,7 @@ try
         R = run_call(R, 'vkprobe_same_alt', {'xrec'}, { ...
             mkvariant('orderwaveform', {x, fs, rpm, par.probe_order, 1, 'FilterOrder', foAlt, ...
                       'Bandwidth', par.vk_bandwidth, 'Decouple', false}, ...
-                      'the other filter order, Bandwidth = par.vk_bandwidth (the number given to ROTA)')});
+                      'the other filter order, Bandwidth = par.vk_bandwidth (the number given to rota-order)')});
         R.vkprobe_same_alt_bandwidth = par.vk_bandwidth;
         R.vkprobe_same_alt_filter_order = foAlt;
     end
@@ -441,11 +441,11 @@ end
 
 function logmsg(varargin)
 % Print to the console and append to log.txt.
-global ROTA_REF_LOG
+global ROTA_ORDER_REF_LOG
 msg = sprintf(varargin{:});
 fprintf('%s\n', msg);
-if ~isempty(ROTA_REF_LOG)
-    fid = fopen(ROTA_REF_LOG, 'a');
+if ~isempty(ROTA_ORDER_REF_LOG)
+    fid = fopen(ROTA_ORDER_REF_LOG, 'a');
     if fid > 0
         fprintf(fid, '%s\n', msg);
         fclose(fid);

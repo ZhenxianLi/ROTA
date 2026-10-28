@@ -2,7 +2,7 @@
 
 v0.1: T1, T2, T5, T14. v0.2: T3, T4, T6, T8, T10, T12, T13.
 
-Each case is one function that returns a :class:`rota.synth.SynthSignal`
+Each case is one function that returns a :class:`rota_order.synth.SynthSignal`
 built from explicit parameters and a fixed seed, so the signal and its
 analytic truth are bit-identical on every run. The script can be run to write
 the signals to disk, or imported (``tests/test_validation.py`` and
@@ -11,9 +11,9 @@ the signals to disk, or imported (``tests/test_validation.py`` and
     python validation/make_signals.py            # writes validation/signals/
     python validation/make_signals.py T1 T14     # only these cases
 
-Each signal is saved with :meth:`rota.synth.SynthSignal.save` as
+Each signal is saved with :meth:`rota_order.synth.SynthSignal.save` as
 ``<name>.npz`` (arrays and truth) plus ``<name>.json`` (configuration, resolved
-phases, seed, ROTA version). The output directory is git-ignored. T13 also
+phases, seed, rota-order version). The output directory is git-ignored. T13 also
 writes ``T13_references.npz`` with the perturbed speed references (see
 :func:`t13_references`).
 
@@ -30,7 +30,7 @@ from pathlib import Path
 import numpy as np
 from scipy import signal as sp_signal
 
-from rota.synth import SynthSignal, rpm_profiles, synth_runup
+from rota_order.synth import SynthSignal, rpm_profiles, synth_runup
 
 __all__ = [
     "CASES",
@@ -100,7 +100,7 @@ def t1():
 
     Returns
     -------
-    rota.synth.SynthSignal
+    rota_order.synth.SynthSignal
         Mono signal with truth. Amplitudes are peak, in Pa.
 
     References
@@ -129,7 +129,7 @@ def t2():
       through it near 2667 rpm (t = 5 s), order 3 near 4000 rpm (t = 9 s);
       order 2 ends 33 Hz below it (167 Hz) and order 1 stays far away.
       The truth is the quasi-static response (see
-      :func:`rota.synth.synth_runup`), which is accurate when the sweep is slow
+      :func:`rota_order.synth.synth_runup`), which is accurate when the sweep is slow
       compared with the ring-down time ``Q / (pi f0)`` = 12.7 ms. The fastest
       sweep is order 4.5 at 25 Hz/s: it needs 1 s to cross the 25 Hz
       half-power bandwidth, about 80 ring-down times.
@@ -147,7 +147,7 @@ def t2():
 
     Returns
     -------
-    rota.synth.SynthSignal
+    rota_order.synth.SynthSignal
         Mono signal with truth. Amplitudes are peak, in Pa (noise: RMS).
 
     References
@@ -194,7 +194,7 @@ def t3():
 
     Returns
     -------
-    rota.synth.SynthSignal
+    rota_order.synth.SynthSignal
         Mono signal with truth. Amplitudes are peak, in Pa (noise: RMS).
 
     References
@@ -246,7 +246,7 @@ def t4():
 
     Returns
     -------
-    rota.synth.SynthSignal
+    rota_order.synth.SynthSignal
         Mono signal with truth; ``rpm`` has shape (n, 2). Amplitudes are peak,
         in Pa (noise: RMS).
 
@@ -276,7 +276,7 @@ def t4():
 def t5(ppr=60, seed=None):
     """T5: tachometer with several pulses per revolution, jitter and drop-outs.
 
-    Examines the robustness of :func:`rota.speed.tacho_to_rpm`.
+    Examines the robustness of :func:`rota_order.speed.tacho_to_rpm`.
 
     * Tachometer sampled at 48 kHz, duration 15 s.
     * Speed: idle at 800 rpm for 2 s, raised-cosine ("s_curve", zero slope at
@@ -302,7 +302,7 @@ def t5(ppr=60, seed=None):
 
     Returns
     -------
-    rota.synth.SynthSignal
+    rota_order.synth.SynthSignal
         ``tacho`` holds the pulse signal, ``pulse_times``/``pulse_revs`` the
         truth of the pulses that were rendered, ``rpm`` the true speed in
         rpm, ``config["tacho_n_dropped"]`` the number of dropped pulses.
@@ -360,7 +360,7 @@ def t6(duration=1.0):
 
     Returns
     -------
-    rota.synth.SynthSignal
+    rota_order.synth.SynthSignal
         Mono signal with truth. Amplitudes are peak, in Pa (noise: RMS).
 
     References
@@ -393,7 +393,7 @@ def t8(ratio=1.02, am_freq=(0.4, 0.25), am_depth=0.3, seed=8):
     shafts run at speeds that differ by ``ratio - 1`` (0.5 %, 2 % or 4 % for
     the three cases ``T8_r1005``, ``T8_r1020``, ``T8_r1040``), so the same
     order of the two is a pair of lines whose separation is the beat
-    frequency. :func:`rota.extract.resolution_check` must warn when a setting
+    frequency. :func:`rota_order.extract.resolution_check` must warn when a setting
     cannot separate them.
 
     * Sampling rate 4 kHz, duration 10 s (40 000 samples).
@@ -426,7 +426,7 @@ def t8(ratio=1.02, am_freq=(0.4, 0.25), am_depth=0.3, seed=8):
 
     Returns
     -------
-    rota.synth.SynthSignal
+    rota_order.synth.SynthSignal
         Mono signal with truth; ``rpm`` has shape (n, 2). Amplitudes are peak,
         in Pa (noise: RMS).
 
@@ -460,7 +460,7 @@ def t8(ratio=1.02, am_freq=(0.4, 0.25), am_depth=0.3, seed=8):
 def t10():
     """T10: the true speed is partly outside the search range of the estimator.
 
-    Examines :func:`rota.speed.rpm_from_ridge` (ROADMAP T10, section 6 item 1):
+    Examines :func:`rota_order.speed.rpm_from_ridge` (ROADMAP T10, section 6 item 1):
     when the true speed leaves the search range the estimator must say so
     (``at_bound``, a warning), not return the range boundary as if it were an
     estimate.
@@ -479,7 +479,7 @@ def t10():
 
     Returns
     -------
-    rota.synth.SynthSignal
+    rota_order.synth.SynthSignal
         Mono signal with truth. Amplitudes are peak, in Pa (noise: RMS).
 
     References
@@ -510,11 +510,11 @@ def t12():
     (see :func:`t2`: orders 1, 2, 3, 4.5, a resonance, a fixed tone and
     noise, 16 kHz, 12 s, seed 2). The orders are removed with either extractor
     and the energy left at each removed order is measured against the stored
-    truth (:func:`rota.metrics.order_residual_energy`).
+    truth (:func:`rota_order.metrics.order_residual_energy`).
 
     Returns
     -------
-    rota.synth.SynthSignal
+    rota_order.synth.SynthSignal
         The signal of :func:`t2`. Amplitudes are peak, in Pa (noise: RMS).
 
     References
@@ -547,7 +547,7 @@ def t13():
 
     Returns
     -------
-    rota.synth.SynthSignal
+    rota_order.synth.SynthSignal
         Mono signal with truth. Amplitudes are peak, in Pa (noise: RMS).
 
     References
@@ -600,7 +600,7 @@ def t13_references(
 
     Parameters
     ----------
-    sig : rota.synth.SynthSignal
+    sig : rota_order.synth.SynthSignal
         Signal whose true speed is perturbed (T13).
     bias, jitter_rms, step : float
         Relative sizes (0.005 is 0.5 %).
@@ -665,7 +665,7 @@ def t14(seed=14):
 
     Returns
     -------
-    rota.synth.SynthSignal
+    rota_order.synth.SynthSignal
         Mono signal with truth. Amplitudes are peak, in Pa.
 
     References
@@ -729,7 +729,7 @@ def main(outdir=None, names=None):
 
     References
     ----------
-    ROTA ROADMAP, section 5.5 (directory and workflow).
+    rota-order ROADMAP, section 5.5 (directory and workflow).
     """
     outdir = SIGNALS_DIR if outdir is None else Path(outdir)
     names = list(CASES) if not names else list(names)

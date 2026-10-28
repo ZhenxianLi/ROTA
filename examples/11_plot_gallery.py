@@ -1,30 +1,47 @@
-"""Gallery of rota.plot: one figure per function, from one synthetic run-up.
+"""Gallery of rota_order.plot: one figure per function, on two realistic synthetic recordings.
 
-Every public function of ``rota.plot`` draws one figure here, written to
+Every public function of ``rota_order.plot`` draws one figure here, written to
 ``docs/images/plot_<function>.png`` and shown with its call in
 ``docs/plotting.md``. Two more figures show the before/after view of an order
 modification: ``compare_maps`` with the level difference, and an order slice
 drawn ``relative_to`` the original (``plot_order_slice_relative_to.png``).
 
-The signal comes from ``rota.synth`` (seeded): 6 s at 8 kHz, a linear run-up from
-1000 to 4500 rpm with six orders (0.5, 1, 1.5, 3, 4.5, 6), a 180 Hz resonance, a
-fixed 250 Hz tone, white noise and a tachometer of 12 pulses per revolution. It is
-read as sound pressure in Pa, so the level plots take ``**rp.SOUND_PRESSURE``
-(dB re 20 µPa). The modified signal has order 3 lowered by 10 dB
-(``order_waveform`` through ``rota.extract.residual``, ``modify_orders``,
-``resynthesize``).
+The recordings come from ``rota_order.synth.synth_scenario`` (seeded, 32 kHz, sound
+pressure in Pa at the receiver, so the level plots take ``**rp.SOUND_PRESSURE``,
+dB re 20 µPa). All of it is synthetic and comes with exact truth.
+
+* ``ice``: ``"ice_runup"`` with its defaults, 18 s. A four-stroke four-cylinder
+  engine (firing order 2, then 4, 6, 8, odd and half orders) pulls at full load
+  from 1200 rpm in second gear to 6000 rpm and shifts up at 9.2 and 15.2 s; combustion bursts
+  ring a 1.9 kHz resonance, a modal path has humps at 45 and 175 Hz and a dip at
+  80 Hz, a cabin, engine broadband, road noise, rumble, a thump and a click
+  complete it. The maps, slices, order table and band levels use the second-gear
+  pull before the first upshift (``x2``, ``rpm2``), where the speed rises
+  monotonically; the speed plots and the level against time use the whole record.
+* ``ev``: ``"ev_runup"``, 8 s, set up as in ``10_worked_analysis.py``: an electric
+  drive (motor orders 2 to 14, gear mesh 6.7, gear whine at order 40, inverter
+  carrier near 10 kHz, fixed tones at 6.3 and 14.2 kHz) accelerating from 200 to
+  10900 rpm, with one structural resonance added to the path (2900 Hz, Q = 20), so
+  the whine is amplified around 4350 rpm, and a cabin without diffuse-field fading
+  up to 7.9 kHz. The whine is extracted with the Vold-Kalman filter (its envelope
+  is the ``order_components`` figure); for the before/after figures it is lowered by
+  10 dB with ``modify_orders`` and added back to the residual with ``resynthesize``.
+
+The speed of both comes from the tachometer channel (``tacho_to_rpm``, with the
+conditioning delay of the scenario compensated), as in a measurement.
 
 No psychoacoustic toolbox is needed. ``metric_vs_rpm`` and ``time_metric`` draw
-results of ``rota.bridges.TimeMetric``, normally made by a toolbox (loudness,
-sharpness, ...); here the metric is a quantity computed by ROTA itself, the
-A-weighted sound level with Fast time weighting (``rota.tonal.level_vs_time``),
+results of ``rota_order.bridges.TimeMetric``, normally made by a toolbox (loudness,
+sharpness, ...); here the metric is a quantity computed by rota-order itself, the
+A-weighted sound level with Fast time weighting (``rota_order.tonal.level_vs_time``),
 wrapped in a ``TimeMetric`` by hand.
 
 Amplitude conventions: maps, slices, spectra and the order table are RMS (the
-maps are computed with ``amplitude="rms"``); extracted order envelopes are peak.
-Every label says which.
+maps are computed with ``amplitude="rms"``); extracted order envelopes are peak;
+the truth amplitudes of the scenario are peak and are divided by sqrt(2) where
+they are compared with RMS slices. Every label says which.
 
-Run:  python examples/11_plot_gallery.py   (needs matplotlib, about 5 s)
+Run:  python examples/11_plot_gallery.py   (needs matplotlib, about 20 s)
 Writes docs/images/plot_*.png (16 figures, 6 x 3.6 in at 110 dpi).
 """
 
@@ -34,42 +51,60 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-import rota
-import rota.plot as rp
-from rota.bridges import TimeMetric
+import rota_order as ro
+import rota_order.plot as rp
+from rota_order.bridges import TimeMetric
 
-FS = 8000.0  # sampling rate, Hz
-DURATION = 6.0  # s
-START_RPM, TOP_RPM = 1000.0, 4500.0
-PPR = 12  # tachometer pulses per revolution
-EDGES = np.arange(1000.0, 4501.0, 250.0)  # speed bins, rpm
+FS = 32000.0  # sampling rate of both scenarios, Hz
 IMAGES = Path(__file__).resolve().parent.parent / "docs" / "images"
 DPI = 110
-
-ORDERS = [
-    {"order": 0.5, "amplitude": 0.15},
-    {"order": 1.0, "amplitude": 0.35},
-    {"order": 1.5, "amplitude": 1.0, "gain_rpm": [START_RPM, TOP_RPM], "gain": [0.7, 1.3]},
-    {"order": 3.0, "amplitude": 0.5},
-    {"order": 4.5, "amplitude": 0.3},
-    {"order": 6.0, "amplitude": 0.2},
-]
+EDGES = np.arange(1250.0, 6001.0, 250.0)  # speed bins of the engine, rpm
+EV_EDGES = np.arange(1000.0, 11001.0, 250.0)  # speed bins of the electric drive, rpm
+WHINE = 40.0  # gear-whine order of the electric drive (gear_mesh.teeth)
+TONE = 6300.0  # fixed tone of the electric drive, Hz
 
 
-def build_signal():
-    """Linear run-up with orders, resonance, tone, noise and a tachometer (peak amplitudes in Pa)."""
-    t = np.arange(round(DURATION * FS)) / FS
-    rpm = rota.synth.rpm_profiles(t, "linear", start=START_RPM, stop=TOP_RPM)
-    return rota.synth.synth_runup(
-        FS,
-        rpm,
-        ORDERS,
-        tones=[{"freq": 250.0, "amplitude": 0.12}],
-        resonances=[{"freq": 180.0, "q": 6.0, "gain": 4.0}],
-        noise_rms=0.05,
-        tacho_ppr=PPR,
-        tacho_jitter=30e-6,  # s
-        seed=7,
+def engine():
+    """The ice_runup scenario with its defaults (18 s): second-gear pull and two upshifts."""
+    return ro.synth.synth_scenario("ice_runup", fs=FS, seed=1)
+
+
+def electric_drive():
+    """The ev_runup scenario of example 10: a 2900 Hz path resonance added, no cabin fading below 7.9 kHz."""
+    modes = ro.synth.scenario_defaults("ev_runup")["path"]["modes"] + [{"freq": 2900.0, "q": 20.0, "gain": 0.5}]
+    return ro.synth.synth_scenario("ev_runup", fs=FS, duration=8.0, seed=3, tacho={"ppr": 24},
+                                     path={"modes": modes}, cabin={"crossover_hz": 7900.0})
+
+
+def tacho_rpm(sc):
+    """Speed from the tachometer channel at the audio sample times (the conditioning delay compensated)."""
+    delay = sc.config["resolved"]["tacho_delay"]
+    return ro.speed.tacho_to_rpm(sc.tacho, FS, ppr=sc.config["parameters"]["tacho"]["ppr"], t_out=sc.t + delay)
+
+
+def order_truth(sc, order):
+    """True RMS amplitude (Pa) of a source order at the receiver, quasi-statically."""
+    return sc.quasi_static_amplitude(int(np.flatnonzero(sc.orders == order)[0])) / np.sqrt(2.0)
+
+
+def tone_truth(sc, freq):
+    """True RMS amplitude (Pa) at the receiver of the fixed tone ``freq`` of the scenario.
+
+    The tone stem before the path is a sum of cosines at fixed frequencies; the amplitude of the
+    one at ``freq`` is its projection on that frequency, and the path response gives the receiver.
+    """
+    a = 2.0 * abs(np.mean(sc.source_stems["tones"] * np.exp(-2j * np.pi * freq * sc.t)))  # peak, Pa
+    return a * abs(sc.path_response(freq)) / np.sqrt(2.0)
+
+
+def a_weighted_level(x):
+    """A-weighted, Fast time-weighted level every 50 ms, as a TimeMetric (computed by rota-order)."""
+    t, level = ro.tonal.level_vs_time(ro.tonal.weight(x, FS, "A"), FS, frame=0.05)
+    return TimeMetric(
+        name="A-weighted level, Fast", t=t, values=level, unit="dB re 20 µPa",
+        skip_start=0.5,  # the meter starts at zero and reads low for a few time constants
+        aggregate="power",  # energy mean of levels in a speed bin
+        source="rota-order level_vs_time",
     )
 
 
@@ -82,101 +117,98 @@ def save(ax_or_fig, name):
     print(f"wrote docs/images/{path.name}")
 
 
-def a_weighted_level(x):
-    """A-weighted, Fast time-weighted level every 50 ms, as a TimeMetric (computed by ROTA)."""
-    t, level = rota.tonal.level_vs_time(rota.tonal.weight(x, FS, "A"), FS, frame=0.05)
-    return TimeMetric(
-        name="A-weighted level, Fast", t=t, values=level, unit="dB re 20 µPa",
-        skip_start=0.5,  # the meter starts at zero and reads low for a few time constants
-        aggregate="power",  # energy mean of levels in a speed bin
-        source="rota.tonal.level_vs_time",
-    )
-
-
 def main():
     plt.switch_backend("Agg")  # file output only; no display needed
     plt.rcdefaults()  # Matplotlib's default style, whatever a local matplotlibrc sets
-    # The size of the gallery figures. rota.plot creates a figure with the current rcParams
+    # The size of the gallery figures. rota_order.plot creates a figure with the current rcParams
     # when no Axes is given, so the calls below are the plain one-line calls.
     plt.rcParams.update({"figure.figsize": (6.0, 3.6), "figure.constrained_layout.use": True,
                          "font.size": 8.5})
     IMAGES.mkdir(parents=True, exist_ok=True)
 
-    sig = build_signal()
-    x, rpm, t = sig.x, sig.rpm, sig.t
+    # ---- the engine run-up ------------------------------------------------------------------
+    ice = engine()
+    t, rpm = ice.t, tacho_rpm(ice)
+    second = t < ice.events["shift_times"][0]  # the second-gear pull, before the first upshift
+    x2, rpm2 = ice.x[second], rpm[second]
 
-    # ---- results of ROTA ------------------------------------------------------------------
-    fmap = rota.maps.rpm_frequency_map(x, FS, rpm, resolution=4.0, amplitude="rms", max_freq=600.0)
-    omap = rota.maps.rpm_order_map(x, FS, rpm, order_resolution=0.125, max_order=8.0, amplitude="rms")
-    s15, s3 = rota.slices.order_slice(omap, 1.5), rota.slices.order_slice(omap, 3.0)
-    truth15, truth3 = sig.order_amplitude[:, 2] / np.sqrt(2.0), sig.order_amplitude[:, 3] / np.sqrt(2.0)  # RMS, Pa
-    tone = rota.slices.frequency_slice(fmap, 250.0)
-    tone_rms = np.full_like(rpm, np.sqrt(np.mean(sig.stems["tones"] ** 2)))  # after the resonance, Pa
-    spec = rota.slices.order_spectrum(omap)
-    rpm_tacho = rota.speed.tacho_to_rpm(sig.tacho, FS, ppr=PPR)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")  # the narrow search range is deliberate (RuntimeWarning)
-        ridge = rota.speed.rpm_from_ridge(x, FS, (600.0, 3500.0), orders=(1.5, 3.0, 4.5, 6.0), whiten=None)
-    comp = rota.extract.tracked_harmonics(x, FS, rpm, [1.5, 3.0, 6.0], window_revs=8.0)
-    table = rota.resynth.OrderTable.from_slices(
-        [rota.slices.order_slice(omap, o) for o in (1.5, 3.0, 4.5)], EDGES[:-1] + 125.0, unit="Pa"
+    fmap = ro.maps.rpm_frequency_map(x2, FS, rpm2, resolution=4.0, amplitude="rms", max_freq=1000.0)
+    omap = ro.maps.rpm_order_map(x2, FS, rpm2, order_resolution=0.125, max_order=10.0, amplitude="rms")
+    s2, s4 = ro.slices.order_slice(omap, 2.0), ro.slices.order_slice(omap, 4.0)
+    truth2, truth4 = order_truth(ice, 2.0)[second], order_truth(ice, 4.0)[second]  # RMS, Pa
+    spec = ro.slices.order_spectrum(omap)
+    table = ro.resynth.OrderTable.from_slices(
+        [ro.slices.order_slice(omap, o) for o in (2.0, 4.0, 6.0)], EDGES[:-1] + 125.0, unit="Pa"
     )
-    prom = rota.tonal.order_prominence(x, FS, rpm, [3.0, 4.5], rpm_bins=EDGES)
-    bands = rota.tonal.band_levels_vs_rpm(x, FS, rpm, rpm_bins=EDGES, frame=0.1, fmin=25.0, fmax=3150.0)
-    level = a_weighted_level(x)
-    level_vs_rpm = level.vs_rpm(rpm, t, bins=EDGES)
+    ridge = ro.speed.rpm_from_ridge(ice.x, FS, (700.0, 7000.0), orders=(2, 4, 6))
+    level = a_weighted_level(ice.x)
+    bands = ro.tonal.band_levels_vs_rpm(x2, FS, rpm2, rpm_bins=EDGES, frame=0.1, fmax=5000.0)
 
-    # The before/after pair: order 3 lowered by 10 dB, everything else unchanged.
-    resid, c3 = rota.extract.residual(x, FS, rpm, [3.0], method="vold-kalman")
-    y = rota.resynth.resynthesize(rota.resynth.modify_orders(c3, gain_db={3.0: -10.0}), resid)["mix"]
-    omap_y = rota.maps.rpm_order_map(y, FS, rpm, order_resolution=0.125, max_order=8.0, amplitude="rms")
-    s3_y = rota.slices.order_slice(omap_y, 3.0)
-    ol = rota.slices.overall_level(x, FS, rpm, weighting="A", rpm_bins=EDGES)
-    ol_y = rota.slices.overall_level(y, FS, rpm, weighting="A", rpm_bins=EDGES)
+    # ---- the electric drive -----------------------------------------------------------------
+    ev = electric_drive()
+    rpm_ev = tacho_rpm(ev)
+    ev_fmap = ro.maps.rpm_frequency_map(ev.x, FS, rpm_ev, resolution=4.0, amplitude="rms", max_freq=8000.0)
+    tone = ro.slices.frequency_slice(ev_fmap, TONE)
+    tone_rms = np.full_like(rpm_ev, tone_truth(ev, TONE))
+    prom = ro.tonal.order_prominence(ev.x, FS, rpm_ev, [WHINE], min_rpm=1500.0)
+    ev_level = a_weighted_level(ev.x).vs_rpm(rpm_ev, ev.t, bins=EV_EDGES)
+
+    # The before/after pair: the whine lowered by 10 dB, everything else unchanged.
+    resid, whine = ro.extract.residual(ev.x, FS, rpm_ev, [WHINE], method="vold-kalman", bandwidth=20.0)
+    y = ro.resynth.resynthesize(ro.resynth.modify_orders(whine, gain_db={WHINE: -10.0}), resid)["mix"]
+    okw = {"order_resolution": 0.125, "max_order": 44.0, "amplitude": "rms"}
+    ev_omap, ev_omap_y = (ro.maps.rpm_order_map(s, FS, rpm_ev, **okw) for s in (ev.x, y))
+    s40, s40_y = ro.slices.order_slice(ev_omap, WHINE), ro.slices.order_slice(ev_omap_y, WHINE)
+    ol = ro.slices.overall_level(ev.x, FS, rpm_ev, weighting="A", rpm_bins=EV_EDGES)
+    ol_y = ro.slices.overall_level(y, FS, rpm_ev, weighting="A", rpm_bins=EV_EDGES)
 
     # ---- one figure per function ----------------------------------------------------------
     # Maps
-    ax = rp.rpm_frequency_map(fmap, **rp.SOUND_PRESSURE, mark_orders=(1.5, 3, 4.5, 6))
+    ax = rp.rpm_frequency_map(fmap, **rp.SOUND_PRESSURE, mark_orders=(2, 4, 6))
     save(ax, "rpm_frequency_map")
 
-    ax = rp.rpm_order_map(omap, **rp.SOUND_PRESSURE, mark_orders=(1.5, 3, 4.5, 6))
+    ax = rp.rpm_order_map(omap, **rp.SOUND_PRESSURE, mark_orders=(2, 4, 6))
     save(ax, "rpm_order_map")
 
-    fig, _ = rp.compare_maps({"original": omap, "order 3 -10 dB": omap_y}, **rp.SOUND_PRESSURE,
-                             difference=True, figsize=(9.0, 3.2))
+    with warnings.catch_warnings():
+        # At the lowest speeds the whine and its neighbours change (the Vold-Kalman band spans more than
+        # one order there) below the 70 dB colour range; compare_maps says so, and the figure is meant so.
+        warnings.filterwarnings("ignore", message="compare_maps", category=UserWarning)
+        fig, _ = rp.compare_maps({"original": ev_omap, "order 40 -10 dB": ev_omap_y}, **rp.SOUND_PRESSURE,
+                                 difference=True, dynamic_range=70, figsize=(9.0, 3.2))
     save(fig, "compare_maps")
 
     # Slices, spectra, levels, metrics
-    ax = rp.order_slice({"order 1.5": s15, "order 3": s3}, **rp.SOUND_PRESSURE,
-                        truth={"order 1.5": (rpm, truth15), "order 3": (rpm, truth3)})
+    ax = rp.order_slice({"order 2": s2, "order 4": s4}, **rp.SOUND_PRESSURE,
+                        truth={"order 2": (rpm2, truth2), "order 4": (rpm2, truth4)})
     save(ax, "order_slice")
 
-    ax = rp.order_slice({"original": s3, "order 3 -10 dB": s3_y}, relative_to="original")
+    ax = rp.order_slice({"original": s40, "order 40 -10 dB": s40_y}, relative_to="original")
     save(ax, "order_slice_relative_to")
 
-    ax = rp.frequency_slice({"250 Hz": tone}, **rp.SOUND_PRESSURE, truth=(rpm, tone_rms))
+    ax = rp.frequency_slice({"6.3 kHz tone": tone}, **rp.SOUND_PRESSURE, truth=(rpm_ev, tone_rms))
     save(ax, "frequency_slice")
 
-    ax = rp.order_spectrum(spec, **rp.SOUND_PRESSURE, mark_orders=(0.5, 1, 1.5, 3, 4.5, 6))
+    ax = rp.order_spectrum(spec, **rp.SOUND_PRESSURE, mark_orders=(2, 4, 6, 8))
     save(ax, "order_spectrum")
 
-    ax = rp.overall_level({"original": ol, "order 3 -10 dB": ol_y}, **rp.SOUND_PRESSURE)
+    ax = rp.overall_level({"original": ol, "order 40 -10 dB": ol_y}, **rp.SOUND_PRESSURE)
     save(ax, "overall_level")
 
-    ax = rp.metric_vs_rpm(level_vs_rpm)
+    ax = rp.metric_vs_rpm(ev_level)
     save(ax, "metric_vs_rpm")
 
     ax = rp.time_metric(level)
     save(ax, "time_metric")
 
     # Speed, extraction, tonal
-    ax = rp.rpm_vs_time(t, rpm_tacho, label="tacho_to_rpm", reference=(t, rpm))
+    ax = rp.rpm_vs_time(t, rpm, label="tacho_to_rpm", reference=(t, ice.rpm_mean))
     save(ax, "rpm_vs_time")
 
-    ax = rp.rpm_from_ridge(ridge, reference=(t, rpm))
+    ax = rp.rpm_from_ridge(ridge, reference=(t, ice.rpm_mean))
     save(ax, "rpm_from_ridge")
 
-    ax = rp.order_components(comp, rpm=rpm, **rp.SOUND_PRESSURE)
+    ax = rp.order_components(whine, rpm=rpm_ev, **rp.SOUND_PRESSURE)
     save(ax, "order_components")
 
     ax = rp.order_table(table, **rp.SOUND_PRESSURE)

@@ -8,17 +8,17 @@ labels: bug
 
 **Minimal reproduction**
 
-Please build the input with `rota.synth` (or plain NumPy) so that the expected result is known analytically. Do not attach measurement data you are not allowed to share.
+Please build the input with `rota_order.synth` (or plain NumPy) so that the expected result is known analytically. Do not attach measurement data you are not allowed to share.
 
 ```python
 import numpy as np
-import rota
+import rota_order as ro
 ```
 
 **Expected result** (and how you know it, e.g. the analytic value)
 
 **Versions**
 
-- ROTA:
+- rota-order:
 - Python:
 - NumPy / SciPy:

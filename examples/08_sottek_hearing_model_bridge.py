@@ -1,18 +1,18 @@
-"""ROTA and the Sottek hearing model: ECMA-418-2 metrics along rpm, attributed to orders.
+"""rota-order and the Sottek hearing model: ECMA-418-2 metrics along rpm, attributed to orders.
 
-ROTA computes no psychoacoustic metric (it is out of scope); it prepares the signal for
+rota-order computes no psychoacoustic metric (it is out of scope); it prepares the signal for
 one, and it bins the time-varying result along rpm. This script links it to the Python
 implementation of the Sottek hearing model of ECMA-418-2, ``sottek-hearing-model``
 (import name ``sottek_hearing_model``, PyPI 0.1.14, repository
-github.com/mlotinga/sottek-hearing-model), through ``rota.bridges.sottek_hearing_model``.
+github.com/mlotinga/sottek-hearing-model), through ``rota_order.bridges.sottek_hearing_model``.
 The package implements ECMA-418-2:2025 (4th edition) time-dependent tonality (with the
 frequency of the dominant tonal component), loudness and roughness. Fluctuation strength
 is not part of the release yet (the package README announces it for a future version), so
 it is not used here.
 
-Optional external dependency, not part of ROTA. The package is licensed AGPL-3.0-only
+Optional external dependency, not part of rota-order. The package is licensed AGPL-3.0-only
 (package metadata) and needs Python 3.11 or later; it pulls in PyQt6, Matplotlib,
-Bottleneck and tqdm. ROTA does not depend on it, vendor it or copy its code: the bridge
+Bottleneck and tqdm. rota-order does not depend on it, vendor it or copy its code: the bridge
 imports it only inside its functions (and undoes the change of Matplotlib's settings that
 the import makes) and calls only the documented public functions ``shm_tonality_ecma``,
 ``shm_loudness_ecma_from_comp`` and ``shm_roughness_ecma``. Install it yourself if you
@@ -20,17 +20,17 @@ accept its licence: ``pip install sottek-hearing-model`` (or
 ``pip install "rota-order[sottek-hearing-model]"``). Without it, or if its import fails, this
 script stops with that message (and the import error) when it first calls the bridge.
 
-The signals come from ``rota.synth.synth_scenario``: ``"ice_runup"`` (a four-stroke
+The signals come from ``rota_order.synth.synth_scenario``: ``"ice_runup"`` (a four-stroke
 four-cylinder engine, firing order 2, no gear shift in the first 6 s) and ``"ev_runup"``
 (motor orders 2, 4, 8, 10, 12, 14, gear-mesh order 6.7, gear whine at order 40, a dithered
 10 kHz inverter carrier and two fixed tones, 8 s), both seeded, mono, 32 kHz.
 
 Chain:
 
-1. Speed from the tachometer channel (``rota.speed.tacho_to_rpm``, conditioning delay
+1. Speed from the tachometer channel (``rota_order.speed.tacho_to_rpm``, conditioning delay
    compensated). The signal goes to the bridge as sound pressure in Pa at 32 kHz
    (calibration factor 1, the default, because the synthetic signal is already in Pa); the
-   bridge brings it to the model's rate of 48 kHz with ``rota.tonal.to_calibrated_48k``.
+   bridge brings it to the model's rate of 48 kHz with ``rota_order.tonal.to_calibrated_48k``.
 2. The model, through the bridge: overall time-dependent tonality (187.5 Hz frame rate)
    with the frequency of its dominant tonal component, and the specific (per half critical
    band) tonality with its tonal frequencies, both in the result of ``tonality``; loudness
@@ -38,7 +38,7 @@ Chain:
    the tonality run) and roughness (50 Hz frame rate). Free-frontal sound field, the
    package default.
 3. Binning along rpm with the ``vs_rpm`` method of each result, which calls
-   ``rota.slices.metric_vs_rpm`` with what the bridge recommends for the metric. Tonality:
+   ``rota_order.slices.metric_vs_rpm`` with what the bridge recommends for the metric. Tonality:
    the mean of the frames above 0.02 tu_HMS (the threshold of the result; frames below are
    discarded), the rule ECMA-418-2 uses for its single value. Loudness: arithmetic mean of
    the time-dependent loudness (the package's ``loudness_powavg``, the ``single_value`` of
@@ -53,9 +53,9 @@ Chain:
    one bin spanning the whole run reproduces the package's ``tonality_avg`` and
    ``roughness90pc``, so the per-bin values are those single values restricted to a speed
    bin.
-4. Order attribution of the model's tonal frequencies: ``rota.slices.frequency_to_order``
+4. Order attribution of the model's tonal frequencies: ``rota_order.slices.frequency_to_order``
    (frequency / (rpm / 60), nearest candidate order, 10 % tolerance) and
-   ``rota.slices.order_share`` (share on a base order and its harmonics, optionally
+   ``rota_order.slices.order_share`` (share on a base order and its harmonics, optionally
    weighted by tonality). Two views are reported: the frequency of the overall tonality
    (one dominant tone per frame) and all half-band tonal components above the threshold,
    weighted by their specific tonality. The overall tonality is the largest specific
@@ -66,7 +66,7 @@ Chain:
    lowest bands (the engine's firing frequency reads 7 % low below 50 Hz, about 1 % low
    above 70 Hz; the script prints both); an order without a source (11 for the engine, 34
    for the drive) gives the chance level of the attribution.
-5. Order contribution: the whine (order 40) is removed with ``rota.extract.remove_orders``
+5. Order contribution: the whine (order 40) is removed with ``rota_order.extract.remove_orders``
    (tracked harmonics, 4 revolutions, as in example 06) and the model runs again.
    The overall tonality along rpm is compared with and without it, and so is the
    order-attributed tonality: the largest specific tonality of a half band whose tonal
@@ -87,7 +87,7 @@ Needs matplotlib and sottek-hearing-model. About 2 minutes on four cores (the mo
 by default it uses all cores but one, ``PARALLEL_CORES = 1`` is about three times slower).
 Writes docs/images/08_sottek_hearing_model_bridge.png.
 
-Toolboxes used (cite them as their authors ask; ROTA does not include or redistribute
+Toolboxes used (cite them as their authors ask; rota-order does not include or redistribute
 their code, which keeps its own licence):
 
 * Lotinga, M. J. B., Torjussen, M., & Felix Greco, G. (2025). Verified implementations of
@@ -105,8 +105,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-import rota
-from rota import bridges
+import rota_order as ro
+from rota_order import bridges
 
 NEEDS_MODEL = (  # the message the script stops with if the bridge cannot import the package
     "This example needs the optional package sottek-hearing-model (ECMA-418-2 Sottek hearing\n"
@@ -151,10 +151,10 @@ def run_model(x, fs, roughness=True):
 def prepare(sc, ppr, removed_orders=None):
     """Tacho speed, and the recording in Pa at its own rate (without ``removed_orders`` if given)."""
     delay = float(sc.config["resolved"]["tacho_delay"])
-    rpm = rota.speed.tacho_to_rpm(sc.tacho, sc.fs, ppr=ppr, t_out=sc.t + delay)
+    rpm = ro.speed.tacho_to_rpm(sc.tacho, sc.fs, ppr=ppr, t_out=sc.t + delay)
     x = sc.x  # Pa: the bridge's default calibration factor 1 applies
     if removed_orders is not None:
-        x, _ = rota.extract.remove_orders(
+        x, _ = ro.extract.remove_orders(
             x, sc.fs, rpm, removed_orders, method="tracked-harmonics", window_revs=WHINE_WINDOW_REVS
         )
     return rpm, x
@@ -178,7 +178,7 @@ def order_tonality(ton, rpm_m, order):
     """
     spec = ton.extra["spec_tonality"]
     f = np.where(spec > ton.threshold, ton.extra["spec_tonality_freqs"], np.nan)
-    fo = rota.slices.frequency_to_order(f, rpm_m[:, None], tolerance=TOLERANCE, orders=[order])
+    fo = ro.slices.frequency_to_order(f, rpm_m[:, None], tolerance=TOLERANCE, orders=[order])
     return bridges.TimeMetric(
         name=f"order-{order:g} tonality", t=ton.t, values=np.max(np.where(fo.matched, spec, 0.0), axis=1),
         unit=ton.unit, skip_start=ton.skip_start, source=ton.source,
@@ -198,7 +198,7 @@ def band_attribution(ton, rpm_m, candidates):
     keep = ton.t >= ton.skip_start
     s, f, r = ton.extra["spec_tonality"][keep], ton.extra["spec_tonality_freqs"][keep], rpm_m[keep]
     on = s > ton.threshold
-    fo = rota.slices.frequency_to_order(np.where(on, f, np.nan), r[:, None], tolerance=TOLERANCE, orders=candidates)
+    fo = ro.slices.frequency_to_order(np.where(on, f, np.nan), r[:, None], tolerance=TOLERANCE, orders=candidates)
     total = float(s[on & np.isfinite(fo.order)].sum())
     share = {o: float(s[on & fo.matched & (fo.nearest == o)].sum() / total) for o in candidates}
     other = 1.0 - sum(share.values())
@@ -210,7 +210,7 @@ def dominant_attribution(ton, rpm_m, base, harmonics):
     """Share of the frames' dominant tonal frequency (overall tonality) on ``base`` and its harmonics."""
     keep = (ton.t >= ton.skip_start) & (ton.values > ton.threshold)
     f = np.where(keep, ton.extra["tonality_freqs"], np.nan)
-    return rota.slices.order_share(f, rpm_m, base, harmonics=harmonics, tolerance=TOLERANCE), float(np.nanmedian(f))
+    return ro.slices.order_share(f, rpm_m, base, harmonics=harmonics, tolerance=TOLERANCE), float(np.nanmedian(f))
 
 
 def main():
@@ -218,8 +218,8 @@ def main():
     t_start = time.time()
 
     # ---- signals ----------------------------------------------------------------------------------
-    ice = rota.synth.synth_scenario("ice_runup", fs=FS, duration=ICE_DURATION, seed=SEED)
-    ev = rota.synth.synth_scenario("ev_runup", fs=FS, duration=EV_DURATION, seed=SEED, **EV_OVERRIDES)
+    ice = ro.synth.synth_scenario("ice_runup", fs=FS, duration=ICE_DURATION, seed=SEED)
+    ev = ro.synth.synth_scenario("ev_runup", fs=FS, duration=EV_DURATION, seed=SEED, **EV_OVERRIDES)
     ice_ppr, ev_ppr = int(ice.config["parameters"]["tacho"]["ppr"]), int(ev.config["parameters"]["tacho"]["ppr"])
     firing = float(ice.config["parameters"]["combustion"]["per_rev"])
     assert ice.events["shift_times"].size == 0, "the engine record must stay in one gear"
@@ -331,7 +331,7 @@ def main():
     for lbl, key in (("with the whine", "ev"), ("whine removed", "ev_nw")):
         ton, rpm_m = R[key]["ton"], R[key]["rpm_m"]
         spec, keep = ton.extra["spec_tonality"], ton.t >= ton.skip_start
-        sw = rota.slices.order_share(
+        sw = ro.slices.order_share(
             np.where(spec > ton.threshold, ton.extra["spec_tonality_freqs"], np.nan)[keep].ravel(),
             np.repeat(rpm_m[keep][:, None], spec.shape[1], axis=1).ravel(),
             WHINE_ORDER, harmonics=1, tolerance=TOLERANCE, weights=spec[keep].ravel())

@@ -1,6 +1,6 @@
 """A worked analysis: from a run-up recording with a tonal complaint to an engineering conclusion.
 
-The recording comes from ``rota.synth.synth_scenario("ev_runup")`` (8 s, 32 kHz, one channel, seed
+The recording comes from ``rota_order.synth.synth_scenario("ev_runup")`` (8 s, 32 kHz, one channel, seed
 fixed): a synthetic electric drive with four pole pairs behind a 12:1 reduction, accelerating at full
 load from walking pace to 109 km/h (200 to 10900 rpm). Nothing is measured; all of it comes with
 exact truth. The complaint is a tone, the gear whine at order 40, which is the typical tonal
@@ -40,7 +40,7 @@ Steps (the printed output follows them):
    by 1 dB until the check passes) and by a round 10 dB; ``resynthesize`` adds the residual back. The
    new signals go through the same analysis. ``modify_orders`` scales the order over the whole run;
    a real fix, a damping of the resonance, would act only near it.
-5. Psychoacoustics, with optional toolboxes, through ``rota.bridges``. MoSQITo (Apache-2.0,
+5. Psychoacoustics, with optional toolboxes, through ``rota_order.bridges``. MoSQITo (Apache-2.0,
    ``pip install mosqito``): ``bridges.mosqito.loudness`` and ``bridges.mosqito.sharpness``, ISO 532-1
    loudness (``loudness_zwtv``) and DIN 45692 sharpness (``sharpness_din_from_loudness``). The Sottek
    hearing model (``pip install sottek-hearing-model``, AGPL-3.0-only, Python 3.11 or later):
@@ -48,11 +48,11 @@ Steps (the printed output follows them):
    take the signals in Pa at 32 kHz and resample them to 48 kHz; the ``vs_rpm`` method of each result
    bins it along rpm with the start-up exclusion and the aggregation that the bridge recommends
    (loudness N5, the 95th percentile; sharpness, the median; tonality, the mean of the frames above
-   0.02 tu_HMS), and the values are compared for the original and the two reduced signals. ROTA does
+   0.02 tu_HMS), and the values are compared for the original and the two reduced signals. rota-order does
    not depend on either package: a bridge imports its toolbox only inside the function that calls it
    and calls only documented public functions. Without a package, or if its import fails, the script
    runs and says which part it skipped. Other open-source implementations of psychoacoustic metrics
-   are catalogued at https://zhenxianli.github.io/LISQM/. Editions: ROTA's prominence follows
+   are catalogued at https://zhenxianli.github.io/LISQM/. Editions: rota-order's prominence follows
    ECMA-418-1 (3rd edition, 2024); the Sottek model implements ECMA-418-2:2025 (4th edition).
 6. Conclusion: problem order, speed range, excess over the criterion, reduction needed, the effect
    on the A-weighted level, loudness, sharpness and tonality, next to the truth.
@@ -76,7 +76,7 @@ both toolboxes, about 25 s without them)
 Writes docs/images/10_worked_overview.png, 10_worked_diagnosis.png, 10_worked_whatif.png and
 docs/audio/worked_*.wav. The narrative is in docs/worked_example.md.
 
-Toolboxes used (cite them as their authors ask; ROTA does not include or redistribute
+Toolboxes used (cite them as their authors ask; rota-order does not include or redistribute
 their code, which keeps its own licence):
 
 * Green Forge Coop (2024). MOSQITO (version 1.2.1) [software]. Zenodo.
@@ -100,8 +100,8 @@ import numpy as np
 from scipy import ndimage, signal
 from scipy.io import wavfile
 
-import rota
-from rota import bridges
+import rota_order as ro
+from rota_order import bridges
 
 P_REF = 20e-6  # reference pressure in Pa (dB re 20 uPa), passed explicitly
 FULL_SCALE_PA = 4.0  # sound pressure in Pa that maps to digital full scale in every WAV file
@@ -179,14 +179,14 @@ def build_scenario(duration=DURATION):
     seconds here, at the times they have in the full ``DURATION`` record, so that a shortened record
     (the test) keeps them where they are and a transient does not land on the passage of the resonance.
     """
-    defaults = rota.synth.scenario_defaults("ev_runup")
+    defaults = ro.synth.scenario_defaults("ev_runup")
     modes = defaults["path"]["modes"] + [dict(PROBLEM_MODE)]
     transients = []
     for tr in defaults["transients"]:
         at = tr["at"] * DURATION
         if at < duration:
             transients.append({**{k: v for k, v in tr.items() if k != "at"}, "time": at})
-    return rota.synth.synth_scenario(
+    return ro.synth.synth_scenario(
         "ev_runup", fs=FS, duration=duration, seed=SEED, tacho={"ppr": PPR}, path={"modes": modes},
         cabin=dict(CABIN), transients=transients,
     )
@@ -215,7 +215,7 @@ def true_tnr(sc, rpm, op, k, tr):
     """
     stem = sc.through_path(sc.order_stems[:, k])
     rest = sc.x_clean - stem
-    m = rota.maps.rpm_order_map(
+    m = ro.maps.rpm_order_map(
         rest, sc.fs, rpm, order_resolution=op.order_resolution, amplitude="rms", min_rpm=MIN_RPM_PROM,
         max_order=1.5 * tr["order"], overlap=op.params["overlap"],
     )
@@ -228,7 +228,7 @@ def true_tnr(sc, rpm, op, k, tr):
             continue
         r = float(np.mean(m.rpm[sel])) / 60.0
         ft = tr["order"] * r
-        dfc = rota.tonal.critical_bandwidth(ft)
+        dfc = ro.tonal.critical_bandwidth(ft)
         psd = np.mean(np.abs(m.values[:, sel]) ** 2, axis=1) / (m.enbw_bins * m.resolution * r)
         band = np.abs(m.axis * r - ft) <= 0.5 * dfc
         out.append(10.0 * np.log10(np.interp(np.mean(m.t[sel]), sc.t, tone) / (np.mean(psd[band]) * dfc)))
@@ -263,8 +263,8 @@ def default_reference(duration):
     The same recording without the added resonance and with the default cabin, analysed with
     ``order_prominence`` in ``BIN_SCREEN`` rpm bins. Returns (excess in dB, order, rpm).
     """
-    sc = rota.synth.synth_scenario("ev_runup", fs=FS, duration=duration, seed=SEED, tacho={"ppr": PPR})
-    rpm = rota.speed.tacho_to_rpm(sc.tacho, FS, ppr=PPR, t_out=sc.t + float(sc.config["resolved"]["tacho_delay"]))
+    sc = ro.synth.synth_scenario("ev_runup", fs=FS, duration=duration, seed=SEED, tacho={"ppr": PPR})
+    rpm = ro.speed.tacho_to_rpm(sc.tacho, FS, ppr=PPR, t_out=sc.t + float(sc.config["resolved"]["tacho_delay"]))
     best = (-np.inf, None, None)
     for o in sc.orders:
         pr = prominence(sc.x, FS, rpm, float(o), BIN_SCREEN)
@@ -284,10 +284,10 @@ def speed_references(sc, x):
     ``rpm_from_ridge`` with a comb of the drive's orders) and the ridge result.
     """
     delay = float(sc.config["resolved"]["tacho_delay"])
-    rpm = rota.speed.tacho_to_rpm(sc.tacho, sc.fs, ppr=PPR, t_out=sc.t + delay)
+    rpm = ro.speed.tacho_to_rpm(sc.tacho, sc.fs, ppr=PPR, t_out=sc.t + delay)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        ridge = rota.speed.rpm_from_ridge(
+        ridge = ro.speed.rpm_from_ridge(
             x, sc.fs, RIDGE_RANGE, orders=RIDGE_ORDERS, window=RIDGE_WINDOW, moving=True
         )
     return rpm, np.interp(sc.t, ridge.t, ridge.rpm), ridge
@@ -300,13 +300,13 @@ def find_candidate_orders(om, rpm_range=CAND_RPM):
     """Orders at which the average order spectrum stands out of its surroundings.
 
     The spectrum is the energy average of the order map over ``rpm_range``
-    (``rota.slices.order_spectrum``, RMS, dB re 20 uPa). A candidate is a peak of at least
+    (``rota_order.slices.order_spectrum``, RMS, dB re 20 uPa). A candidate is a peak of at least
     ``CAND_EXCESS_DB`` above the running median of the spectrum over +-3 orders, above order 1.
     The candidate orders are the peaks rounded to the nearest half order. Returns the candidate
     orders, their excess in dB, the orders of the peaks as found, and the weaker peaks (from
     ``CAND_WEAK_DB``) as a list of (order, excess).
     """
-    sp = rota.slices.order_spectrum(om, rpm_range=rpm_range)
+    sp = ro.slices.order_spectrum(om, rpm_range=rpm_range)
     level = db(sp.amplitude)
     excess = level - ndimage.median_filter(level, size=CAND_FLOOR_BINS, mode="nearest")
     pk, _ = signal.find_peaks(excess, height=CAND_WEAK_DB, distance=4)
@@ -329,7 +329,7 @@ def strongest_lines(x, fs, rpm):
     ``LINE_BAND``; frames in which it is less than ``LINE_EXCESS_DB`` high get NaN. Returns t, rpm,
     frequency (Hz) and excess (dB).
     """
-    fmap = rota.maps.rpm_frequency_map(x, fs, rpm, resolution=LINE_RES_HZ, amplitude="rms")
+    fmap = ro.maps.rpm_frequency_map(x, fs, rpm, resolution=LINE_RES_HZ, amplitude="rms")
     level = db(np.abs(fmap.values))
     excess = level - ndimage.median_filter(level, size=(81, 1), mode="nearest")
     in_band = (fmap.axis >= LINE_BAND[0]) & (fmap.axis <= LINE_BAND[1])
@@ -341,7 +341,7 @@ def strongest_lines(x, fs, rpm):
 
 def prominence(x, fs, rpm, order, bin_width):
     """``order_prominence`` of one order in speed bins, as a plain dictionary (RMS, dB)."""
-    op = rota.tonal.order_prominence(x, fs, rpm, [order], rpm_bins=bin_width, min_rpm=MIN_RPM_PROM, ref=P_REF)
+    op = ro.tonal.order_prominence(x, fs, rpm, [order], rpm_bins=bin_width, min_rpm=MIN_RPM_PROM, ref=P_REF)
     return {
         "op": op, "rpm": op.rpm, "freq": op.freq[:, 0], "tnr": op.tnr[:, 0], "pr": op.pr[:, 0],
         "tnr_crit": op.tnr_criterion[:, 0], "pr_crit": op.pr_criterion[:, 0],
@@ -366,9 +366,9 @@ def reduce_order(x, fs, rpm, order, reduction_db, comp=None, resid=None):
     extracted components and the residual.
     """
     if comp is None:
-        resid, comp = rota.extract.residual(x, fs, rpm, [order], method="vold-kalman", bandwidth=VK_BANDWIDTH)
-    mod = rota.resynth.modify_orders(comp, gain_db={order: -float(reduction_db)})
-    y = rota.resynth.resynthesize(mod, resid)["mix"]
+        resid, comp = ro.extract.residual(x, fs, rpm, [order], method="vold-kalman", bandwidth=VK_BANDWIDTH)
+    mod = ro.resynth.modify_orders(comp, gain_db={order: -float(reduction_db)})
+    y = ro.resynth.resynthesize(mod, resid)["mix"]
     return y, comp, resid
 
 
@@ -376,7 +376,7 @@ def reduce_order(x, fs, rpm, order, reduction_db, comp=None, resid=None):
 
 
 def mosqito_metrics(x):
-    """ISO 532-1 loudness and DIN 45692 sharpness of a signal in Pa at ``FS``, with ``rota.bridges.mosqito``.
+    """ISO 532-1 loudness and DIN 45692 sharpness of a signal in Pa at ``FS``, with ``rota_order.bridges.mosqito``.
 
     Module-level so that it can run in a worker process. The bridge resamples the signal to 48 kHz,
     calls MoSQITo (free field) and silences its output; the sharpness is computed from the specific
@@ -389,14 +389,14 @@ def mosqito_metrics(x):
 def order_tonality(ton, t, rpm, order):
     """Largest specific tonality among the half bands whose tonal frequency lies on ``order`` (else 0).
 
-    ``ton`` is a tonality result of ``rota.bridges.sottek_hearing_model`` and ``rpm`` the speed at the
+    ``ton`` is a tonality result of ``rota_order.bridges.sottek_hearing_model`` and ``rpm`` the speed at the
     times ``t``. The result is a ``TimeMetric`` on the frames of ``ton`` with its start-up exclusion
     and no threshold (the zeros count), so that ``vs_rpm`` bins it like the tonality.
     """
     spec = ton.extra["spec_tonality"]
     f = np.where(spec > ton.threshold, ton.extra["spec_tonality_freqs"], np.nan)
     rpm_m = np.interp(ton.t, t, rpm)  # speed on the model's frames
-    fo = rota.slices.frequency_to_order(f, rpm_m[:, None], tolerance=TONALITY_TOL, orders=[order])
+    fo = ro.slices.frequency_to_order(f, rpm_m[:, None], tolerance=TONALITY_TOL, orders=[order])
     return bridges.TimeMetric(
         name=f"order-{order:g} tonality", t=ton.t, values=np.max(np.where(fo.matched, spec, 0.0), axis=1),
         unit=ton.unit, skip_start=ton.skip_start, source=ton.source,
@@ -450,11 +450,11 @@ def write_wav(name, x, fs):
           f"   {path.stat().st_size / 1e6:.2f} MB")
 
 
-# ---- the analysis chain (steps 1 to 4, ROTA only) ------------------------------------------------------
+# ---- the analysis chain (steps 1 to 4, rota-order only) ------------------------------------------------------
 
 
 def analyse(duration=DURATION, log=print, reference=True):
-    """Steps 1 to 4 of the worked analysis with ROTA alone; returns every result in a dictionary.
+    """Steps 1 to 4 of the worked analysis with rota-order alone; returns every result in a dictionary.
 
     ``log`` receives the printed lines (``print`` in the script; a no-op in the test); ``reference=False``
     skips the check of the unmodified scenario. Nothing about
@@ -479,10 +479,10 @@ def analyse(duration=DURATION, log=print, reference=True):
     rpm, rpm_ridge, ridge = speed_references(sc, x)
     sel = sc.t > EDGE_S
     err_t = np.abs(rpm / sc.rpm_mean - 1.0)
-    modes0 = rota.synth.scenario_defaults("ev_runup")["path"]["modes"]
+    modes0 = ro.synth.scenario_defaults("ev_runup")["path"]["modes"]
     f_low = np.array([100.0, 500.0, 1000.0, 2000.0])
-    d_gain = 20.0 * np.log10(np.abs(rota.synth.modal_response(f_low, modes0 + [dict(PROBLEM_MODE)], FS))
-                             / np.abs(rota.synth.modal_response(f_low, modes0, FS)))
+    d_gain = 20.0 * np.log10(np.abs(ro.synth.modal_response(f_low, modes0 + [dict(PROBLEM_MODE)], FS))
+                             / np.abs(ro.synth.modal_response(f_low, modes0, FS)))
     log("The added mode also raises the modal path gain below the resonance (static gain): "
         + ", ".join(f"{g:+.1f} dB at {f:g} Hz" for f, g in zip(f_low, d_gain)) + ".")
     if reference:
@@ -500,7 +500,7 @@ def analyse(duration=DURATION, log=print, reference=True):
     log(f"  against the tachometer above {RIDGE_FROM_RPM:.0f} rpm: median |difference| "
         f"{100 * np.median(np.abs(dif[above])):.3f} %, 95th percentile {100 * np.percentile(np.abs(dif[above]), 95):.2f} %, "
         f"maximum {100 * np.max(np.abs(dif[above])):.2f} %")
-    x48 = rota.tonal.to_calibrated_48k(x, FS, calibration=1.0, fs_out=FS_TOOL)
+    x48 = ro.tonal.to_calibrated_48k(x, FS, calibration=1.0, fs_out=FS_TOOL)
     log(f"to_calibrated_48k: {FS:g} -> {FS_TOOL:g} Hz, RMS {db(np.sqrt(np.mean(x**2))):.2f} -> "
         f"{db(np.sqrt(np.mean(x48**2))):.2f} dB re 20 uPa (calibration factor 1, the signal is in Pa)")
     R.update(rpm=rpm, rpm_ridge=rpm_ridge, ridge_dif=dif, ridge_mask=above, x48=x48)
@@ -511,14 +511,14 @@ def analyse(duration=DURATION, log=print, reference=True):
 
     # ---- 2. overview -------------------------------------------------------------------------------
     log("\n== 2. Overview ==")
-    ol = rota.slices.overall_level(x, FS, rpm, frame=FRAME_S, weighting="A", ref=P_REF, rpm_bins=EDGES)
+    ol = ro.slices.overall_level(x, FS, rpm, frame=FRAME_S, weighting="A", ref=P_REF, rpm_bins=EDGES)
     fit = np.polyfit(ol.centres[ol.counts > 0], ol.binned_level[ol.counts > 0], 3)
     resid_a = ol.binned_level - np.polyval(fit, ol.centres)
     j = int(np.nanargmax(np.abs(resid_a)))
     log(f"A-weighted level in {BIN_RPM:g} rpm bins: {np.nanmin(ol.binned_level):.1f} dB at {ol.centres[np.nanargmin(ol.binned_level)]:.0f} rpm "
         f"to {np.nanmax(ol.binned_level):.1f} dB at {ol.centres[np.nanargmax(ol.binned_level)]:.0f} rpm; largest departure "
         f"from a smooth cubic fit {resid_a[j]:+.2f} dB at {ol.centres[j]:.0f} rpm (frames of {FRAME_S * 1e3:.0f} ms)")
-    bl = rota.tonal.band_levels_vs_rpm(
+    bl = ro.tonal.band_levels_vs_rpm(
         x, FS, rpm, rpm_bins=EDGES, frame=FRAME_S, fraction=3, fmin=100.0, fmax=12500.0, ref=P_REF, min_count=2)
     lv = bl.levels
     bump = np.full(lv.shape, np.nan)
@@ -532,7 +532,7 @@ def analyse(duration=DURATION, log=print, reference=True):
     log(f"1/3-octave band levels in the same bins ({bl.nominal[0]:g} to {bl.nominal[-1]:g} Hz): among the bands from "
         f"{BAND_FROM_HZ:g} Hz, the one that rises most above the median of its neighbouring speed bins (+-3) is "
         f"{bl.nominal[jb]:g} Hz at {bl.rpm_centres[ib]:.0f} rpm, +{bump[ib, jb]:.1f} dB (level {lv[ib, jb]:.1f} dB re 20 uPa)")
-    om = rota.maps.rpm_order_map(x, FS, rpm, order_resolution=ORDER_RES, max_order=MAX_ORDER_MAP, amplitude="rms",
+    om = ro.maps.rpm_order_map(x, FS, rpm, order_resolution=ORDER_RES, max_order=MAX_ORDER_MAP, amplitude="rms",
                                  min_rpm=500.0)
     cand, cand_excess, cand_peak, weak = find_candidate_orders(om)
     log(f"Order map ({ORDER_RES:g} order bins, RMS): peaks of the average order spectrum {CAND_RPM[0]:.0f} to "
@@ -552,7 +552,7 @@ def analyse(duration=DURATION, log=print, reference=True):
         pr = prominence(x, FS, rpm, float(o), BIN_SCREEN)
         e_t, r_t = max_of(pr["rpm"], pr["tnr_excess"])
         e_p, r_p = max_of(pr["rpm"], pr["pr_excess"])
-        sl = rota.slices.order_slice(om, float(o))
+        sl = ro.slices.order_slice(om, float(o))
         ok = (sl.rpm > CAND_RPM[0]) & np.isfinite(sl.amplitude)
         screen[float(o)] = {"pr": pr, "tnr_excess": e_t, "tnr_rpm": r_t, "pr_excess": e_p, "pr_rpm": r_p,
                             "slice": sl, "level_max": float(np.max(db(sl.amplitude[ok])))}
@@ -617,7 +617,7 @@ def analyse(duration=DURATION, log=print, reference=True):
     for label, m_ in (("whole run", np.ones(rl.size, bool)), ("range", in_w)):
         row = []
         for o in list(cand) + [34.0]:
-            s = rota.slices.order_share(fl[m_], rl[m_], float(o), harmonics=1, tolerance=LINE_TOL, weights=pl[m_])
+            s = ro.slices.order_share(fl[m_], rl[m_], float(o), harmonics=1, tolerance=LINE_TOL, weights=pl[m_])
             shares[(label, float(o))] = s.share
             row.append(f"{o:g}: {100 * s.share:.0f} %" + (" (control, no source)" if o == 34.0 else ""))
         n_line = int(np.sum(np.isfinite(fl[m_])))
@@ -631,17 +631,17 @@ def analyse(duration=DURATION, log=print, reference=True):
     log("\n== 4. Extraction and what-if ==")
     with warnings.catch_warnings():  # pairs of the other candidates at idle are not extracted: not our concern
         warnings.simplefilter("ignore")
-        rep = rota.extract.resolution_check(rpm, FS, list(cand), bandwidth=VK_BANDWIDTH)
+        rep = ro.extract.resolution_check(rpm, FS, list(cand), bandwidth=VK_BANDWIDTH)
     pairs = [p for p in rep.pairs if problem in p["orders"]]
     nearest = min(pairs, key=lambda p: p["min_separation_hz"])
     log(f"resolution_check, Vold-Kalman bandwidth {VK_BANDWIDTH:g} Hz (pass band {2 * VK_BANDWIDTH:g} Hz) against the "
         f"candidates {', '.join(f'{o:g}' for o in cand)}: all pairs with order {problem:g} resolved "
         f"{all(p['resolved'] for p in pairs)}; nearest is order {next(o for o in nearest['orders'] if o != problem):g}, "
         f"at least {nearest['min_separation_hz']:.0f} Hz away, largest admissible bandwidth {min(p['required_bandwidth_hz'] for p in pairs):.0f} Hz")
-    resid, comp = rota.extract.residual(x, FS, rpm, [problem], method="vold-kalman", bandwidth=VK_BANDWIDTH)
+    resid, comp = ro.extract.residual(x, FS, rpm, [problem], method="vold-kalman", bandwidth=VK_BANDWIDTH)
     stem = sc.through_path(sc.order_stems[:, tr["k"]])
     s_ok = sc.t > EDGE_S
-    sim = rota.metrics.waveform_similarity(comp.waveforms[s_ok, 0], stem[s_ok])
+    sim = ro.metrics.waveform_similarity(comp.waveforms[s_ok, 0], stem[s_ok])
     win = (rpm >= lo) & (rpm <= hi)
     lvl = lambda a: db(np.sqrt(np.mean(a[win] ** 2)))
     log(f"extracted order {problem:g} against its true stem through the path: correlation {sim['corr']:.4f}, "
@@ -651,10 +651,10 @@ def analyse(duration=DURATION, log=print, reference=True):
     for bw in (10.0, 20.0, 30.0, 50.0):  # the choice of the bandwidth: separation against following the envelope
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            rep_b = rota.extract.resolution_check(rpm, FS, list(cand), bandwidth=bw)
+            rep_b = ro.extract.resolution_check(rpm, FS, list(cand), bandwidth=bw)
         ok_b = all(q["resolved"] for q in rep_b.pairs if problem in q["orders"])
-        c_b = rota.extract.order_waveform(x, FS, rpm, [problem], bandwidth=bw)
-        sim_b = rota.metrics.waveform_similarity(c_b.waveforms[s_ok, 0], stem[s_ok])
+        c_b = ro.extract.order_waveform(x, FS, rpm, [problem], bandwidth=bw)
+        sim_b = ro.metrics.waveform_similarity(c_b.waveforms[s_ok, 0], stem[s_ok])
         tries_bw.append((bw, ok_b, sim_b["corr"]))
     log("  other bandwidths, order resolved from its neighbours / correlation with the true stem: "
         + "; ".join(f"{bw:g} Hz: {'yes' if ok_b else 'no'} / {corr:.4f}" for bw, ok_b, corr in tries_bw))
@@ -688,11 +688,11 @@ def analyse(duration=DURATION, log=print, reference=True):
         e_t_y, _ = max_of(pr["rpm"], pr["tnr_excess"])
         e_p_y, _ = max_of(pr["rpm"], pr["pr_excess"])
         rng = prominent_range(pr["rpm"], pr["tnr_excess"])
-        om_y = om if key == "original" else rota.maps.rpm_order_map(
+        om_y = om if key == "original" else ro.maps.rpm_order_map(
             y, FS, rpm, order_resolution=ORDER_RES, max_order=MAX_ORDER_MAP, amplitude="rms", min_rpm=500.0)
-        sl_y = rota.slices.order_slice(om_y, problem)
+        sl_y = ro.slices.order_slice(om_y, problem)
         d_slice = np.median(db(sl_y.amplitude[inw]) - db(sl.amplitude[inw]))
-        ol_y = rota.slices.overall_level(y, FS, rpm, frame=FRAME_S, weighting="A", ref=P_REF, rpm_bins=EDGES)
+        ol_y = ro.slices.overall_level(y, FS, rpm, frame=FRAME_S, weighting="A", ref=P_REF, rpm_bins=EDGES)
         la = energy_mean_db(ol_y.level[(ol_y.rpm >= lo) & (ol_y.rpm <= hi)])
         checks[key] = {"prom": pr, "slice": sl_y, "ol": ol_y, "la_window": la, "slice_change": float(d_slice),
                        "excess": e_t_y, "excess_pr": e_p_y, "range": rng}
@@ -1040,7 +1040,7 @@ def figure_diagnosis(R, path):
 
 
 def figure_whatif(R, M, S, path):
-    """Figure 3: the what-if. ROTA's check of the reduced signals and the toolbox metrics along rpm."""
+    """Figure 3: the what-if. rota-order's check of the reduced signals and the toolbox metrics along rpm."""
     import matplotlib.pyplot as plt
 
     _style(plt)
@@ -1065,7 +1065,7 @@ def figure_whatif(R, M, S, path):
     ax.set_ylim(25.0, 65.0)
     ax.set_xlabel("Speed (1000 rpm)")
     ax.set_ylabel("Order level (dB re 20 µPa, RMS)")
-    ax.set_title(f"(a) Order {p:g} slice (ROTA)", loc="left")
+    ax.set_title(f"(a) Order {p:g} slice (rota-order)", loc="left")
     ax.legend(frameon=True, fontsize=6.5, loc="upper right")
     ax.grid(alpha=0.3)
 
@@ -1079,7 +1079,7 @@ def figure_whatif(R, M, S, path):
     ax.set_ylim(-32.0, 18.0)
     ax.set_xlabel("Speed (1000 rpm)")
     ax.set_ylabel("TNR minus criterion (dB)")
-    ax.set_title("(b) Tone prominence after the change (ROTA)", loc="left")
+    ax.set_title("(b) Tone prominence after the change (rota-order)", loc="left")
     ax.legend(frameon=True, fontsize=6.5, loc="upper right")
     ax.grid(alpha=0.3)
 
@@ -1093,7 +1093,7 @@ def figure_whatif(R, M, S, path):
     ax.set_xlim(2.0, 8.0)
     ax.set_xlabel("Speed (1000 rpm)")
     ax.set_ylabel("A-weighted level change (dB)")
-    ax.set_title("(c) Overall level (ROTA, overall_level)", loc="left")
+    ax.set_title("(c) Overall level (rota-order, overall_level)", loc="left")
     ax.legend(frameon=True, fontsize=6.5, loc="lower right")
     ax.grid(alpha=0.3)
 
@@ -1159,7 +1159,7 @@ def main():
     t_start = time.time()
     R = analyse()
     print("\n== 5. Psychoacoustics (optional toolboxes, called only through their documented functions) ==")
-    print("ROTA itself computes none of these metrics. Editions: ROTA's prominence follows ECMA-418-1 (3rd edition, 2024); "
+    print("rota-order itself computes none of these metrics. Editions: rota-order's prominence follows ECMA-418-1 (3rd edition, 2024); "
           "the Sottek model implements ECMA-418-2 (4th edition, 2025); more implementations: "
           "https://zhenxianli.github.io/LISQM/")
     M = toolbox_metrics(R)
@@ -1170,11 +1170,11 @@ def main():
 
     print(f"\nWAV files (16-bit PCM, {int(FS_TOOL)} Hz, mono, full scale = {FULL_SCALE_PA:g} Pa):")
     red = R["reductions"]
-    write_wav("worked_original.wav", rota.tonal.to_calibrated_48k(R["variants"]["original"], FS, fs_out=FS_TOOL), FS_TOOL)
+    write_wav("worked_original.wav", ro.tonal.to_calibrated_48k(R["variants"]["original"], FS, fs_out=FS_TOOL), FS_TOOL)
     write_wav(f"worked_order{R['problem']:g}_minus{red['required']:g}db.wav",
-              rota.tonal.to_calibrated_48k(R["variants"]["required"], FS, fs_out=FS_TOOL), FS_TOOL)
+              ro.tonal.to_calibrated_48k(R["variants"]["required"], FS, fs_out=FS_TOOL), FS_TOOL)
     write_wav(f"worked_order{R['problem']:g}_minus{red['round']:g}db.wav",
-              rota.tonal.to_calibrated_48k(R["variants"]["round"], FS, fs_out=FS_TOOL), FS_TOOL)
+              ro.tonal.to_calibrated_48k(R["variants"]["round"], FS, fs_out=FS_TOOL), FS_TOOL)
 
     FIG_DIR.mkdir(parents=True, exist_ok=True)
     import matplotlib

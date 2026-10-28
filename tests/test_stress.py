@@ -1,4 +1,4 @@
-"""Stress tests of the analysis chain on the realistic scenarios of ``rota.synth.synth_scenario``.
+"""Stress tests of the analysis chain on the realistic scenarios of ``rota_order.synth.synth_scenario``.
 
 The validation cases (``tests/test_validation*.py``) check each method on a
 signal built for it. Here the same methods meet complete synthetic recordings
@@ -6,7 +6,7 @@ signal built for it. Here the same methods meet complete synthetic recordings
 shaft angle, gear shifts and a clutch-slip launch, half orders, angle-locked
 combustion bursts, a transfer path with modes and a reverberant cabin impulse
 response, broadband and road noise, transients, a delayed tachometer and an
-imperfect recorder. All data come from ``rota.synth`` with fixed seeds and the
+imperfect recorder. All data come from ``rota_order.synth`` with fixed seeds and the
 scenario defaults (only the sampling rate and the duration are set here).
 
 The orders under test are not hard-coded: they are the strongest orders of each
@@ -32,12 +32,12 @@ import warnings
 import numpy as np
 import pytest
 
-from rota.extract import order_waveform, remove_orders, tracked_harmonics
-from rota.maps import rpm_order_map
-from rota.metrics import order_residual_energy, track_error, waveform_similarity
-from rota.slices import order_slice
-from rota.speed import rpm_from_ridge, tacho_to_rpm
-from rota.synth import measurement_chain, synth_scenario
+from rota_order.extract import order_waveform, remove_orders, tracked_harmonics
+from rota_order.maps import rpm_order_map
+from rota_order.metrics import order_residual_energy, track_error, waveform_similarity
+from rota_order.slices import order_slice
+from rota_order.speed import rpm_from_ridge, tacho_to_rpm
+from rota_order.synth import measurement_chain, synth_scenario
 
 # Sampling rates: the default tachometers need at least 2 samples per pulse at top speed
 # (60 pulses per revolution up to the ICE limiter at 32 kHz; the EV runs faster, so it
