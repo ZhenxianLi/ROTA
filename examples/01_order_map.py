@@ -10,7 +10,9 @@ horizontal line, and at idle the orders merge because a fixed-length time window
 spans several of them; (b) rpm-order map: orders are horizontal lines and stay
 separated down to half an order at idle, the tone bends into a hyperbola and each
 order brightens where it passes the resonance; (c) order slices of orders 1.5 and 3
-against the amplitude put into the signal (analytic truth).
+against the amplitude put into the signal (analytic truth). The panels are drawn with
+``rota.plot`` (``rpm_frequency_map`` with the orders marked, ``rpm_order_map``,
+``order_slice`` with ``truth=``), against time so that the idle hold stays visible.
 
 Amplitude convention: RMS, in Pa (a line that falls on a bin reads its peak
 amplitude divided by sqrt(2)); levels are in dB re 20 uPa. The script also prints
@@ -26,8 +28,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import rota
+import rota.plot as rp
 
-P_REF = 20e-6  # reference pressure in Pa (dB re 20 uPa), passed explicitly
 FS = 8000.0  # sampling rate, Hz
 DURATION = 6.0  # s
 IDLE_RPM, TOP_RPM = 900.0, 4500.0
@@ -60,11 +62,6 @@ def build_signal():
         noise_rms=0.05,
         seed=7,
     )
-
-
-def to_db(amplitude):
-    """Level in dB re P_REF of an amplitude in Pa (RMS in, RMS level out)."""
-    return 20.0 * np.log10(np.maximum(amplitude, 1e-12) / P_REF)
 
 
 def add_rpm_axis(ax, sig, rpm_ticks=(2000.0, 3000.0, 4000.0)):
@@ -131,54 +128,49 @@ def main():
                  if r["n_tone"] else ""))
 
     # ---- figure ----------------------------------------------------------------------------
+    # rota.plot draws the two maps and the slices with their labels; the top speed axis, the shared
+    # colour bar, titles, limits and annotations are plain Matplotlib.
+    plt.rcdefaults()  # Matplotlib's default style, whatever a local matplotlibrc sets
     plt.rcParams.update({"font.size": 8, "axes.titlesize": 9, "axes.labelsize": 8})
     fig = plt.figure(figsize=(8.0, 7.2), dpi=150, constrained_layout=True)
     gs = fig.add_gridspec(2, 2, height_ratios=[1.0, 0.8])
     ax_f, ax_o, ax_s = fig.add_subplot(gs[0, 0]), fig.add_subplot(gs[0, 1]), fig.add_subplot(gs[1, :])
 
-    db_f, db_o = to_db(fmap.magnitude), to_db(omap.magnitude)
-    vmax = np.ceil(max(db_f.max(), db_o.max()) / 5.0) * 5.0
-    kw = {"cmap": "viridis", "vmin": vmax - 60.0, "vmax": vmax, "shading": "nearest",
-          "rasterized": True}
-    ax_f.pcolormesh(fmap.t, fmap.axis, db_f, **kw)
-    im = ax_o.pcolormesh(omap.t, omap.axis, db_o, **kw)
-    cb = fig.colorbar(im, ax=[ax_f, ax_o], location="bottom", fraction=0.05, pad=0.02)
-    cb.set_label("Level per bin, dB re 20 µPa (RMS)")
+    # Time on the x axis (x="time"): the idle hold is where the two maps differ most, and with
+    # x="auto" its frames, all at 900 rpm, would collapse onto one speed. One colour scale for both,
+    # with one colour bar made here: rp.compare_maps would share the scale too, but it builds a
+    # figure of its own, and this one also holds the slices of panel (c).
+    peak = max(np.abs(fmap.values).max(), np.abs(omap.values).max())
+    vmax = np.ceil(20.0 * np.log10(peak / rp.SOUND_PRESSURE["ref"]) / 5.0) * 5.0
+    scale = {"x": "time", "vmin": vmax - 60.0, "vmax": vmax, "colorbar": False, **rp.SOUND_PRESSURE}
+    rp.rpm_frequency_map(fmap, ax=ax_f, mark_orders=sig.orders, **scale)
+    rp.rpm_order_map(omap, ax=ax_o, **scale)
+    cb = fig.colorbar(ax_o.collections[0], ax=[ax_f, ax_o], location="bottom", fraction=0.05, pad=0.02)
+    cb.set_label("Level per bin (dB re 20 µPa, RMS)")
 
     ax_f.set_title("(a) Campbell diagram, 4 Hz bins", loc="left")
-    ax_f.set_ylabel("Frequency (Hz)")
     ax_o.set_title("(b) Order map, 0.125 order bins", loc="left")
-    ax_o.set_ylabel("Order (cycles per revolution)")
     ax_o.set_yticks(sig.orders)
     ax_o.set_yticklabels([f"{o:g}" for o in sig.orders])
-    ax_o.set_ylim(0, 8)
     for ax in (ax_f, ax_o):
-        ax.set_xlabel("Time (s)")
-        ax.set_xlim(0.0, DURATION)
         add_rpm_axis(ax, sig)
-    ax_f.annotate("250 Hz tone", (0.1, TONE_HZ + 6.0), color="w", fontsize=7, ha="left", va="bottom")
-    for o in (0.5, 1.0, 1.5, 3.0, 4.5, 6.0):  # order labels at the end of the run-up
-        ax_f.text(5.8, o * TOP_RPM / 60.0 + 8.0, f"{o:g}", color="w", fontsize=7,
-                  ha="right", va="bottom")
+    ax_f.annotate("250 Hz tone", (0.3, TONE_HZ + 6.0), color="w", fontsize=7, ha="left", va="bottom")
     ax_o.annotate("250 Hz tone", (3.1, 7.2), color="w", fontsize=7, ha="left", va="center")
 
-    # Order slices against the truth.
-    colours = {1.5: "#0072B2", 3.0: "#D55E00"}
-    for order, colour in colours.items():
+    # Order slices against the truth: one call, one truth curve per slice (keys as in the dict).
+    slices, truths = {}, {}
+    for order in (1.5, 3.0):
         k = int(np.flatnonzero(sig.orders == order)[0])
-        s = rota.slices.order_slice(omap, order)
-        truth = sig.order_amplitude[:, k] / np.sqrt(2.0)  # peak -> RMS
-        ax_s.plot(s.t, to_db(s.amplitude), color=colour, lw=2.4, label=f"order {order:g}, order_slice")
-        ax_s.plot(sig.t, to_db(truth), color="k", lw=0.8, ls=(0, (4, 3)),
-                  label="truth (synth)" if order == 1.5 else None)
+        slices[f"order {order:g}"] = rota.slices.order_slice(omap, order)
+        truths[f"order {order:g}"] = (sig.t, sig.order_amplitude[:, k] / np.sqrt(2.0))  # peak -> RMS
+    rp.order_slice(slices, ax=ax_s, x="time", truth=truths, **rp.SOUND_PRESSURE)
+    ax_s.legend(loc="upper left", ncol=2)
+    ax_s.yaxis.set_major_locator(plt.MultipleLocator(5.0))
     ax_s.set_title("(c) Order slices of orders 1.5 and 3 against the amplitude put into the signal",
                    loc="left")
-    ax_s.set_xlabel("Time (s)")
-    ax_s.set_ylabel("Order level, dB re 20 \u00b5Pa (RMS)")
     ax_s.set_xlim(0.0, DURATION)
     ax_s.set_ylim(83.0, 104.0)
     ax_s.grid(alpha=0.3)
-    ax_s.legend(loc="upper left", frameon=True)
     add_rpm_axis(ax_s, sig)
     t_res = float(np.interp(3600.0, sig.rpm[sig.t >= T_RUNUP], sig.t[sig.t >= T_RUNUP]))
     ax_s.annotate("order 3 passes the\n180 Hz resonance", (t_res, 97.3), xytext=(t_res - 1.4, 101.0),

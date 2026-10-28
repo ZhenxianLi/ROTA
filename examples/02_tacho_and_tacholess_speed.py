@@ -11,7 +11,9 @@ Figure: (a) the speed curves, (b) their relative errors, (c, d) the tacholess
 estimator run again with a search range that is deliberately too narrow (600 to
 3500 rpm): above the limit the estimate does not sit on the bound but jumps to a
 wrong value, and only ``at_bound`` tells it reliably (``confidence`` falls in some
-of those frames, not in all).
+of those frames, not in all). Panels (a) and (c) are drawn with ``rota.plot``
+(``rpm_vs_time`` and ``rpm_from_ridge``, which marks the frames flagged ``at_bound``
+with open dark-red circles); (b) and (d) are plain Matplotlib.
 
 Settings that the data call for (see the docstring of ``rpm_from_ridge``):
 ``orders=(1.5, 3, 4.5, 6)``, because with the default integer comb the half-order
@@ -35,6 +37,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import rota
+import rota.plot as rp
 
 FS = 8000.0  # sampling rate, Hz
 DURATION = 6.0  # s
@@ -86,9 +89,9 @@ def ridge(sig, rpm_range):
 
 
 def shade(ax, t, flag, label=None):
-    """Grey bands over the frames where ``flag`` is True."""
+    """Light red bands over the frames where ``flag`` is True (near the colour of the at_bound markers)."""
     ax.fill_between(t, 0, 1, where=flag, step="mid", transform=ax.get_xaxis_transform(),
-                    color="0.6", alpha=0.3, lw=0, label=label)
+                    color="#b2182b", alpha=0.15, lw=0, label=label)
 
 
 def main():
@@ -129,20 +132,29 @@ def main():
           f"RuntimeWarning raised: {len(warn_narrow) > 0}")
 
     # ---- figure ----------------------------------------------------------------------------
+    # rota.plot draws the speed panels (a, c): rpm_vs_time for the tachometer speed, rpm_from_ridge
+    # for the tacholess track with its doubtful frames. rota.plot has no figure for a relative
+    # error or for the confidence alone, so panels (b) and (d) are plain Matplotlib.
     blue, orange, grey = "#0072B2", "#D55E00", "0.45"
+    plt.rcdefaults()  # Matplotlib's default style, whatever a local matplotlibrc sets
     plt.rcParams.update({"font.size": 8, "axes.titlesize": 9, "axes.labelsize": 8})
     fig, (ax_a, ax_b, ax_c, ax_d) = plt.subplots(
         4, 1, figsize=(8.0, 9.0), dpi=150, sharex=True, constrained_layout=True,
         gridspec_kw={"height_ratios": [2.3, 1.3, 2.0, 1.2]},
     )
+    truth_t = (sig.t, sig.rpm)  # the true speed, drawn as the "reference" (dashed grey)
 
-    ax_a.plot(sig.t, sig.rpm, color="k", lw=2.6, alpha=0.35, label="true speed (synth)")
-    ax_a.plot(sig.t, rpm_tacho, color=blue, lw=1.0, label="tacho_to_rpm")
-    ax_a.plot(res.t, res.rpm, ls="none", marker="o", ms=3.0, color=orange, mfc="none",
-              label="rpm_from_ridge, 600 to 6000 rpm")
-    ax_a.set_title("(a) Speed", loc="left")
-    ax_a.set_ylabel("Speed (rpm)")
+    # rota.plot draws with the colour cycle of the axes: tachometer blue, ridge orange in every panel.
+    ax_a.set_prop_cycle(color=[blue, orange])
+    rp.rpm_vs_time(sig.t, rpm_tacho, ax=ax_a, label="tacho_to_rpm")
+    rp.rpm_from_ridge(res, ax=ax_a, reference=truth_t, label="rpm_from_ridge, 600 to 6000 rpm")
+    # Style choice in plain Matplotlib: the ridge frames as open circles, as in panel (b), so that
+    # the tachometer curve stays visible under them (rpm_from_ridge draws the track as a line).
+    for line in ax_a.get_lines():
+        if line.get_label().startswith("rpm_from_ridge"):
+            line.set(linestyle="none", marker="o", markersize=3.0, markerfacecolor="none")
     ax_a.legend(loc="upper left")
+    ax_a.set_title("(a) Speed; reference: the true speed (synth)", loc="left")
 
     ax_b.axhline(0.0, color="k", lw=0.6)
     ax_b.plot(sig.t, 100.0 * (rpm_tacho / sig.rpm - 1.0), color=blue, lw=0.8, label="tacho_to_rpm")
@@ -153,29 +165,28 @@ def main():
     ax_b.set_ylim(-2.5, 2.5)
     ax_b.legend(loc="upper right", ncol=2)
 
-    ax_c.plot(sig.t, sig.rpm, color="k", lw=2.6, alpha=0.35, label="true speed (synth)")
-    ax_c.plot(narrow.t, narrow.rpm, ls="none", marker="o", ms=3.0, color=orange, mfc="none",
-              label="rpm_from_ridge, 600 to 3500 rpm")
-    ax_c.axhline(narrow.rpm_range[1], color=grey, lw=0.8, ls="--", label="upper limit of rpm_range")
-    shade(ax_c, narrow.t, narrow.at_bound, "at_bound")
+    # Open circles: frames flagged at_bound; crosses: confidence below 0.1; dotted: rpm_range.
+    ax_c.set_prop_cycle(color=[orange])
+    rp.rpm_from_ridge(narrow, ax=ax_c, reference=truth_t, label="rpm_from_ridge, 600 to 3500 rpm")
+    ax_c.legend(loc="upper left", ncol=2)
     ax_c.annotate("wrong value, not on the bound:\nflagged by at_bound (beyond)", (5.2, 2700.0),
                   xytext=(3.3, 1500.0), fontsize=7, ha="center", va="center",
                   arrowprops={"arrowstyle": "->", "lw": 0.6})
     ax_c.set_title("(c) Search range too narrow: the estimate leaves the truth above the limit", loc="left")
-    ax_c.set_ylabel("Speed (rpm)")
-    ax_c.legend(loc="upper left")
+    ax_c.set_xlabel("")
 
     ax_d.plot(res.t, res.confidence, color=grey, lw=1.0, label="confidence, range (a)")
     ax_d.plot(narrow.t, narrow.confidence, color=orange, lw=1.2, label="confidence, range (c)")
-    shade(ax_d, narrow.t, narrow.at_bound)
+    shade(ax_d, narrow.t, narrow.at_bound, "at_bound, range (c)")
     ax_d.set_title("(d) Confidence of the tacholess estimate (0 to 1)", loc="left")
     ax_d.set_ylabel("Confidence")
     ax_d.set_ylim(-0.04, 1.08)  # a clean track sits at 1: keep it off the frame
     ax_d.set_xlabel("Time (s)")
-    ax_d.legend(loc="lower left", ncol=2)
+    ax_d.legend(loc="lower left", ncol=3)
     for ax in (ax_a, ax_b, ax_c, ax_d):
         ax.grid(alpha=0.3)
         ax.set_xlim(0.0, DURATION)
+    ax_a.set_xlabel("")
 
     FIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(FIG_PATH, dpi=150, facecolor="white")

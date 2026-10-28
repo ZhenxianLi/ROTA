@@ -1,10 +1,10 @@
 # Examples
 
-Runnable scripts that show the main parts of ROTA on synthetic signals: six on ROTA alone (01 to 06), three bridges to open-source psychoacoustic toolboxes (07 to 09), which are optional, external dependencies (07 and 08 call them through `rota.bridges`), and a worked analysis from recording to engineering conclusion (10, narrated in [docs/worked_example.md](../docs/worked_example.md)). All data come from `rota.synth`, so every result can be compared with the analytic truth that went into the signal, and each script prints those comparisons as numbers before it saves one figure. Scripts 5 and 6 also write WAV files that you can listen to.
+Runnable scripts that show the main parts of ROTA on synthetic signals: six on ROTA alone (01 to 06), three bridges to open-source psychoacoustic toolboxes (07 to 09), which are optional, external dependencies (07 and 08 call them through `rota.bridges`), a worked analysis from recording to engineering conclusion (10, narrated in [docs/worked_example.md](../docs/worked_example.md)), and a gallery of the figures of `rota.plot` (11, shown in [docs/plotting.md](../docs/plotting.md)). All data come from `rota.synth`, so every result can be compared with the analytic truth that went into the signal, and scripts 1 to 10 print those comparisons as numbers before they save their figures. Scripts 5 and 6 also write WAV files that you can listen to.
 
 ## Running
 
-Matplotlib is needed for the figures only (the library itself depends on NumPy and SciPy). From the repository root:
+Matplotlib is needed for the figures only (the library itself depends on NumPy and SciPy); scripts 1, 2 and 11 draw with `rota.plot`, the others with Matplotlib directly. From the repository root:
 
 ```
 pip install -e ".[plot]"
@@ -17,11 +17,12 @@ python examples/06_electric_drive_audio.py
 python examples/07_mosqito_bridge.py
 python examples/08_sottek_hearing_model_bridge.py
 python examples/10_worked_analysis.py
+python examples/11_plot_gallery.py
 ```
 
 The bridges need their toolbox, which the extra of the same name installs: `pip install -e ".[mosqito]"` for script 7 (MoSQITo, Apache-2.0, with the matplotlib its import needs) and `pip install -e ".[sottek-hearing-model]"` for script 8 (sottek-hearing-model, AGPL-3.0-only, Python 3.11 or later; mind its licence). The scripts call them through `rota.bridges`, which imports a toolbox only inside the function that needs it, so ROTA itself does not depend on either. Example 9 runs SQAT in MATLAB and is described in its own folder. Script 10 uses both toolboxes when they are installed and skips those parts otherwise.
 
-The scripts can be started from any directory. Each runs in a few seconds (about 2 s, 2 s, 8 s, 5 s, 11 s and 25 s) and writes its figure to `docs/images/`, 8 inches wide at 150 dpi; scripts 5 and 6 also write their WAV files to `docs/audio/` (`scipy.io.wavfile`). Random elements use fixed seeds, so the numbers, figures and audio files are reproducible.
+The scripts can be started from any directory. Each runs in a few seconds (about 2 s, 2 s, 8 s, 5 s, 11 s and 25 s; script 11 about 5 s) and writes its figure to `docs/images/`, 8 inches wide at 150 dpi (the gallery figures of script 11 are about 6 inches wide at 110 dpi, the `compare_maps` figure 9 inches); scripts 5 and 6 also write their WAV files to `docs/audio/` (`scipy.io.wavfile`). Random elements use fixed seeds, so the numbers, figures and audio files are reproducible.
 
 ## The signal
 
@@ -29,7 +30,7 @@ Scripts 1 to 3 use the same 6 s signal at 8 kHz: an idle at 900 rpm for 1.2 s, t
 
 ## 01_order_map.py
 
-Builds the Campbell diagram (`rpm_frequency_map`) and the order map (`rpm_order_map`) of the signal and reads two order slices (`order_slice`) from the order map. In the Campbell diagram the orders are rays and the tone is a horizontal line, but at idle the half orders merge, because a fixed-length time window spans several of them. In the order map the orders are horizontal lines and stay separated at idle; the tone bends into a hyperbola and each order brightens where it passes the resonance. The slices of orders 1.5 and 3 are compared with the amplitude put into the signal, including the passage of order 3 through the resonance. The script prints the slice error in dB for all six orders (idle, run-up median and run-up maximum). It uses an order resolution of 0.125, which is what separates orders half an order apart; frames in which the fixed tone lies inside an order's band are left out of the statistics.
+Builds the Campbell diagram (`rpm_frequency_map`) and the order map (`rpm_order_map`) of the signal and reads two order slices (`order_slice`) from the order map. In the Campbell diagram the orders are rays and the tone is a horizontal line, but at idle the half orders merge, because a fixed-length time window spans several of them. In the order map the orders are horizontal lines and stay separated at idle; the tone bends into a hyperbola and each order brightens where it passes the resonance. The slices of orders 1.5 and 3 are compared with the amplitude put into the signal, including the passage of order 3 through the resonance. The script prints the slice error in dB for all six orders (idle, run-up median and run-up maximum). It uses an order resolution of 0.125, which is what separates orders half an order apart; frames in which the fixed tone lies inside an order's band are left out of the statistics. The panels are drawn with `rota.plot` (`rpm_frequency_map` with the orders marked, `rpm_order_map`, and `order_slice` with one `truth=` curve per order), against time with a speed axis on top, because the frames of the idle hold would collapse onto one speed on an rpm axis; the shared colour bar, the speed axis and the annotations are plain Matplotlib.
 
 ![Campbell diagram, order map and order slices](../docs/images/01_order_map.png)
 
@@ -37,7 +38,7 @@ Figure: `docs/images/01_order_map.png`.
 
 ## 02_tacho_and_tacholess_speed.py
 
-Compares two speed estimates with the true speed. The signal gets a 12-pulse tachometer with timing jitter and dropped pulses, which `tacho_to_rpm` converts to rpm. `rpm_from_ridge` estimates the speed from the signal alone, with a comb of the half-order family (1.5, 3, 4.5, 6) and without spectral whitening, because the fixed tone would otherwise briefly outscore the orders at a speed above the search range (the comments in the script explain both). The figure shows the speed curves, their relative errors, and a second tacholess run whose search range is deliberately too narrow: above the upper limit the estimate does not sit on the bound but jumps to a wrong value, and `at_bound` flags every one of those frames. The script prints the speed errors, the number of pulses filled in, and how many frames of the narrow run were flagged.
+Compares two speed estimates with the true speed. The signal gets a 12-pulse tachometer with timing jitter and dropped pulses, which `tacho_to_rpm` converts to rpm. `rpm_from_ridge` estimates the speed from the signal alone, with a comb of the half-order family (1.5, 3, 4.5, 6) and without spectral whitening, because the fixed tone would otherwise briefly outscore the orders at a speed above the search range (the comments in the script explain both). The figure shows the speed curves, their relative errors, and a second tacholess run whose search range is deliberately too narrow: above the upper limit the estimate does not sit on the bound but jumps to a wrong value, and `at_bound` flags every one of those frames. The script prints the speed errors, the number of pulses filled in, and how many frames of the narrow run were flagged. The speed panels are drawn with `rota.plot`: `rpm_vs_time` for the tachometer speed and `rpm_from_ridge` for the tacholess track, which marks the frames flagged `at_bound` (at or beyond a search bound) with open dark-red circles and those of low confidence with black crosses, and draws the search range; the relative errors and the confidence are plain Matplotlib, as `rota.plot` has no figure for them.
 
 ![Tacho and tacholess speed](../docs/images/02_tacho_and_tacholess_speed.png)
 
@@ -130,3 +131,11 @@ Audio (48 kHz, mono, 8 s, the same `FULL_SCALE_PA` as scripts 5 and 6): `docs/au
 ![Order 40 slice, tone prominence, A-weighted level, loudness, sharpness and tonality before and after](../docs/images/10_worked_whatif.png)
 
 Figures: `docs/images/10_worked_overview.png`, `10_worked_diagnosis.png` and `10_worked_whatif.png`.
+
+## 11_plot_gallery.py
+
+One figure for each of the 15 functions of `rota.plot`, written to `docs/images/plot_<function>.png` and shown with the call that drew it in [docs/plotting.md](../docs/plotting.md). The signal is the run-up of scripts 1 to 3 without the idle hold (1000 to 4500 rpm), so that `x="auto"` draws the maps against speed. A modified signal, with order 3 lowered by 10 dB (`modify_orders` and `resynthesize`), gives the before/after figures: `compare_maps` with the level difference, `overall_level` with two entries, and an order slice drawn `relative_to` the original (one more figure, `plot_order_slice_relative_to.png`). No psychoacoustic toolbox is needed: `metric_vs_rpm` and `time_metric` draw a `rota.bridges.TimeMetric` made by hand from the A-weighted Fast level computed by ROTA (`rota.tonal.level_vs_time`). Level plots use `**rp.SOUND_PRESSURE` (dB re 20 µPa). The script prints only the names of the files it writes.
+
+![Order maps before and after lowering order 3 by 10 dB](../docs/images/plot_compare_maps.png)
+
+Figures: `docs/images/plot_*.png` (16 files).
