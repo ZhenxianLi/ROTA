@@ -1,11 +1,12 @@
 """ROTA and MoSQITo: psychoacoustic metrics of a run-up along rpm, and what an order contributes.
 
 ROTA does not compute loudness, sharpness or roughness (they are out of scope); the open-source
-toolbox MoSQITo (Apache-2.0, ``pip install mosqito``, https://github.com/Eomys/MoSQITo) does. This
-script shows the hand-over: ROTA prepares the signal and the speed, MoSQITo computes the metrics, ROTA
-bins the time-varying metrics along rpm and attributes them to an order. MoSQITo stays an optional,
-external dependency: nothing in ``src/rota`` imports it, and only its documented public functions
-are called here.
+toolbox MoSQITo (Apache-2.0, https://github.com/Eomys/MoSQITo) does. This script shows the hand-over
+through ``rota.bridges.mosqito``: ROTA prepares the signal and the speed, the bridge calls MoSQITo,
+the ``vs_rpm`` method of each result bins the metric along rpm, and ROTA attributes the metrics to an
+order. MoSQITo stays an optional, external dependency (``pip install "rota-order[mosqito]"``): ROTA
+does not depend on it, the bridge imports it only inside its functions, and only documented public
+functions of MoSQITo are called.
 
 The recording is ``rota.synth.synth_scenario("ice_runup")`` (a synthetic four-cylinder engine in a
 vehicle, firing order 2), the first 6 s of the default full-load run-up (about 1200 to 4400 rpm in
@@ -14,30 +15,33 @@ second gear; the first upshift comes later), one receiver channel, seed fixed. N
 MoSQITo functions used (version 1.2.1, ``mosqito.sq_metrics``) and the standards behind them, as
 catalogued at https://zhenxianli.github.io/LISQM/ (projects/mosqito.html):
 
-* ``loudness_zwtv``: ISO 532-1:2017 time-varying loudness (Zwicker), in sone, one value per 2 ms.
-* ``sharpness_din_from_loudness``: DIN 45692 sharpness (``weighting="din"``), in acum, from the
-  specific loudness of ``loudness_zwtv`` (the result is identical to ``sharpness_din_tv``, which
-  would compute the loudness a second time).
-* ``roughness_dw``: Daniel & Weber roughness, in asper, one value per 0.1 s (200 ms windows, 50 %
-  overlap).
-* ``tnr_ecma_st``: tone-to-noise ratio of the ECMA-74 Annex D method (the catalogue gives
-  ECMA-74:2019, 17th edition; the docstring says "ECMA 418-1" without an edition).
-* Not used here: ``loudness_ecma`` and ``roughness_ecma`` implement ECMA-418-2 in its 2nd edition
-  (2022) only, which is not the current edition (the 4th); its Clause 8 loudness is missing. A
-  result must not be quoted as "ECMA-418-2" without that qualification.
+* ``loudness_zwtv`` (``bridges.mosqito.loudness``): ISO 532-1:2017 time-varying loudness (Zwicker),
+  in sone, one value per 2 ms.
+* ``sharpness_din_from_loudness`` (``bridges.mosqito.sharpness`` of the loudness result): DIN 45692
+  sharpness (``weighting="din"``), in acum, from the specific loudness of ``loudness_zwtv`` (the result
+  is identical to ``sharpness_din_tv``, which would compute the loudness a second time).
+* ``roughness_dw`` (``bridges.mosqito.roughness``): Daniel & Weber roughness, in asper, one value per
+  0.1 s (200 ms windows, 50 % overlap).
+* ``tnr_ecma_st``, called directly (``rota.bridges`` does not wrap it, since ROTA has its own
+  tone-to-noise ratio in ``rota.tonal``): tone-to-noise ratio of the ECMA-74 Annex D method (the
+  catalogue gives ECMA-74:2019, 17th edition; the docstring says "ECMA 418-1" without an edition).
+* Not used here, nor wrapped by ``rota.bridges``: ``loudness_ecma`` and ``roughness_ecma`` implement
+  ECMA-418-2 in its 2nd edition (2022) only, which is not the current edition (the 4th); its Clause 8
+  loudness is missing. A result must not be quoted as "ECMA-418-2" without that qualification.
 
 The script follows the steps below.
 
-1. Preparation with ROTA. ``rota.tonal.to_calibrated_48k`` brings the signal to Pa at 48 kHz (the
-   rate MoSQITo's time-varying loudness requires; the polyphase filter keeps the level, which is
-   checked) and ``tacho_to_rpm`` gives the speed from the tachometer channel.
+1. Preparation with ROTA. ``tacho_to_rpm`` gives the speed from the tachometer channel; the bridge
+   brings the signal in Pa to 48 kHz with ``rota.tonal.to_calibrated_48k`` (the rate MoSQITo's
+   time-varying loudness requires; the polyphase filter keeps the level, which is checked).
 2. MoSQITo computes loudness, sharpness and roughness of the run-up (``field_type="free"``).
-3. ``rota.slices.metric_vs_rpm`` bins each metric along the speed in 250 rpm bins on the monotonic
-   run-up, after skipping the start-up of the metric: 0.6 s for loudness and sharpness (which comes
-   from the same filters) and 1.5 s for roughness, the rules of thumb in the docstring of
-   ``metric_vs_rpm``. The aggregation follows the usage for time-varying sounds: the 95th percentile
-   of loudness (N5, the loudness exceeded in 5 % of the time; Fastl and Zwicker), the median of the
-   sharpness and the 90th percentile of the roughness (R10). A metric is never averaged in dB.
+3. The ``vs_rpm`` method of each result bins it along the speed in 250 rpm bins on the monotonic
+   run-up (``rota.slices.metric_vs_rpm``), after the start-up that the bridge recommends: 0.6 s for
+   loudness and sharpness (which comes from the same filters) and 1.5 s for roughness, the rules of
+   thumb in the docstring of ``metric_vs_rpm``. The aggregation, also the bridge's, follows the usage
+   for time-varying sounds: the 95th percentile of loudness (N5, the loudness exceeded in 5 % of the
+   time; Fastl and Zwicker), the median of the sharpness and the 90th percentile of the roughness
+   (R10). A metric is never averaged in dB.
 4. Order contribution. Step 2 and 3 are repeated on the signal with order 2 removed
    (``rota.extract.remove_orders``, tracked harmonics) and with order 2 raised by 6 dB
    (``rota.resynth.modify_orders`` on the extracted components, then ``rota.resynth.resynthesize``
@@ -83,7 +87,7 @@ The script follows the steps below.
 
 Amplitude conventions. Signals are sound pressure in Pa; levels are in dB re 20 uPa. The RMS
 convention is used for order slices and levels; the extracted order envelopes are peak values, but only
-gains (ratios) are applied to them. MoSQITo takes the signal in Pa and returns sone, acum and asper.
+gains (ratios) are applied to them. The bridge takes the signal in Pa and returns sone, acum and asper.
 
 Run:  python examples/07_mosqito_bridge.py     (needs matplotlib and mosqito; about 1 minute on 4 cores, 2 on one)
 Writes docs/images/07_mosqito_bridge.png.
@@ -96,11 +100,8 @@ their code, which keeps its own licence):
 
 """
 
-import contextlib
-import io
 import os
 import time
-import warnings
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
@@ -109,8 +110,12 @@ import numpy as np
 from scipy import signal
 
 import rota
+from rota import bridges
 
-try:  # MoSQITo is an optional, external dependency of this example only
+# MoSQITo is an optional, external dependency of this example and of rota.bridges.mosqito (pip extra
+# rota-order[mosqito]); ROTA itself does not depend on it. tnr_ecma_st is called directly:
+# rota.bridges does not wrap it, as ROTA has its own (rota.tonal, ECMA-418-1:2024), compared in step 5.
+try:
     import mosqito
     from mosqito.sq_metrics import tnr_ecma_st
 except ImportError as err:  # pragma: no cover
@@ -118,15 +123,13 @@ except ImportError as err:  # pragma: no cover
 
 P_REF = 20e-6  # reference pressure in Pa (dB re 20 uPa), passed explicitly
 FS = 32000.0  # sampling rate of the scenario, Hz
-FS_MQ = 48000.0  # sampling rate MoSQITo needs, Hz
+FS_MQ = 48000.0  # rate MoSQITo runs at (the bridge resamples to it; tnr_ecma_st is given it below), Hz
 DURATION = 6.0  # s
 SEED = 3
 ORDER = 2.0  # firing order of the four-cylinder engine
 BOOST_DB = 6.0  # gain applied to order 2 in the "raised" variant
 WINDOW_REVS = 8.0  # tracked-harmonics frame length, revolutions
 EDGES = np.arange(1500.0, 4501.0, 250.0)  # speed bins, rpm
-SKIP_S = {"loudness": 0.6, "sharpness": 0.6, "roughness": 1.5}  # start-up of each metric, s
-AGGREGATE = {"loudness": ("percentile", 95), "sharpness": "median", "roughness": ("percentile", 90)}
 EXC_RPM = (3000.0, 3500.0, 4000.0)  # reference speeds of the steady excerpts, rpm
 EXC_DURATION = 2.0  # s
 N_EXC = 5  # excerpts (seeds) per reference speed
@@ -138,41 +141,29 @@ VARIANTS = ("original", "order 2 removed", f"order 2 {BOOST_DB:+g} dB")
 COLOURS = {VARIANTS[0]: "#0072B2", VARIANTS[1]: "#D55E00", VARIANTS[2]: "#009E73"}
 
 
-def mosqito_metrics(x48):
-    """Loudness, sharpness and roughness of a signal in Pa at 48 kHz, with MoSQITo.
+def mosqito_metrics(x):
+    """Loudness, sharpness and roughness of a signal in Pa at ``FS``, with ``rota.bridges.mosqito``.
 
-    Module-level so that it can run in a worker process. MoSQITo prints a warning about the first
-    points of sharpness computed from a loudness track; those points are skipped by ``skip_start``
-    later, so the output is silenced here.
+    Module-level so that it can run in a worker process. The bridge resamples the signal to 48 kHz,
+    calls MoSQITo and silences its output (its warning about the first points of the sharpness
+    concerns the start-up that ``vs_rpm`` skips). Returns ``TimeMetric`` results.
     """
-    from mosqito.sq_metrics import loudness_zwtv, roughness_dw, sharpness_din_from_loudness
-
-    with contextlib.redirect_stdout(io.StringIO()), warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        n_sone, n_spec, _bark, t_n = loudness_zwtv(x48, FS_MQ, field_type="free")  # ISO 532-1:2017
-        s_acum = sharpness_din_from_loudness(n_sone, n_spec, weighting="din")  # DIN 45692
-        r_asper, _r_spec, _bark_r, t_r = roughness_dw(x48, FS_MQ, overlap=0.5)  # Daniel & Weber
-    return {"t_n": np.asarray(t_n), "loudness": np.asarray(n_sone), "sharpness": np.asarray(s_acum),
-            "t_r": np.asarray(t_r), "roughness": np.asarray(r_asper)}
+    loud = bridges.mosqito.loudness(x, FS)  # ISO 532-1:2017, free field, sone
+    return {"loudness": loud,
+            "sharpness": bridges.mosqito.sharpness(None, None, loudness=loud),  # DIN 45692, acum
+            "roughness": bridges.mosqito.roughness(x, FS)}  # Daniel & Weber, asper
 
 
-def bin_metrics(m, t, rpm):
-    """Bin the MoSQITo tracks along the speed with ``metric_vs_rpm`` (identical bins for every call)."""
-    out = {}
-    for name in ("loudness", "sharpness", "roughness"):
-        t_m = m["t_r"] if name == "roughness" else m["t_n"]
-        out[name] = rota.slices.metric_vs_rpm(
-            m[name], t_m, rpm, t, bins=EDGES, skip_start=SKIP_S[name], aggregate=AGGREGATE[name],
-            min_count=3,
-        )
-    return out
+def bin_metrics(metrics, t, rpm):
+    """Bin the metrics along the speed (identical bins for every call); ``vs_rpm`` skips the start-up
+    and aggregates (N5, median, R10) as the bridge recommends."""
+    return {name: m.vs_rpm(rpm, t, bins=EDGES, min_count=3) for name, m in metrics.items()}
 
 
 def mosqito_tnr(x, fs, f0, tol_hz=2.0):
     """TNR in dB of the tone MoSQITo finds nearest to ``f0`` (NaN if it finds none within ``tol_hz``)."""
     x48 = rota.tonal.to_calibrated_48k(x, fs)
-    with contextlib.redirect_stdout(io.StringIO()):
-        _t_tnr, tnr, _prominent, freqs = tnr_ecma_st(x48, FS_MQ, prominence=False)
+    _t_tnr, tnr, _prominent, freqs = tnr_ecma_st(x48, FS_MQ, prominence=False)
     tnr, freqs = np.asarray(tnr, dtype=float).ravel(), np.asarray(freqs, dtype=float).ravel()
     if freqs.size == 0:
         return np.nan
@@ -217,14 +208,14 @@ def main():
     # mix = 2 * order + (x - order) = x + order in amplitude: +6 dB means a factor 10**(6/20) = 1.995
     gain = 10.0 ** (BOOST_DB / 20.0)
     assert np.allclose(raised, x + (gain - 1.0) * comp.total, atol=1e-9)
-    x48 = {k: rota.tonal.to_calibrated_48k(v, FS) for k, v in signals.items()}  # Pa at 48 kHz
-    rms_in, rms_out = np.sqrt(np.mean(x ** 2)), np.sqrt(np.mean(x48[VARIANTS[0]] ** 2))
+    x48 = rota.tonal.to_calibrated_48k(x, FS)  # the conversion the bridge makes before calling MoSQITo
+    rms_in, rms_out = np.sqrt(np.mean(x ** 2)), np.sqrt(np.mean(x48 ** 2))
     print(f"to_calibrated_48k: {FS:g} -> {FS_MQ:g} Hz, RMS {20 * np.log10(rms_in / P_REF):.2f} -> "
           f"{20 * np.log10(rms_out / P_REF):.2f} dB re 20 uPa")
 
     workers = max(1, min(len(VARIANTS), os.cpu_count() or 1))
     pool = ProcessPoolExecutor(max_workers=workers)
-    futures = {k: pool.submit(mosqito_metrics, v) for k, v in x48.items()}  # one process per variant
+    futures = {k: pool.submit(mosqito_metrics, v) for k, v in signals.items()}  # one process per variant
 
     # ---- 4b. what the variants are, in ROTA's terms (while MoSQITo works) ------------------------
     print("Order 2 and the overall level of the three signals (ROTA, RMS, run-up after 1 s):")
@@ -262,9 +253,11 @@ def main():
     print(f"TNR of order {ORDER:g} in dB (ROTA: tone_prominence / order_prominence; MoSQITo: tnr_ecma_st):")
     print(f"  {'rpm':>5s} {'Hz':>4s} | {'angle domain':>12s} | {f'{WINDOW_S:g} s window':>11s} {'sweep':>6s} {'of band':>7s} "
           f"{'resolved':>8s} | {f'ROTA, {N_EXC} steady excerpts':>27s} | {f'MoSQITo, same {N_EXC}':>27s} | agree")
+    def fmt(a):
+        return " ".join("  -  " if np.isnan(v) else f"{v:5.1f}" for v in a)
+
     for r in rows:
         agree = int(np.sum(np.abs(r["mq"] - r["rota"]) <= AGREE_DB))
-        fmt = lambda a: " ".join("  -  " if np.isnan(v) else f"{v:5.1f}" for v in a)  # noqa: E731
         print(f"  {r['rpm']:5.0f} {r['f0']:4.0f} | {r['angle']:12.1f} | {r['window']:11.1f} {r['sweep']:4.0f} Hz "
               f"{100 * r['sweep'] / r['cb']:6.0f}% {'no' if r['unresolved'] else 'yes':>8s} | {fmt(r['rota']):>27s} | "
               f"{fmt(r['mq']):>27s} | {agree}/{N_EXC}")
@@ -282,7 +275,7 @@ def main():
           f"loudness N5 (ISO 532-1), sharpness median (DIN 45692), roughness R10 (Daniel & Weber)")
     print(f"  {'rpm':>5s} | {'N5':>5s} {'dN rem':>7s} {'dN +6':>6s} | {'S':>5s} {'dS rem':>7s} {'dS +6':>6s} | "
           f"{'R10':>6s} {'dR rem':>7s} {'dR +6':>6s}   (sone, acum, asper; d = variant - original)")
-    for j in range(0, EDGES.size - 1):
+    for j in range(EDGES.size - 1):
         if not np.isfinite(base["roughness"].value[j]) or j % 2 == 0:
             continue
         cells = []

@@ -24,7 +24,8 @@ Steps (the printed output follows them):
 1. Preparation. ``tacho_to_rpm`` gives the speed from the tachometer (the conditioning delay is
    compensated); ``rpm_from_ridge`` estimates it from the signal alone, with a comb of the orders of
    the drive, and the two are compared. ``to_calibrated_48k`` makes the Pa signal at 48 kHz that the
-   toolboxes and the WAV files need (the level is unchanged, which is printed).
+   WAV files need, and that the bridges of step 5 make for the toolboxes (the level is unchanged,
+   which is printed).
 2. Overview. ``overall_level`` (A-weighted) and ``band_levels_vs_rpm`` (1/3-octave bands) against
    rpm, and ``rpm_order_map``. Candidate orders are the peaks of the average order spectrum
    (``order_spectrum``) that stand out of its running median.
@@ -39,15 +40,19 @@ Steps (the printed output follows them):
    by 1 dB until the check passes) and by a round 10 dB; ``resynthesize`` adds the residual back. The
    new signals go through the same analysis. ``modify_orders`` scales the order over the whole run;
    a real fix, a damping of the resonance, would act only near it.
-5. Psychoacoustics, with optional toolboxes. MoSQITo (Apache-2.0, ``pip install mosqito``): ISO 532-1
+5. Psychoacoustics, with optional toolboxes, through ``rota.bridges``. MoSQITo (Apache-2.0,
+   ``pip install mosqito``): ``bridges.mosqito.loudness`` and ``bridges.mosqito.sharpness``, ISO 532-1
    loudness (``loudness_zwtv``) and DIN 45692 sharpness (``sharpness_din_from_loudness``). The Sottek
    hearing model (``pip install sottek-hearing-model``, AGPL-3.0-only, Python 3.11 or later):
-   ECMA-418-2 tonality (``shm_tonality_ecma``). ``metric_vs_rpm`` bins them along rpm (loudness
-   N5, the 95th percentile; sharpness, the median; tonality, the mean of the frames above 0.02
-   tu_HMS) and the values are compared for the original and the two reduced signals. ROTA does not import
-   either package; the script calls only documented public functions, and without a package the
-   script runs and says which part it skipped. Other open-source implementations of psychoacoustic
-   metrics are catalogued at https://zhenxianli.github.io/LISQM/. Editions: ROTA's prominence follows
+   ``bridges.sottek_hearing_model.tonality``, ECMA-418-2 tonality (``shm_tonality_ecma``). The bridges
+   take the signals in Pa at 32 kHz and resample them to 48 kHz; the ``vs_rpm`` method of each result
+   bins it along rpm with the start-up exclusion and the aggregation that the bridge recommends
+   (loudness N5, the 95th percentile; sharpness, the median; tonality, the mean of the frames above
+   0.02 tu_HMS), and the values are compared for the original and the two reduced signals. ROTA does
+   not depend on either package: a bridge imports its toolbox only inside the function that calls it
+   and calls only documented public functions. Without a package, or if its import fails, the script
+   runs and says which part it skipped. Other open-source implementations of psychoacoustic metrics
+   are catalogued at https://zhenxianli.github.io/LISQM/. Editions: ROTA's prominence follows
    ECMA-418-1 (3rd edition, 2024); the Sottek model implements ECMA-418-2:2025 (4th edition).
 6. Conclusion: problem order, speed range, excess over the criterion, reduction needed, the effect
    on the A-weighted level, loudness, sharpness and tonality, next to the truth.
@@ -66,8 +71,8 @@ versions), scaled with the same ``FULL_SCALE_PA`` as ``05_realistic_engine_audio
 ``06_electric_drive_audio.py`` so that their levels can be compared directly. The script refuses to
 write a file that would clip.
 
-Run:  python examples/10_worked_analysis.py     (needs matplotlib; about 75 s on four cores with both
-toolboxes, about 20 s without them)
+Run:  python examples/10_worked_analysis.py     (needs matplotlib; about 2 minutes on four cores with
+both toolboxes, about 25 s without them)
 Writes docs/images/10_worked_overview.png, 10_worked_diagnosis.png, 10_worked_whatif.png and
 docs/audio/worked_*.wav. The narrative is in docs/worked_example.md.
 
@@ -79,13 +84,12 @@ their code, which keeps its own licence):
 * Lotinga, M. J. B., Torjussen, M., & Felix Greco, G. (2025). Verified implementations of
   the Sottek psychoacoustic Hearing Model standardised sound quality metrics (ECMA-418-2
   loudness, tonality and roughness). Proceedings of Forum Acusticum / Euronoise 2025,
-  Malaga, Spain. Software: sottek-hearing-model 0.1.14,
+  Malaga, Spain. https://doi.org/10.61782/fa.2025.0951. Software: sottek-hearing-model 0.1.14,
   https://github.com/mlotinga/sottek-hearing-model (AGPL-3.0-only).
 
 """
 
-import contextlib
-import io
+import importlib.metadata
 import os
 import time
 import warnings
@@ -97,12 +101,13 @@ from scipy import ndimage, signal
 from scipy.io import wavfile
 
 import rota
+from rota import bridges
 
 P_REF = 20e-6  # reference pressure in Pa (dB re 20 uPa), passed explicitly
 FULL_SCALE_PA = 4.0  # sound pressure in Pa that maps to digital full scale in every WAV file
 FADE_S = 0.02  # raised-cosine fade-in and fade-out of every WAV file, s
 FS = 32000.0  # sampling rate of the scenario and of the analysis, Hz
-FS_TOOL = 48000.0  # sampling rate of the toolboxes and of the WAV files, Hz
+FS_TOOL = 48000.0  # sampling rate of the WAV files (and of the toolboxes, to which the bridges resample), Hz
 DURATION = 8.0  # s
 SEED = 3
 PPR = 24  # tachometer pulses per revolution (the default 48 is too short at 32 kHz above 10000 rpm)
@@ -144,10 +149,7 @@ LINE_TOL = 0.02  # relative tolerance of the attribution of a line to an order
 VK_BANDWIDTH = 20.0  # Vold-Kalman -3 dB bandwidth, Hz
 ROUND_REDUCTION_DB = 10.0  # the round-valued what-if, dB
 
-# 5. toolbox metrics
-SKIP_LOUDNESS = 0.6  # start-up of the ISO 532-1 loudness and DIN 45692 sharpness, s
-SKIP_TONALITY = 0.30  # start-up frames of the ECMA-418-2 tonality, s
-TONALITY_THRESHOLD = 0.02  # tu_HMS; frames below are not averaged (ECMA-418-2 single value)
+# 5. toolbox metrics (start-up exclusion, aggregation and tonality threshold: those of each bridge result)
 TONALITY_TOL = 0.10  # relative tolerance when the model's tonal frequency is attributed to an order
 MIN_COUNT = 3
 
@@ -373,76 +375,53 @@ def reduce_order(x, fs, rpm, order, reduction_db, comp=None, resid=None):
 # ---- 5. toolbox metrics -------------------------------------------------------------------------------
 
 
-def have_mosqito():
-    try:
-        import mosqito  # noqa: F401
-    except ImportError:
-        return False
-    return True
+def mosqito_metrics(x):
+    """ISO 532-1 loudness and DIN 45692 sharpness of a signal in Pa at ``FS``, with ``rota.bridges.mosqito``.
 
-
-def have_sottek():
-    try:
-        import sottek_hearing_model  # noqa: F401
-    except ImportError:
-        return False
-    return True
-
-
-def mosqito_metrics(x48):
-    """ISO 532-1 loudness and DIN 45692 sharpness of a signal in Pa at 48 kHz, with MoSQITo.
-
-    Module-level so that it can run in a worker process. MoSQITo prints a warning about the first
-    points of the sharpness computed from a loudness track; those points are skipped by
-    ``skip_start`` later, so the output is silenced here.
+    Module-level so that it can run in a worker process. The bridge resamples the signal to 48 kHz,
+    calls MoSQITo (free field) and silences its output; the sharpness is computed from the specific
+    loudness of the loudness result. Returns ``TimeMetric`` results.
     """
-    from mosqito.sq_metrics import loudness_zwtv, sharpness_din_from_loudness
-
-    with contextlib.redirect_stdout(io.StringIO()), warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        n_sone, n_spec, _bark, t_n = loudness_zwtv(x48, FS_TOOL, field_type="free")  # ISO 532-1:2017
-        s_acum = sharpness_din_from_loudness(n_sone, n_spec, weighting="din")  # DIN 45692
-    return {"t": np.asarray(t_n), "loudness": np.asarray(n_sone), "sharpness": np.asarray(s_acum)}
+    loud = bridges.mosqito.loudness(x, FS)
+    return {"loudness": loud, "sharpness": bridges.mosqito.sharpness(None, None, loudness=loud)}
 
 
-def sottek_metrics(x48):
-    """ECMA-418-2 tonality (overall and per half band) of a signal in Pa at 48 kHz, with the Sottek model."""
-    from sottek_hearing_model import shm_tonality_ecma
+def order_tonality(ton, t, rpm, order):
+    """Largest specific tonality among the half bands whose tonal frequency lies on ``order`` (else 0).
 
-    with contextlib.redirect_stdout(io.StringIO()), warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        ton = shm_tonality_ecma(x48, FS_TOOL, soundfield="free_frontal", wait_bar=False, parallel_cores=None)
-    return {k: np.asarray(ton[k]) for k in ("time_out", "tonality_t", "spec_tonality", "spec_tonality_freqs")}
-
-
-def order_tonality(spec, freqs, rpm_m, order):
-    """Largest specific tonality among the half bands whose tonal frequency lies on ``order`` (else 0)."""
-    f = np.where(spec > TONALITY_THRESHOLD, freqs, np.nan)
+    ``ton`` is a tonality result of ``rota.bridges.sottek_hearing_model`` and ``rpm`` the speed at the
+    times ``t``. The result is a ``TimeMetric`` on the frames of ``ton`` with its start-up exclusion
+    and no threshold (the zeros count), so that ``vs_rpm`` bins it like the tonality.
+    """
+    spec = ton.extra["spec_tonality"]
+    f = np.where(spec > ton.threshold, ton.extra["spec_tonality_freqs"], np.nan)
+    rpm_m = np.interp(ton.t, t, rpm)  # speed on the model's frames
     fo = rota.slices.frequency_to_order(f, rpm_m[:, None], tolerance=TONALITY_TOL, orders=[order])
-    return np.max(np.where(fo.matched, spec, 0.0), axis=1)
+    return bridges.TimeMetric(
+        name=f"order-{order:g} tonality", t=ton.t, values=np.max(np.where(fo.matched, spec, 0.0), axis=1),
+        unit=ton.unit, skip_start=ton.skip_start, source=ton.source,
+    )
 
 
 def bin_mosqito(m, t, rpm):
-    """Loudness (N5, 95th percentile) and sharpness (median) of a MoSQITo result along rpm."""
-    kw = {"bins": EDGES, "skip_start": SKIP_LOUDNESS, "min_count": MIN_COUNT}
-    return {
-        "loudness": rota.slices.metric_vs_rpm(m["loudness"], m["t"], rpm, t, aggregate=("percentile", 95), **kw),
-        "sharpness": rota.slices.metric_vs_rpm(m["sharpness"], m["t"], rpm, t, aggregate="median", **kw),
-    }
+    """Loudness (N5, 95th percentile) and sharpness (median) of ``mosqito_metrics`` along rpm.
+
+    ``vs_rpm`` skips the start-up and aggregates as the bridge recommends.
+    """
+    return {name: metric.vs_rpm(rpm, t, bins=EDGES, min_count=MIN_COUNT) for name, metric in m.items()}
 
 
-def bin_sottek(m, t, rpm, order):
-    """Overall tonality and order tonality of a Sottek-model result along rpm (frames above the threshold)."""
-    t_m = m["time_out"].astype(float)
-    t_ax, rpm_ax = np.append(t, t[-1] + 0.01), np.append(rpm, rpm[-1])  # the last frame sits one sample later
-    rpm_m = np.interp(t_m, t, rpm)
-    kw = {"bins": EDGES, "skip_start": SKIP_TONALITY, "min_count": MIN_COUNT, "aggregate": "mean"}
-    ton = np.where(m["tonality_t"] > TONALITY_THRESHOLD, m["tonality_t"], np.nan)
+def bin_sottek(ton, t, rpm, order):
+    """Overall tonality and order tonality of a tonality result of the Sottek model along rpm.
+
+    ``vs_rpm`` averages the tonality frames above the threshold of the result after its start-up and
+    gives the last frame the last speed (the model puts it at the signal length rounded up to a multiple
+    of 256 samples at 48 kHz, here one sample after the last speed sample).
+    """
+    kw = {"bins": EDGES, "min_count": MIN_COUNT}
     return {
-        "tonality": rota.slices.metric_vs_rpm(ton, t_m, rpm_ax, t_ax, **kw),
-        "order_tonality": rota.slices.metric_vs_rpm(
-            order_tonality(m["spec_tonality"], m["spec_tonality_freqs"], rpm_m, m["order"]), t_m, rpm_ax, t_ax, **kw
-        ),
+        "tonality": ton.vs_rpm(rpm, t, **kw),
+        "order_tonality": order_tonality(ton, t, rpm, order).vs_rpm(rpm, t, **kw),
     }
 
 
@@ -735,44 +714,55 @@ def analyse(duration=DURATION, log=print, reference=True):
 
 
 def toolbox_metrics(R, log=print, parallel=True):
-    """Step 5: loudness and sharpness (MoSQITo) and tonality (Sottek hearing model) along rpm, if installed.
+    """Step 5: loudness and sharpness (MoSQITo) and tonality (Sottek hearing model) along rpm, if available.
 
-    ROTA prepares the three signals (calibrated Pa at 48 kHz); the toolboxes compute; ``metric_vs_rpm``
-    bins the results along rpm. A toolbox that is not installed is skipped with a message.
-    Returns ``{"mosqito": {variant: binned}, "sottek": {variant: binned}}`` (empty if skipped).
+    The bridges take the three signals in Pa at ``FS`` and return ``TimeMetric`` results; ``vs_rpm``
+    bins them along rpm. MoSQITo runs in worker processes (``parallel``) while the Sottek model runs
+    here; the lines are logged when both are done, with the start-up exclusion and the threshold of the
+    results. A toolbox that is not installed, or whose import fails, is skipped with a message: its
+    bridge imports it at the first call and raises ImportError in both cases (with the install command
+    and the original error), here or in a worker. Returns
+    ``{"mosqito": {variant: binned}, "sottek": {variant: binned}}`` (empty if skipped); a binned entry
+    of the Sottek model also holds the tonality result itself, as ``"ton"``.
     """
-    sc, rpm, problem = R["sc"], R["rpm"], R["problem"]
+    sc, rpm, problem, variants = R["sc"], R["rpm"], R["problem"], R["variants"]
     out = {"mosqito": {}, "sottek": {}}
-    x48 = {k: rota.tonal.to_calibrated_48k(v, FS, calibration=1.0, fs_out=FS_TOOL) for k, v in R["variants"].items()}
     futures, pool = {}, None
-    if have_mosqito():
-        import mosqito
-
-        log(f"MoSQITo {mosqito.__version__}: loudness_zwtv (ISO 532-1:2017, free field) and "
-            f"sharpness_din_from_loudness (DIN 45692), {SKIP_LOUDNESS:g} s start-up skipped")
-        if parallel:
-            pool = ProcessPoolExecutor(max_workers=max(1, min(len(x48), os.cpu_count() or 1)))
-            futures = {k: pool.submit(mosqito_metrics, v) for k, v in x48.items()}  # one process per variant
-    else:
-        log("MoSQITo is not installed: loudness and sharpness skipped (pip install mosqito)")
-    raw_sottek = {}
-    if have_sottek():
-        log("sottek-hearing-model: shm_tonality_ecma (ECMA-418-2, 4th edition, free-frontal field), "
-            f"{SKIP_TONALITY:g} s start-up skipped, frames above {TONALITY_THRESHOLD:g} tu_HMS averaged")
-        for k, v in x48.items():
+    if parallel:
+        pool = ProcessPoolExecutor(max_workers=max(1, min(len(variants), os.cpu_count() or 1)))
+        futures = {k: pool.submit(mosqito_metrics, v) for k, v in variants.items()}  # one process per variant
+    tonality, seconds, unavailable = {}, {}, {}
+    try:
+        for k, v in variants.items():
             t0 = time.time()
-            m = sottek_metrics(v)
-            m["order"] = problem
-            raw_sottek[k] = m
-            log(f"  {k:9s} {time.time() - t0:5.1f} s")
-    else:
-        log("sottek-hearing-model is not installed: ECMA-418-2 tonality skipped (pip install sottek-hearing-model)")
-    if have_mosqito():
-        raw = {k: f.result() for k, f in futures.items()} if parallel else {k: mosqito_metrics(v) for k, v in x48.items()}
+            tonality[k] = bridges.sottek_hearing_model.tonality(v, FS)  # free-frontal field
+            seconds[k] = time.time() - t0
+    except ImportError as err:  # not installed, or its import fails
+        unavailable["sottek"] = err
+    try:
+        raw = {k: f.result() for k, f in futures.items()} if parallel else {k: mosqito_metrics(v) for k, v in variants.items()}
+    except ImportError as err:  # not installed, or its import fails (raised in a worker, result() raises it here)
+        unavailable["mosqito"] = err
+    finally:
         if pool is not None:
             pool.shutdown()
+    if "mosqito" in unavailable:
+        log("MoSQITo is not installed or cannot be imported: loudness and sharpness skipped")
+        log(f"  {unavailable['mosqito']}")
+    else:
+        log(f"MoSQITo {importlib.metadata.version('mosqito')}: loudness_zwtv (ISO 532-1:2017, free field) and "
+            f"sharpness_din_from_loudness (DIN 45692), {raw['original']['loudness'].skip_start:g} s start-up skipped")
         out["mosqito"] = {k: bin_mosqito(m, sc.t, rpm) for k, m in raw.items()}
-    out["sottek"] = {k: bin_sottek(m, sc.t, rpm, problem) for k, m in raw_sottek.items()}
+    if "sottek" in unavailable:
+        log("sottek-hearing-model is not installed or cannot be imported: ECMA-418-2 tonality skipped")
+        log(f"  {unavailable['sottek']}")
+    else:
+        ton = tonality["original"]
+        log("sottek-hearing-model: shm_tonality_ecma (ECMA-418-2, 4th edition, free-frontal field), "
+            f"{ton.skip_start:g} s start-up skipped, frames above {ton.threshold:g} tu_HMS averaged")
+        for k, s in seconds.items():
+            log(f"  {k:9s} {s:5.1f} s")
+        out["sottek"] = {k: {"ton": m, **bin_sottek(m, sc.t, rpm, problem)} for k, m in tonality.items()}
     return out
 
 
@@ -808,8 +798,8 @@ def print_metric_tables(R, M, log=print):
             log(f"  {c:5.0f} | " + " | ".join(cells) + mark)
     if M["sottek"]:
         log(f"Sottek hearing model, {BIN_RPM:g} rpm bins (tonality in tu_HMS: mean of the frames above "
-            f"{TONALITY_THRESHOLD:g}; order {R['problem']:g}: largest specific tonality of a half band whose tonal "
-            f"frequency lies on the order, {100 * TONALITY_TOL:g} % window, 0 where there is none):")
+            f"{M['sottek']['original']['ton'].threshold:g}; order {R['problem']:g}: largest specific tonality of a "
+            f"half band whose tonal frequency lies on the order, {100 * TONALITY_TOL:g} % window, 0 where there is none):")
         log(f"  {'rpm':>5s} | " + " ".join(f"{'tonality ' + names[k]:>17s}" for k in keys) + " | "
             + " ".join(f"{'order ' + format(R['problem'], 'g') + ' ' + names[k]:>17s}" for k in keys))
         base = M["sottek"]["original"]
@@ -885,15 +875,15 @@ def print_conclusion(R, S, log=print):
             parts.append(f"ECMA-418-2 tonality {s['tonality']:+.3f} tu_HMS (from {s['tonality_orig']:.3f}), "
                          f"order-{p:g} tonality {s['order_tonality']:+.3f} (from {s['order_tonality_orig']:.3f})")
         log("    " + "; ".join(parts))
-    if not (have_mosqito() and have_sottek()):
-        log("  (loudness and sharpness, or tonality, are missing: the toolbox is not installed)")
+    if not ("loudness" in S["required"] and "tonality" in S["required"]):
+        log("  (loudness and sharpness, or tonality, are missing: the toolbox is not installed or cannot be imported)")
 
 
 # ---- figures ------------------------------------------------------------------------------------------------
 
 
 def _style(plt):
-    plt.rcdefaults()  # the model package changes Matplotlib's global settings; start from the defaults
+    plt.rcdefaults()  # Matplotlib's default style, whatever a local matplotlibrc sets
     plt.rcParams.update({"font.size": 8, "axes.titlesize": 8.5, "axes.labelsize": 8})
 
 
@@ -1063,7 +1053,7 @@ def figure_whatif(R, M, S, path):
     w = np.array(win) / 1e3
 
     def skipped(ax, what):
-        ax.text(0.5, 0.5, f"skipped: {what} not installed", ha="center", va="center", transform=ax.transAxes,
+        ax.text(0.5, 0.5, f"skipped: {what} not available", ha="center", va="center", transform=ax.transAxes,
                 fontsize=8, color=GREY)
 
     ax = axes[0, 0]

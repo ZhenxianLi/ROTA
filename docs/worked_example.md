@@ -4,7 +4,7 @@ This page follows one analysis from the raw signal to a statement an engineer ca
 
 > The gear whine, order 40, is prominent between about 3.0 and 4.7 krpm (2.0 to 3.1 kHz) and more than 6 dB above the ECMA-418-1 criterion between 3.8 and 4.5 krpm. It exceeds the criterion by up to 14 dB, at 4.3 krpm. About 15 dB less at that order brings it under the criterion. That lowers the A-weighted level in the range by 1.05 dB, the loudness by 8.6 %, and the ECMA-418-2 tonality by 69 %.
 
-The script is [examples/10_worked_analysis.py](https://github.com/ZhenxianLi/rota-order/blob/main/examples/10_worked_analysis.py). It runs in about 75 s on four cores with the two optional toolboxes (about 20 s without them), prints every number quoted below, and writes the three figures and three WAV files linked here. All numbers on this page are its output.
+The script is [examples/10_worked_analysis.py](https://github.com/ZhenxianLi/rota-order/blob/main/examples/10_worked_analysis.py). It runs in about 2 minutes on four cores with the two optional toolboxes (about 25 s without them), prints every number quoted below, and writes the three figures and three WAV files linked here. All numbers on this page are its output.
 
 The recording is synthetic: `rota.synth.synth_scenario("ev_runup")`, seeded. Nothing is measured. That is deliberate: the signal has an exact truth, so each step of the analysis can be compared with what was put into the signal, and the page does that in a table at the end. The analysis itself does not use the truth. It finds the order, the speed range and the size of the problem from the signal alone.
 
@@ -33,7 +33,7 @@ Tacholess speed (rpm_from_ridge, comb of orders 2, 4, 6.7, 8, 10, 12, 14, 40, se
 to_calibrated_48k: 32000 -> 48000 Hz, RMS 87.71 -> 87.71 dB re 20 uPa (calibration factor 1, the signal is in Pa)
 ```
 
-The two speeds agree to 0.13 % (median) above 2500 rpm. Below about 2500 rpm the tonal lines lie under the road noise and the rumble, and the tacholess estimate has nothing to follow, so the search range starts at 2000 rpm and the tachometer is the reference for everything below. The rest of the analysis uses the tachometer speed. `to_calibrated_48k` makes the 48 kHz copy that the toolboxes and the WAV files need; the polyphase filter leaves the level unchanged (87.71 dB before and after).
+The two speeds agree to 0.13 % (median) above 2500 rpm. Below about 2500 rpm the tonal lines lie under the road noise and the rumble, and the tacholess estimate has nothing to follow, so the search range starts at 2000 rpm and the tachometer is the reference for everything below. The rest of the analysis uses the tachometer speed. `to_calibrated_48k` makes the 48 kHz copy that the WAV files need (the bridges of step 5 make the same copy for the toolboxes); the polyphase filter leaves the level unchanged (87.71 dB before and after).
 
 ## 2. Overview
 
@@ -132,14 +132,26 @@ The order slice drops by 14.89 and 9.95 dB, as applied. Ten dB is not enough: th
 
 ## 5. Psychoacoustics
 
-ROTA computes none of the psychoacoustic metrics; it prepares the signal and the speed, and bins the time-varying results of the toolboxes along rpm (`metric_vs_rpm`). This step uses two optional, open-source packages through their documented public functions. ROTA does not import or copy them; without a package the script prints which part it skipped (`pip install mosqito`, `pip install sottek-hearing-model`) and the tests for that part are skipped. Other open-source implementations are catalogued at [zhenxianli.github.io/LISQM](https://zhenxianli.github.io/LISQM/); [examples 07](https://github.com/ZhenxianLi/rota-order/blob/main/examples/07_mosqito_bridge.py) and [08](https://github.com/ZhenxianLi/rota-order/blob/main/examples/08_sottek_hearing_model_bridge.py) describe the two bridges in detail.
+ROTA computes none of the psychoacoustic metrics. It prepares the signal and the speed, calls two optional, open-source toolboxes through the thin wrappers of `rota.bridges`, and bins the time-varying results along rpm. A bridge takes the signal in Pa at any sampling rate, resamples it to 48 kHz with `to_calibrated_48k`, calls the documented public functions of its toolbox and returns the metric with its time axis, unit and source; the `vs_rpm` method of the result bins it along rpm with `metric_vs_rpm`:
 
-* MoSQITo 1.2.1 (Apache-2.0): `loudness_zwtv` (ISO 532-1:2017, time-varying, free field) and `sharpness_din_from_loudness` (DIN 45692).
-* The Sottek hearing model, `sottek-hearing-model` 0.1.14 (AGPL-3.0-only, Python 3.11 or later; install it only if you accept the licence): `shm_tonality_ecma`, the ECMA-418-2:2025 (4th edition) tonality. Its dominant tonal frequencies are attributed to order 40 with `frequency_to_order` (10 % window), as in example 08.
+```python
+from rota import bridges
+
+# y: one of the three signals, in Pa at fs = 32 kHz; rpm: the tachometer speed at the times t
+loud = bridges.mosqito.loudness(y, fs)                         # ISO 532-1:2017, sone
+n5 = loud.vs_rpm(rpm, t, bins=edges, min_count=3)              # N5 in each 250 rpm bin
+s = bridges.mosqito.sharpness(None, None, loudness=loud).vs_rpm(rpm, t, bins=edges, min_count=3)
+ton = bridges.sottek_hearing_model.tonality(y, fs).vs_rpm(rpm, t, bins=edges, min_count=3)
+```
+
+ROTA does not depend on the toolboxes and does not copy them: a bridge imports its toolbox only inside the function that needs it, and the extras `mosqito` and `sottek-hearing-model` install them (see [Reproducing](#reproducing)). Without a toolbox the script prints which part it skipped and the tests for that part are skipped. Other open-source implementations are catalogued at [zhenxianli.github.io/LISQM](https://zhenxianli.github.io/LISQM/); [examples 07](https://github.com/ZhenxianLi/rota-order/blob/main/examples/07_mosqito_bridge.py) and [08](https://github.com/ZhenxianLi/rota-order/blob/main/examples/08_sottek_hearing_model_bridge.py) describe the two bridges in detail.
+
+* MoSQITo 1.2.1 (Apache-2.0), through `rota.bridges.mosqito`: `loudness` calls `loudness_zwtv` (ISO 532-1:2017, time-varying, free field), `sharpness` calls `sharpness_din_from_loudness` (DIN 45692) on the specific loudness of that result.
+* The Sottek hearing model, `sottek-hearing-model` 0.1.14 (AGPL-3.0-only, Python 3.11 or later; install it only if you accept the licence), through `rota.bridges.sottek_hearing_model`: `tonality` calls `shm_tonality_ecma`, the ECMA-418-2:2025 (4th edition) tonality. The result also holds the specific tonality of each half band and its tonal frequency; those frequencies are attributed to order 40 with `frequency_to_order` (10 % window), as in example 08.
 
 Editions: ROTA's prominence follows ECMA-418-1, 3rd edition (2024). The Sottek model implements ECMA-418-2, 4th edition (2025). The ECMA-418-2 functions of MoSQITo 1.2.1 are of the 2nd edition (2022) and are not used here.
 
-`metric_vs_rpm` bins each metric in 250 rpm bins with the aggregation that suits it: the 95th percentile of the loudness (N5), the median of the sharpness, the mean of the tonality frames above 0.02 tu_HMS. The start-up of each model is skipped (0.6 s, 0.3 s). Metrics are never averaged in dB. The three signals are the original and the two reduced versions.
+`vs_rpm` bins each metric in 250 rpm bins with the start-up exclusion and the aggregation that the bridge recommends for it: the 95th percentile of the loudness (N5), the median of the sharpness, the mean of the tonality frames above 0.02 tu_HMS (the threshold ECMA-418-2 uses for its single value). The start-up of each model is skipped (0.6 s, 0.3 s). Metrics are never averaged in dB. The three signals are the original and the two reduced versions.
 
 ![Order 40 slice, tone prominence, A-weighted level, loudness, sharpness and tonality before and after](images/10_worked_whatif.png)
 
@@ -234,9 +246,11 @@ Three mono 16-bit WAV files at 48 kHz, 8 s, with the same scaling as examples 05
 
 ```
 pip install -e ".[plot]"
-pip install mosqito                  # optional: loudness and sharpness
-pip install sottek-hearing-model     # optional: tonality (AGPL-3.0-only, Python 3.11 or later)
+pip install -e ".[mosqito]"                 # optional: loudness and sharpness (MoSQITo, Apache-2.0)
+pip install -e ".[sottek-hearing-model]"    # optional: tonality (AGPL-3.0-only, Python 3.11 or later)
 python examples/10_worked_analysis.py
 ```
 
-The analysis chain (steps 1 to 4, ROTA only) runs in about 16 s. `tests/test_worked_example.py` runs it on the first 3.6 s of the same signal, which holds the whole passage of the resonance, and checks the order, the range, the excess, the reduction and the extraction against the truth; its toolbox tests are skipped when a package is missing.
+The extras are named like the toolboxes and install them next to ROTA (installing the packages themselves, `pip install mosqito` and `pip install sottek-hearing-model`, works as well); the script reaches them through `rota.bridges`.
+
+The analysis chain (steps 1 to 4, ROTA only) runs in about 20 s. `tests/test_worked_example.py` runs it on the first 3.6 s of the same signal, which holds the whole passage of the resonance, and checks the order, the range, the excess, the reduction and the extraction against the truth; its toolbox tests are skipped when a package is missing.

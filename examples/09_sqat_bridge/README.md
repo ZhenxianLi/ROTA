@@ -1,6 +1,6 @@
 # 09: SQAT bridge (MATLAB)
 
-This example links ROTA to [SQAT](https://github.com/ggrecow/SQAT), the open-source Sound Quality Analysis Toolbox for MATLAB, and shows how psychoacoustic metrics vary with rpm in two synthetic run-ups. ROTA writes the signals, SQAT computes the metrics over time, and ROTA bins them along the speed with `rota.slices.metric_vs_rpm`. SQAT is an optional, external dependency: it is never vendored in ROTA, and only its documented public functions are called (the SQAT README and the help header of each function), with every parameter given explicitly. In continuous integration it runs the same way as the black-box MATLAB reference (`validation/README.md`): on a GitHub-hosted runner, where MathWorks licenses MATLAB automatically for a public repository.
+This example links ROTA to [SQAT](https://github.com/ggrecow/SQAT), the open-source Sound Quality Analysis Toolbox for MATLAB, and shows how psychoacoustic metrics vary with rpm in two synthetic run-ups. ROTA writes the signals, SQAT computes the metrics over time, and ROTA bins them along the speed with `rota.slices.metric_vs_rpm`. SQAT is an optional, external dependency: it is never vendored in ROTA, and only its documented public functions are called (the SQAT README and the help header of each function), with every parameter given explicitly. In continuous integration it runs the same way as the black-box MATLAB reference (`validation/README.md`): on a GitHub-hosted runner, where MathWorks licenses MATLAB automatically for a public repository. On your own machine, with a licensed MATLAB, the same calls can also be made from Python with `rota.bridges.sqat` (see [From Python on your own machine](#from-python-on-your-own-machine-rotabridgessqat)).
 
 ## SQAT
 
@@ -55,6 +55,34 @@ python examples/09_sqat_bridge/import_results.py
 ```
 
 `run_sqat.m` finds the repository from its own location; set the environment variable `SQAT_DIR` to use a SQAT copy elsewhere. Matplotlib is needed for the figure only.
+
+## From Python on your own machine: `rota.bridges.sqat`
+
+Since ROTA 0.6.0 the same SQAT functions can be called from Python, without the MATLAB script, through `rota.bridges.sqat`, which uses the MATLAB Engine API for Python. It takes the signal in Pa at any sampling rate (`calibration` converts file units to Pa), resamples it to 48 kHz with `rota.tonal.to_calibrated_48k`, makes the calls of `run_sqat.m` (the table above, without the fallback for the sharpness) with every parameter given explicitly, and returns a `rota.bridges.TimeMetric`, whose `vs_rpm` method bins it along rpm. You need, on your own machine:
+
+* a licensed local MATLAB with the Signal Processing Toolbox (needed by `Tonality_ECMA418_2`); both are commercial products of The MathWorks, Inc. that you license yourself;
+* the MATLAB Engine API for Python in the version that matches your MATLAB release, `pip install matlabengine==<version>`: for example 25.1.x for R2025a, 25.2.x for R2025b, 26.1.x for R2026a, 26.2.x for R2026b (see the release history of `matlabengine` on PyPI). ROTA has no extra for it, because the version depends on your MATLAB;
+* a checkout of SQAT release v2.0, the release the wrappers are tested against, whose folder you put in the environment variable `ROTA_SQAT_PATH` (or pass as `sqat_path`). The checkout of the previous section will do:
+
+```
+git clone --branch v2.0 --depth 1 https://github.com/ggrecow/SQAT build/sqat_bridge/SQAT
+export ROTA_SQAT_PATH="$PWD/build/sqat_bridge/SQAT"
+```
+
+```python
+from rota.bridges import sqat
+
+with sqat.Session() as s:   # starts MATLAB, adds ROTA_SQAT_PATH to its path and runs startup_SQAT
+    loud = sqat.loudness(x, fs, session=s)                         # Loudness_ISO532_1, free field, sone
+    sharp = sqat.sharpness(None, None, loudness=loud, session=s)   # Sharpness_DIN45692_from_loudness, acum
+    rough = sqat.roughness(x, fs, session=s)                       # Roughness_Daniel1997, asper
+    ton = sqat.tonality(x, fs, session=s)                          # Tonality_ECMA418_2, free-frontal, tu_HMS
+n5 = loud.vs_rpm(rpm, t_rpm, bin_width=250.0)                      # N5 per 250 rpm bin, first 0.6 s skipped
+```
+
+`x` is the sound pressure in Pa (mono) at the sampling rate `fs`, `rpm` the speed at the times `t_rpm` in s. The session quits MATLAB when the `with` block ends; `sqat.start()` returns the same kind of `Session`, and `sqat.Session(engine=matlab.engine.connect_matlab())` uses a MATLAB that is already running and leaves it running. Without `session=`, the functions start a default session on first use, reuse it, and close it at exit (`sqat.close_default()` closes it earlier). Each result records the call it made (`extra["call"]`) and the SQAT and MATLAB versions (`source`). `vs_rpm` skips the start-up that `import_results.py` skips (0.6 s, 1.5 s for roughness) but aggregates like examples 07 and 08: the 95th percentile of the loudness (N5), the median of the sharpness, the 90th percentile of the roughness (R10), and the mean of the tonality frames above 0.02 tu_HMS. With `aggregate="mean"` and `threshold=float("nan")` it takes the arithmetic mean per bin, as `import_results.py` does. `tests/test_bridges_sqat.py` compares the wrappers with the same SQAT calls made directly through the engine where `matlab.engine` and `ROTA_SQAT_PATH` are available; everywhere else a stub engine tests the marshalling.
+
+CI keeps the MATLAB script `run_sqat.m`. On a GitHub-hosted runner MathWorks licenses MATLAB only inside its own run actions (`matlab-actions/run-command` and the like): a MATLAB engine started from Python fails there with `License Error: Licensing shutdown`, and a licensed run-command session that shares its engine does not answer `connect_matlab()` while it is busy. The manual workflow `.github/workflows/sqat-engine.yml` probes both and records the outcome.
 
 ## References
 

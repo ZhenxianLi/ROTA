@@ -7,10 +7,11 @@ the whole passage of the resonance; the transients keep their times of the full 
 order, the speed range, the excess over the ECMA-418-1 criterion and the reduction that removes it,
 all against the truth computed from the stems of ``rota.synth``. Data come from ``rota.synth`` only.
 
-The toolbox parts (MoSQITo loudness and sharpness, Sottek-model tonality) run on a 1.6 s excerpt around
-the passage and are skipped when the package is missing.
+The toolbox parts (MoSQITo loudness and sharpness, Sottek-model tonality, through ``rota.bridges``) run
+on a 1.6 s excerpt around the passage and are skipped when the package is missing.
 """
 
+import importlib.abc
 import importlib.util
 import sys
 from pathlib import Path
@@ -20,6 +21,7 @@ import pytest
 from scipy.io import wavfile
 
 import rota
+from rota import bridges
 
 SCRIPT = Path(__file__).resolve().parents[1] / "examples" / "10_worked_analysis.py"
 DURATION = 3.6  # s of the scenario; the passage of the resonance is at 2.9 to 3.1 s
@@ -161,28 +163,56 @@ def test_modified_signal_differs_only_by_the_order(run):
 # ---- toolboxes (optional) ---------------------------------------------------------------------------------
 
 
-def test_missing_toolboxes_are_skipped_with_a_message(worked, run, monkeypatch):
-    monkeypatch.setattr(worked, "have_mosqito", lambda: False)
-    monkeypatch.setattr(worked, "have_sottek", lambda: False)
+class _ImportFails(importlib.abc.MetaPathFinder, importlib.abc.Loader):
+    """Finds the given packages, as if they were installed, and raises ImportError when one is imported."""
+
+    def __init__(self, names):
+        self.names = set(names)
+
+    def find_spec(self, name, path=None, target=None):
+        return importlib.util.spec_from_loader(name, self) if name in self.names else None
+
+    def create_module(self, spec):
+        return None  # the default module object
+
+    def exec_module(self, module):
+        raise ImportError(f"{module.__name__} is installed, but its import fails (simulated)")
+
+
+@pytest.mark.parametrize("import_fails", [False, True], ids=["not-installed", "import-fails"])
+def test_missing_toolboxes_are_skipped_with_a_message(worked, run, monkeypatch, import_fails):
+    names = ("mosqito", "sottek_hearing_model")
+    if import_fails:  # found by importlib.util.find_spec, as an installed package is, but its import raises
+        for name in names:
+            monkeypatch.delitem(sys.modules, name, raising=False)
+        monkeypatch.setattr(sys, "meta_path", [_ImportFails(names), *sys.meta_path])
+        assert all(importlib.util.find_spec(name) is not None for name in names)
+    else:  # not installed: the import raises ModuleNotFoundError
+        for name in names:
+            monkeypatch.setitem(sys.modules, name, None)
     lines = []
-    out = worked.toolbox_metrics(run, log=lines.append)
+    out = worked.toolbox_metrics(run, log=lines.append, parallel=False)  # the bridges raise ImportError here
     assert out == {"mosqito": {}, "sottek": {}}
     text = "\n".join(lines)
-    assert "MoSQITo is not installed" in text and "sottek-hearing-model is not installed" in text
+    assert "MoSQITo is not installed or cannot be imported" in text
+    assert "sottek-hearing-model is not installed or cannot be imported" in text
+    assert "pip install mosqito" in text and "pip install sottek-hearing-model" in text  # the bridges' messages
     S = worked.summary(run, out)  # the summary and the conclusion still work, with ROTA's numbers only
     assert set(S["required"]) == {"L_A"}
     printed = []
     worked.print_conclusion(run, S, log=printed.append)
     assert any("problem order" in line for line in printed)
+    assert any("cannot be imported" in line for line in printed)
 
 
 @pytest.fixture(scope="module")
 def excerpt(run):
-    """The three signals of the run, cut to EXCERPT, at 48 kHz, with the speed and time axes of the cut."""
+    """The three signals of the run cut to EXCERPT (Pa at the rate of the scenario), with the speed and
+    time axes of the cut; the bridges resample the signals to 48 kHz."""
     sc, rpm = run["sc"], run["rpm"]
     i0, i1 = int(EXCERPT[0] * sc.fs), int(EXCERPT[1] * sc.fs)
-    x48 = {k: rota.tonal.to_calibrated_48k(v[i0:i1], sc.fs) for k, v in run["variants"].items()}
-    return x48, sc.t[i0:i1] - sc.t[i0], rpm[i0:i1]
+    x = {k: v[i0:i1] for k, v in run["variants"].items()}
+    return x, sc.t[i0:i1] - sc.t[i0], rpm[i0:i1]
 
 
 def _peak_bin(res, rpm_peak):
@@ -192,8 +222,8 @@ def _peak_bin(res, rpm_peak):
 def test_mosqito_loudness_and_sharpness_fall_at_the_passage(worked, run, excerpt):
     pytest.importorskip("matplotlib")  # mosqito imports it without declaring it
     pytest.importorskip("mosqito")
-    x48, t, rpm = excerpt
-    b = {k: worked.bin_mosqito(worked.mosqito_metrics(v), t, rpm) for k, v in x48.items() if k != "round"}
+    x, t, rpm = excerpt
+    b = {k: worked.bin_mosqito(worked.mosqito_metrics(v), t, rpm) for k, v in x.items() if k != "round"}
     j = _peak_bin(b["original"]["loudness"], run["tr"]["rpm_res"])
     n0, n1 = b["original"]["loudness"].value[j], b["required"]["loudness"].value[j]
     assert np.isfinite(n0) and np.isfinite(n1)
@@ -206,12 +236,11 @@ def test_mosqito_loudness_and_sharpness_fall_at_the_passage(worked, run, excerpt
 def test_sottek_tonality_falls_at_the_passage(worked, run, excerpt):
     pytest.importorskip("matplotlib")
     pytest.importorskip("sottek_hearing_model")
-    x48, t, rpm = excerpt
+    x, t, rpm = excerpt
     b = {}
     for k in ("original", "required"):
-        m = worked.sottek_metrics(x48[k])
-        m["order"] = run["problem"]
-        b[k] = worked.bin_sottek(m, t, rpm, run["problem"])
+        ton = bridges.sottek_hearing_model.tonality(x[k], worked.FS)
+        b[k] = worked.bin_sottek(ton, t, rpm, run["problem"])
     j = _peak_bin(b["original"]["tonality"], run["tr"]["rpm_res"])
     t0, t1 = b["original"]["tonality"].value[j], b["required"]["tonality"].value[j]
     assert np.isfinite(t0) and np.isfinite(t1)

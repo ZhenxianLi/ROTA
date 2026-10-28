@@ -39,8 +39,9 @@ def run():
     ton = shm.shm_tonality_ecma(p, FS_MODEL, **kw)
     lou = shm.shm_loudness_ecma_from_comp(ton["spec_tonal_loudness"], ton["spec_noise_loudness"])
     rou = shm.shm_roughness_ecma(p, FS_MODEL, **kw)
-    # Speed axis held for 10 ms beyond the last sample: the model's last frame lies at the
-    # duration, one sample after it, and metric_vs_rpm does not extrapolate the speed.
+    # Speed axis held for 10 ms beyond the last sample: the model's last frame lies at the signal
+    # length rounded up to a multiple of 256 samples at 48 kHz (here 1.4 ms after the last sample),
+    # and metric_vs_rpm does not extrapolate the speed.
     t_rpm, rpm_h = np.append(sig.t, sig.t[-1] + 0.01), np.append(sig.rpm, sig.rpm[-1])
     t_m = np.asarray(ton["time_out"], float)
     return {"sig": sig, "p": p, "ton": ton, "lou": lou, "rou": rou, "t_m": t_m, "t_rpm": t_rpm, "rpm": rpm_h,
