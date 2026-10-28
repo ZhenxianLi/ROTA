@@ -15,6 +15,8 @@ metrics  Validation metrics.
 bridges  Optional thin wrappers for MoSQITo, the Sottek hearing model (ECMA-418-2) and
          SQAT (MATLAB, through the MATLAB Engine API for Python); the toolboxes are
          not required and are imported lazily.
+plot     Figures of the results above, one call per result (optional Matplotlib,
+         imported lazily).
 
 Conventions
 -----------
@@ -25,11 +27,11 @@ independently and linearly. Amplitude conventions (peak or RMS) are stated
 in each docstring and selected explicitly where a choice exists.
 """
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 
-from . import angle, bridges, extract, maps, metrics, resynth, slices, speed, synth, tonal  # noqa: F401
+from . import angle, bridges, extract, maps, metrics, plot, resynth, slices, speed, synth, tonal  # noqa: F401
 
 __all__ = [
-    "angle", "bridges", "extract", "maps", "metrics", "resynth", "slices", "speed", "synth", "tonal",
+    "angle", "bridges", "extract", "maps", "metrics", "plot", "resynth", "slices", "speed", "synth", "tonal",
     "__version__",
 ]

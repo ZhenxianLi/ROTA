@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-28
+
+Figures of ROTA results.
+
+### Added
+
+- `rota.plot`: standard figures of ROTA results on Matplotlib (optional extra `plot`; `import rota` does not import Matplotlib, and a call without it raises `ImportError` with the install command). Fifteen functions, each named like the function whose result it draws: `rpm_frequency_map`, `rpm_order_map`, `compare_maps`, `order_slice`, `frequency_slice`, `order_spectrum`, `overall_level`, `metric_vs_rpm`, `time_metric`, `rpm_vs_time`, `rpm_from_ridge`, `order_components`, `order_table`, `order_prominence`, `band_levels_vs_rpm`. Each takes `ax=` and returns the Axes it drew on (except `compare_maps`, which builds its own grid and returns `(fig, axes)`), never shows the figure and never changes `rcParams` or the style. Labels carry the unit, the dB reference and the amplitude convention, from an explicit `ref`/`unit` (the constant `SOUND_PRESSURE` for sound pressure in Pa) or the reference a result stores. Line plots take one result, a list or a dict and plot differences with `relative_to=`; `compare_maps` shows maps on one colour scale, with their dB difference. `orders=` selects orders, `mark_orders=` draws order lines. Maps are drawn against rpm when the speed is essentially monotonic (reversals up to `monotonic_tol` of the range, 2 % by default) and against time otherwise; `channel=` selects the channel of multichannel results.
+- Gallery `examples/11_plot_gallery.py` and page `docs/plotting.md`, one figure per function with the call that made it.
+
+### Changed
+
+- Examples 01 and 02 draw their figures with `rota.plot`; their printed numbers are unchanged.
+- Continuous integration installs the `plot` extra in the main test matrix; the oldest-dependency job runs without Matplotlib.
+
 ## [0.6.0] - 2026-10-28
 
 Optional bridges to psychoacoustic toolboxes.
@@ -117,7 +131,8 @@ Core chain for the analysis of a run-up with a tachometer. Development milestone
 - Package metadata, `README.md`, `CONTRIBUTING.md`, `CITATION.cff`, issue and pull request templates, and a GitHub Actions workflow that runs the tests on Python 3.10 to 3.13.
 - Licence: GPL-3.0-or-later.
 
-[Unreleased]: https://github.com/ZhenxianLi/rota-order/compare/v0.6.0...main
+[Unreleased]: https://github.com/ZhenxianLi/rota-order/compare/v0.7.0...main
+[0.7.0]: https://github.com/ZhenxianLi/rota-order/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/ZhenxianLi/rota-order/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/ZhenxianLi/rota-order/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/ZhenxianLi/rota-order/compare/v0.3.0...v0.4.0

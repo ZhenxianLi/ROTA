@@ -14,7 +14,7 @@ The design document is [ROADMAP.md](https://github.com/ZhenxianLi/rota-order/blo
 
 ## Status
 
-Pre-alpha. The current release is 0.6.0; functions and signatures may still change before 1.0.
+Pre-alpha. The current release is 0.7.0; functions and signatures may still change before 1.0.
 
 | Module | Contents | Since |
 |---|---|---|
@@ -28,7 +28,7 @@ Pre-alpha. The current release is 0.6.0; functions and signatures may still chan
 | `rota.metrics` | Speed-track error, waveform similarity (energy-weighted), residual order energy, window and pumping checks, envelope statistics | 0.1–0.3 |
 | `rota.tonal` | Bridge to open-source psychoacoustic tools: A/C weighting (IEC 61672-1), calibrated levels and resampling to 48 kHz, octave and 1/3-octave bands (IEC 61260-1) and band levels along rpm, tone-to-noise ratio and prominence ratio of orders (ECMA-418-1, 3rd edition) | 0.5 |
 | `rota.bridges` | Optional thin wrappers for MoSQITo, the Sottek hearing model (ECMA-418-2) and SQAT (MATLAB, through the MATLAB Engine API for Python): one-line time-varying loudness, sharpness, roughness and tonality on ROTA's conventions; the result's `vs_rpm` method bins it along rpm (`bridges.mosqito.loudness(x, fs).vs_rpm(rpm, t_rpm)`) and keeps its name, unit and source; the toolboxes are not installed with ROTA and are imported lazily | 0.6 |
-| `rota.plot` | Plotting helpers, kept separate from computation | v0.7 (planned) |
+| `rota.plot` | Standard figures of ROTA results on Matplotlib (optional extra `plot`), one call per result and named like the function that computed it: Campbell diagram and order map with order lines, maps compared on one colour scale with their difference, order and frequency slices, order spectrum, overall level and metrics along rpm, speed tracks with their doubtful frames, extracted orders, order tables, tone prominence against the ECMA-418-1 criterion, band levels; labels carry the unit, the dB reference and the amplitude convention; before/after comparisons with `relative_to` | 0.7 |
 
 Planned for v1.0: full validation report, complete documentation, Zenodo DOI.
 
@@ -87,7 +87,7 @@ The amplitude convention of every function is stated in its docstring.
 
 ## Examples
 
-Scripts in [examples/](https://github.com/ZhenxianLi/rota-order/tree/main/examples) cover order maps and slices, tachometer and tacholess speed, order extraction and removal, order-table resynthesis, and two complete synthetic recordings that you can listen to, an engine run-up and an electric drive (01 to 06); three bridges to open-source psychoacoustic toolboxes (07 to 09; 07, 08 and 10 call them through `rota.bridges`); and a worked analysis (10). Each builds its signal with `rota.synth` and prints its results against the known truth.
+Scripts in [examples/](https://github.com/ZhenxianLi/rota-order/tree/main/examples) cover order maps and slices, tachometer and tacholess speed, order extraction and removal, order-table resynthesis, and two complete synthetic recordings that you can listen to, an engine run-up and an electric drive (01 to 06); three bridges to open-source psychoacoustic toolboxes (07 to 09; 07, 08 and 10 call them through `rota.bridges`); a worked analysis (10); and a gallery of the figures of `rota.plot` (11; examples 01 and 02 also draw with it). Each builds its signal with `rota.synth` and prints its results against the known truth.
 
 ![Campbell diagram, order map, engine speed and firing-order level of a synthetic engine run-up](https://raw.githubusercontent.com/ZhenxianLi/rota-order/main/docs/images/realistic_runup.png)
 
@@ -98,6 +98,23 @@ Scripts in [examples/](https://github.com/ZhenxianLi/rota-order/tree/main/exampl
 [docs/worked_example.md](https://github.com/ZhenxianLi/rota-order/blob/main/docs/worked_example.md) follows one analysis from a run-up recording with a tonal complaint to a conclusion an engineer can act on: speed, overview (A-weighted level, 1/3-octave bands, order map), diagnosis of the prominent order with the ECMA-418-1 tone-to-noise and prominence ratios, extraction and a what-if reduction of that order, the effect on loudness, sharpness and ECMA-418-2 tonality computed with optional open-source toolboxes, and the result checked against the truth built into the synthetic signal, with audio before and after.
 
 ![Order slices, tone-to-noise ratio and prominence ratio of the problem order against the ECMA-418-1 criterion](https://raw.githubusercontent.com/ZhenxianLi/rota-order/main/docs/images/10_worked_diagnosis.png)
+
+### Plotting
+
+`rota.plot` draws the standard figure of a result in one call, named like the function that computed it, and returns the Matplotlib Axes for anything else you want to change. Labels carry the unit, the dB reference and the amplitude convention; the reference is explicit (`**rp.SOUND_PRESSURE` for sound pressure in Pa):
+
+```python
+import rota.plot as rp
+
+m = rota.maps.rpm_order_map(x, fs, rpm, order_resolution=0.125, amplitude="rms")
+ax = rp.rpm_order_map(m, **rp.SOUND_PRESSURE, mark_orders=(2, 4, 6))   # colour bar: dB re 20 µPa, RMS
+ax.figure.savefig("order_map.png", dpi=150)                              # the rest is plain Matplotlib
+rp.order_slice({"before": s, "after": s_new}, relative_to="before")     # level change in dB
+```
+
+Here `s` and `s_new` are slices of the same order before and after a change (for example `modify_orders` and `resynthesize`). Matplotlib is an optional extra (`pip install "rota-order[plot]"`); `import rota` does not import it. [docs/plotting.md](https://github.com/ZhenxianLi/rota-order/blob/main/docs/plotting.md) shows one figure per function with the call that drew it ([examples/11_plot_gallery.py](https://github.com/ZhenxianLi/rota-order/blob/main/examples/11_plot_gallery.py)).
+
+![Order maps before and after lowering one order by 10 dB, on one colour scale, and their difference](https://raw.githubusercontent.com/ZhenxianLi/rota-order/main/docs/images/plot_compare_maps.png)
 
 ### Psychoacoustic toolboxes (optional)
 

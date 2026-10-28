@@ -136,7 +136,20 @@ ROTA does not implement metrics that already have open-source implementations, s
 
 ### 2.10 Plotting (`rota.plot`)
 
-Plotting helpers, separate from computation: Campbell diagram, order map, slices, rpm track and confidence, before/after comparison of resynthesis. v0.7 (moved from v0.5, then v0.6).
+Figures of ROTA results, separate from computation, one call per result, named like the function that produced the result. Matplotlib is optional and imported inside the functions; every function takes `ax=` and returns the Axes it drew on (except `compare_maps`, which returns its own grid), never shows the figure and never changes the style. Labels carry the unit, the dB reference (explicit `ref`, `unit`; `SOUND_PRESSURE` for sound pressure in Pa) and the amplitude convention. Line plots take one result, a list or a dict and plot differences with `relative_to=`. v0.7.
+
+| Function | Result | Figure |
+|---|---|---|
+| `rpm_frequency_map`, `rpm_order_map` | `Map`, `BinnedMap` | Campbell diagram and order map against rpm (essentially monotonic speed) or time, colour range below the maximum, order lines (`mark_orders`) |
+| `compare_maps` | several maps | Side by side on one colour scale, optional dB difference |
+| `order_slice`, `frequency_slice` | `OrderSlice`, `FrequencySlice` | Level against rpm or time, with the truth or relative to another result |
+| `order_spectrum` | `Spectrum` | Averaged spectrum against order or frequency |
+| `overall_level` | `OverallLevel` | Weighted level per rpm bin or frame |
+| `metric_vs_rpm`, `time_metric` | `MetricVsRpm`, `TimeMetric` | A metric along rpm with its spread, or against time with the start-up exclusion |
+| `rpm_vs_time`, `rpm_from_ridge` | arrays, `RidgeResult` | Speed against time; tacholess track with frames flagged `at_bound` and of low confidence marked |
+| `order_components`, `order_table` | `OrderComponents`, `OrderTable` | Extracted order envelopes and order-table rows against rpm |
+| `order_prominence` | `OrderProminence` | TNR or PR against rpm with the ECMA-418-1 criterion, prominent ranges shaded |
+| `band_levels_vs_rpm` | `BandRpmLevels` | Band levels against rpm as an image |
 
 ---
 
@@ -160,8 +173,8 @@ All of `rota.resynth`, `angular_to_time`, `stationarize`, `virtual_rpm`, `synth_
 **v0.6 Optional toolbox bridges** (released 2026-10-28):
 `rota.bridges`: thin wrappers that call the documented public functions of MoSQITo (ISO 532-1 loudness, DIN 45692 sharpness, Daniel and Weber roughness), the Sottek hearing model (ECMA-418-2:2025 tonality, loudness, roughness) and SQAT via the MATLAB Engine on ROTA's conventions (Pa, calibration factor, 48 kHz). A bridge module and its extra are named exactly like the toolbox (`mosqito`, `sottek_hearing_model` / `sottek-hearing-model`, `sqat`). Each function returns a `TimeMetric`, whose method `vs_rpm` bins it along rpm with `metric_vs_rpm` (`bridges.mosqito.loudness(x, fs).vs_rpm(rpm, t_rpm)`) and hands the metric's name, unit and source on to the binned `MetricVsRpm`. The toolboxes are imported lazily inside the functions, are never vendored and never required (extras `mosqito` and `sottek-hearing-model`; none for SQAT); without them the wrappers raise `ImportError` with the install command.
 
-**v0.7 Plotting**:
-`rota.plot` (moved from v0.6).
+**v0.7 Plotting** (released 2026-10-28):
+`rota.plot` (moved from v0.5, then v0.6): the functions of section 2.10, a gallery (`docs/plotting.md`, example 11), examples 01 and 02 rewritten on it.
 
 **v1.0 Official release**:
 Full validation report, English documentation, PyPI release, Zenodo DOI. Submit a validation paper (JOSS or an acoustics conference).

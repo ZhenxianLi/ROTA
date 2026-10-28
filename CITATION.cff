@@ -5,7 +5,7 @@ type: software
 authors:
   - family-names: Li
     given-names: Zhenxian
-version: 0.6.0
+version: 0.7.0
 date-released: 2026-10-28
 repository-code: "https://github.com/ZhenxianLi/rota-order"
 license: GPL-3.0-or-later
