@@ -107,7 +107,7 @@ _WEIGHTS = ("DIN45692", "bismarck", "aures")
 _SKIP_LOUDNESS = 0.6
 _SKIP_ROUGHNESS = 1.5
 _SKIP_TONALITY = 0.6
-_TONALITY_THRESHOLD = 0.02  # tu_HMS, ECMA-418-2 rule for the single value (as rota.bridges.shm)
+_TONALITY_THRESHOLD = 0.02  # tu_HMS, ECMA-418-2 rule for the single value (as in sottek_hearing_model)
 _ECMA_MIN_SKIP = 0.304  # s, ECMA-418-2:2025 section 6.2.9 as stated in the SQAT help header
 
 _INSTALL_HINT = (
@@ -234,7 +234,13 @@ class Session:
         """Call the MATLAB function ``fn`` with ``args``; MATLAB's console output is captured.
 
         Raises RuntimeError (chained to the engine's exception) with the function
-        name and MATLAB's output when the call fails.
+        name and MATLAB's output when the call fails. Arguments and results are
+        passed as they are: no unit conversion and no amplitude convention apply.
+
+        References
+        ----------
+        MathWorks, MATLAB Engine API for Python ("Call MATLAB Functions from
+        Python"); https://www.mathworks.com/help/matlab/matlab-engine-for-python.html
         """
         out = io.StringIO()
         try:
@@ -246,7 +252,16 @@ class Session:
             ) from err
 
     def to_matlab(self, a):
-        """A NumPy array as ``matlab.double``: shape (n,) becomes an (n, 1) column."""
+        """A NumPy array as ``matlab.double``: shape (n,) becomes an (n, 1) column.
+
+        The values are copied unchanged (same unit; no amplitude convention
+        applies to the conversion).
+
+        References
+        ----------
+        MathWorks, MATLAB Engine API for Python ("Pass Data to MATLAB from
+        Python"); https://www.mathworks.com/help/matlab/matlab-engine-for-python.html
+        """
         a = np.asarray(a, dtype=float)
         if a.ndim == 1:
             a = a.reshape(-1, 1)
@@ -262,7 +277,13 @@ class Session:
         return m
 
     def close(self):
-        """Quit the engine if this session started it; otherwise leave it running."""
+        """Quit the engine if this session started it; otherwise leave it running.
+
+        References
+        ----------
+        MathWorks, MATLAB Engine API for Python ("Start and Stop MATLAB Engine for
+        Python"); https://www.mathworks.com/help/matlab/matlab-engine-for-python.html
+        """
         if self._owns and self.engine is not None:
             with contextlib.suppress(Exception):  # engine already gone
                 self.engine.quit()
@@ -742,7 +763,7 @@ def tonality(x, fs, *, calibration=1.0, field_type="free-frontal", time_skip=0.3
         ``values`` (``tonalityTDep``) in tu_HMS on ``t`` (``timeOut``);
         ``skip_start`` 0.6 s (examples/09); ``threshold`` 0.02 tu_HMS and mean
         aggregation (the rule of ECMA-418-2 for the single value, as in
-        :mod:`rota.bridges.shm`); ``single_value`` SQAT's ``tonalityAvg``.
+        :mod:`rota.bridges.sottek_hearing_model`); ``single_value`` SQAT's ``tonalityAvg``.
         ``extra``: ``"frequency"`` (Hz, ``tonalityTDepFreqs``, on ``t``),
         ``"specific_tonality"`` (``specTonality``, [time, bands]),
         ``"band_centre_freqs"`` (Hz), ``"statistics"``, ``"field_type"``,
@@ -764,7 +785,8 @@ def tonality(x, fs, *, calibration=1.0, field_type="free-frontal", time_skip=0.3
     Model).
     Lotinga, M. J. B., Torjussen, M., & Felix Greco, G. (2025). Verified
     implementations of the Sottek psychoacoustic Hearing Model standardised sound
-    quality metrics. Forum Acusticum 2025. doi:10.61782/fa.2025.0951.
+    quality metrics (ECMA-418-2 loudness, tonality and roughness). Forum Acusticum /
+    Euronoise 2025, Malaga. https://doi.org/10.61782/fa.2025.0951
     Felix Greco, G., Merino-Martínez, R., Osses, A., & Lotinga, M. J. B. (2026).
     SQAT: a sound quality analysis toolbox for MATLAB (release v2.0). Zenodo.
     https://doi.org/10.5281/zenodo.7934709 (GPL-3.0).

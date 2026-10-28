@@ -443,6 +443,16 @@ class MetricVsRpm:
         Start-up time skipped in s.
     min_count : int
         Minimum samples per bin.
+    name : str, default ""
+        Name of the binned quantity, e.g. ``"loudness"``. Empty when the result
+        is produced by :func:`metric_vs_rpm` directly; filled by
+        :meth:`rota.bridges.TimeMetric.vs_rpm` from the metric.
+    unit : str, default ""
+        Unit of the binned values (``value``, ``std``, ``iqr``, ``spread``),
+        e.g. ``"sone"``. Empty as above; filled from the metric.
+    source : str, default ""
+        Toolbox with its version, standard and edition that computed the
+        metric. Empty as above; filled from the metric.
     """
 
     centres: np.ndarray
@@ -462,6 +472,9 @@ class MetricVsRpm:
     q: object
     skip_start: float
     min_count: int
+    name: str = ""
+    unit: str = ""
+    source: str = ""
 
 
 def _parse_aggregate(aggregate):

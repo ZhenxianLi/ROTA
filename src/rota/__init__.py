@@ -12,8 +12,9 @@ resynth  Order tables, order and broadband resynthesis, provenance.
 tonal    Weighting, calibrated levels, octave bands, order prominence.
 synth    Synthetic test signals with analytic ground truth.
 metrics  Validation metrics.
-bridges  Optional thin wrappers for MoSQITo and the Sottek hearing model (toolboxes
-         not required; imported lazily).
+bridges  Optional thin wrappers for MoSQITo, the Sottek hearing model (ECMA-418-2) and
+         SQAT (MATLAB, through the MATLAB Engine API for Python); the toolboxes are
+         not required and are imported lazily.
 
 Conventions
 -----------

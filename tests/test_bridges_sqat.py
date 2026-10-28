@@ -11,7 +11,7 @@ Two groups of tests:
 * With MATLAB: run only when ``matlab.engine`` is importable and ``ROTA_SQAT_PATH`` points
   to a SQAT checkout (release v2.0). The wrappers must return exactly what the same SQAT
   call made directly through the engine returns on the same signal, and
-  ``rota.bridges.along_rpm`` must bin the results.
+  ``rota.bridges.TimeMetric.vs_rpm`` must bin the results.
 
 Data come from ``rota.synth`` only. No MATLAB output is stored.
 """
@@ -26,7 +26,7 @@ import pytest
 
 import rota
 from rota.bridges import _common, sqat
-from rota.bridges._common import TimeMetric, along_rpm
+from rota.bridges._common import TimeMetric
 
 FS = 16000.0  # Hz, rate of the synthetic signal (resampled to 48 kHz by the bridge)
 DURATION = 0.5  # s, stub tests
@@ -387,14 +387,22 @@ def test_matrix_fallback_to_nested_lists(stub, monkeypatch):
     np.testing.assert_array_equal(m.data[:, 0], np.arange(4.0))
 
 
-def test_along_rpm_on_stub_result(stub):
+def test_vs_rpm_on_stub_result(stub):
     s, _ = stub
     t_rpm = np.linspace(0.0, 0.2, 201)
     rpm = np.linspace(2000.0, 4000.0, 201)
     to = sqat.tonality(_signal().x, FS, session=s)
     to.skip_start = 0.0
-    b = along_rpm(to, rpm, t_rpm, bin_width=500.0, min_count=1)
+    b = to.vs_rpm(rpm, t_rpm, bin_width=500.0, min_count=1)
     assert np.any(np.isfinite(b.value))
+    # the binned result carries the name, unit and source of the SQAT metric
+    assert (b.name, b.unit, b.source) == ("tonality", "tu_HMS", to.source)
+    assert b.source.startswith("SQAT ") and "ECMA-418-2:2025 (4th edition)" in b.source
+    # the recommended threshold of the tonality (0.02 tu_HMS) is applied: stub values are 0.01 * k
+    assert b.count.sum() == np.count_nonzero((to.t <= t_rpm[-1]) & (to.values > 0.02))
+    loud = sqat.loudness(_signal().x, FS, session=s)
+    r = loud.vs_rpm(np.linspace(1000.0, 2000.0, 201), t_rpm, skip_start=0.0, bin_width=250.0, min_count=1)
+    assert (r.name, r.unit, r.source) == ("loudness", "sone", loud.source)
 
 
 def test_docstrings_cite_and_state_licence():
@@ -509,7 +517,9 @@ def test_real_values_plausible(real_run):
 
 @real
 @pytest.mark.parametrize("metric", list(KEYS))
-def test_real_along_rpm(real_run, metric):
+def test_real_vs_rpm(real_run, metric):
     sig = real_run["sig"]
-    b = along_rpm(real_run["wrapped"][metric], sig.rpm, sig.t, bin_width=250.0, min_count=1)
+    m = real_run["wrapped"][metric]
+    b = m.vs_rpm(sig.rpm, sig.t, bin_width=250.0, min_count=1)
     assert np.count_nonzero(np.isfinite(b.value)) >= 2
+    assert (b.name, b.unit, b.source) == (m.name, m.unit, m.source)

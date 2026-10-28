@@ -18,8 +18,8 @@ Wrapped (MoSQITo 1.2.1, public functions only):
   (200 ms windows); the time axis starts at 0.1 s.
 
 Not wrapped: the ECMA-418-2 functions of MoSQITo (2nd edition only; see
-:mod:`rota.bridges.shm` for the 4th edition) and ``tnr_ecma_st`` (ROTA has its own
-ECMA-418-1:2024 tone-to-noise ratio in :mod:`rota.tonal`).
+:mod:`rota.bridges.sottek_hearing_model` for the 4th edition) and ``tnr_ecma_st`` (ROTA has
+its own ECMA-418-1:2024 tone-to-noise ratio in :mod:`rota.tonal`).
 
 Input convention for every function: ``x`` is the instantaneous sound pressure in Pa
 (``calibration`` multiplies ``x`` into Pa), mono, sampled at ``fs``; it is resampled to

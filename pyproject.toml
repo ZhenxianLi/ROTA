@@ -42,13 +42,14 @@ Changelog = "https://github.com/ZhenxianLi/rota-order/blob/main/CHANGELOG.md"
 test = ["pytest>=7"]
 plot = ["matplotlib>=3.5"]
 mosqito = ["mosqito>=1.2", "matplotlib"]
-shm = ["sottek-hearing-model>=0.1.14; python_version>='3.11'"]
+sottek-hearing-model = ["sottek-hearing-model>=0.1.14; python_version>='3.11'"]
 
 [tool.setuptools.dynamic]
 version = { attr = "rota.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
+namespaces = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

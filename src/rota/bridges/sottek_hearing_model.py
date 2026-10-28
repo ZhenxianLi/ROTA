@@ -7,6 +7,12 @@ dependency of ROTA; install it yourself if you accept its licence:
 never at import of this module. Importing it changes Matplotlib's global ``rcParams``;
 they are restored right after the import, so these wrappers have no such side effect.
 
+The module is named exactly like the package it wraps (as ``mosqito`` and ``sqat`` are).
+Inside it the package is imported by its absolute name,
+``importlib.import_module("sottek_hearing_model")``, so the name of this module
+(``rota.bridges.sottek_hearing_model``) does not shadow it. A short alias is up to you:
+``from rota.bridges import sottek_hearing_model as shm``.
+
 Licence: sottek-hearing-model is distributed under the GNU Affero General Public License
 v3.0 only (AGPL-3.0-only) by its author. ROTA (GPL-3.0-or-later) does not include, copy,
 modify or redistribute any of its code; this module calls its public functions at run
@@ -39,6 +45,7 @@ Lotinga, M. J. B., Torjussen, M., & Felix Greco, G. (2025). Verified
 implementations of the Sottek psychoacoustic Hearing Model standardised sound
 quality metrics (ECMA-418-2 loudness, tonality and roughness). Proceedings of
 Forum Acusticum / Euronoise 2025, Malaga, Spain.
+https://doi.org/10.61782/fa.2025.0951
 sottek-hearing-model (version 0.1.14) [software], M. J. B. Lotinga,
 https://github.com/mlotinga/sottek-hearing-model (AGPL-3.0-only).
 LISQM catalogue: https://zhenxianli.github.io/LISQM/
@@ -61,7 +68,11 @@ _TONALITY_THRESHOLD = 0.02  # tu_HMS
 
 
 def _model():
-    """Import ``sottek_hearing_model`` lazily and undo its change of ``matplotlib.rcParams``."""
+    """Import the package ``sottek_hearing_model`` lazily; undo its change of ``matplotlib.rcParams``.
+
+    The import is absolute (``importlib.import_module``), so this module's own name does not
+    shadow the package: what is returned is the external package, never this module.
+    """
     try:
         mpl = importlib.import_module("matplotlib")
     except ImportError:
@@ -71,8 +82,8 @@ def _model():
         return importlib.import_module("sottek_hearing_model")
     except ImportError as err:
         raise ImportError(
-            "rota.bridges.shm needs the optional package sottek-hearing-model (ECMA-418-2 "
-            "Sottek hearing model, AGPL-3.0-only, Python >= 3.11): pip install "
+            "rota.bridges.sottek_hearing_model needs the optional package sottek-hearing-model "
+            "(ECMA-418-2 Sottek hearing model, AGPL-3.0-only, Python >= 3.11): pip install "
             "sottek-hearing-model. ROTA itself does not depend on it. "
             f"Original error: {err}"
         ) from err
@@ -126,9 +137,12 @@ def tonality(x, fs, *, calibration=1.0, soundfield="free_frontal", wait_bar=Fals
     Returns
     -------
     TimeMetric
-        ``values`` in tu_HMS on ``t`` (the model's ``time_out``, in s; the last
-        frame lies one sample past the end of the signal, which
-        :func:`rota.bridges.along_rpm` handles); ``skip_start`` 0.30 s;
+        ``values`` in tu_HMS on ``t`` (the model's ``time_out``, in s: frames 256
+        samples (5.33 ms) apart, the last one at the length of the signal rounded
+        up to a multiple of 256 samples, so one sample after the last sample of
+        the signal when its length at 48 kHz is a multiple of 256 and up to one
+        frame step after it otherwise; :meth:`rota.bridges.TimeMetric.vs_rpm`
+        handles it by holding the last speed); ``skip_start`` 0.30 s;
         ``threshold`` 0.02 tu_HMS and mean aggregation (the rule of ECMA-418-2
         for the single value); ``single_value`` the package's ``tonality_avg``.
         ``extra``: ``"spec_tonality"`` (shape (n_t, n_bands)),
@@ -151,14 +165,15 @@ def tonality(x, fs, *, calibration=1.0, soundfield="free_frontal", wait_bar=Fals
     implementations of the Sottek psychoacoustic Hearing Model standardised sound
     quality metrics (ECMA-418-2 loudness, tonality and roughness). Proceedings of
     Forum Acusticum / Euronoise 2025, Malaga, Spain.
+    https://doi.org/10.61782/fa.2025.0951
     sottek-hearing-model (version 0.1.14) [software], M. J. B. Lotinga,
     https://github.com/mlotinga/sottek-hearing-model (AGPL-3.0-only).
     LISQM catalogue: https://zhenxianli.github.io/LISQM/
     """
     _check(soundfield)
     p = pressure_48k(x, fs, calibration)
-    shm = _model()
-    r = shm.shm_tonality_ecma(
+    model = _model()
+    r = model.shm_tonality_ecma(
         p, FS_MODEL, soundfield=soundfield, wait_bar=wait_bar, parallel_cores=parallel_cores
     )
     return TimeMetric(
@@ -220,9 +235,10 @@ def loudness(
     Returns
     -------
     TimeMetric
-        ``values`` in sone_HMS on ``t`` in s; ``skip_start`` 0.30 s; aggregation
-        mean (the arithmetic mean of the time-dependent loudness, as in example
-        08). ``single_value`` is the package's ``loudness_powavg``, a power
+        ``values`` in sone_HMS on ``t`` in s (the frames of the tonality run, the
+        last one included, see :func:`tonality`); ``skip_start`` 0.30 s;
+        aggregation mean (the arithmetic mean of the time-dependent loudness, as
+        in example 08). ``single_value`` is the package's ``loudness_powavg``, a power
         average, which differs from the arithmetic mean. ``extra``:
         ``"spec_loudness"`` (shape (n_t, n_bands)), ``"spec_tonal_loudness"``,
         ``"spec_noise_loudness"``, ``"band_centre_freqs"`` (Hz), ``"soundfield"``.
@@ -242,6 +258,7 @@ def loudness(
     implementations of the Sottek psychoacoustic Hearing Model standardised sound
     quality metrics (ECMA-418-2 loudness, tonality and roughness). Proceedings of
     Forum Acusticum / Euronoise 2025, Malaga, Spain.
+    https://doi.org/10.61782/fa.2025.0951
     sottek-hearing-model (version 0.1.14) [software], M. J. B. Lotinga,
     https://github.com/mlotinga/sottek-hearing-model (AGPL-3.0-only).
     LISQM catalogue: https://zhenxianli.github.io/LISQM/
@@ -262,9 +279,11 @@ def loudness(
             and "spec_tonal_loudness" in ton.extra
             and ton.source.startswith("sottek-hearing-model")
         ):
-            raise ValueError("tonality must be the TimeMetric returned by rota.bridges.shm.tonality")
-    shm = _model()
-    r = shm.shm_loudness_ecma_from_comp(
+            raise ValueError(
+                "tonality must be the TimeMetric returned by rota.bridges.sottek_hearing_model.tonality"
+            )
+    model = _model()
+    r = model.shm_loudness_ecma_from_comp(
         ton.extra["spec_tonal_loudness"], ton.extra["spec_noise_loudness"]
     )
     field = ton.extra["soundfield"]
@@ -331,14 +350,15 @@ def roughness(x, fs, *, calibration=1.0, soundfield="free_frontal", wait_bar=Fal
     implementations of the Sottek psychoacoustic Hearing Model standardised sound
     quality metrics (ECMA-418-2 loudness, tonality and roughness). Proceedings of
     Forum Acusticum / Euronoise 2025, Malaga, Spain.
+    https://doi.org/10.61782/fa.2025.0951
     sottek-hearing-model (version 0.1.14) [software], M. J. B. Lotinga,
     https://github.com/mlotinga/sottek-hearing-model (AGPL-3.0-only).
     LISQM catalogue: https://zhenxianli.github.io/LISQM/
     """
     _check(soundfield)
     p = pressure_48k(x, fs, calibration)
-    shm = _model()
-    r = shm.shm_roughness_ecma(
+    model = _model()
+    r = model.shm_roughness_ecma(
         p, FS_MODEL, soundfield=soundfield, wait_bar=wait_bar, parallel_cores=parallel_cores
     )
     return TimeMetric(
