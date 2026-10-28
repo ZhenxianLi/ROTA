@@ -1,29 +1,118 @@
 name: publish
 
-# Builds the distributions and uploads them to PyPI when a GitHub release is
-# published. Uses PyPI trusted publishing (OpenID Connect): no API token is
-# stored in the repository. The PyPI project must list this repository,
-# this workflow file (publish.yml) and the environment "pypi" as a trusted
-# publisher.
+# Publishes a release of ROTA: upload to PyPI, git tag and GitHub release.
+#
+# PyPI trusted publishing (OpenID Connect): no API token is stored in the repository.
+# The PyPI project lists this repository, this workflow file (publish.yml) and the
+# environment "pypi" as a trusted publisher.
+#
+# Two ways to start a release:
+# 1. Push to main a commit whose message starts with the line "Release X.Y.Z" (exactly;
+#    it must be the last commit of the push), where X.Y.Z equals rota.__version__,
+#    CHANGELOG.md has a section "## [X.Y.Z] - date" and the tag vX.Y.Z does not exist
+#    yet (do not push the tag by hand). The workflow runs the tests, builds the
+#    distributions and uploads them to PyPI, then tags that commit vX.Y.Z and creates
+#    the GitHub release, with the CHANGELOG section of X.Y.Z as release notes. A first
+#    line that looks like a release but does not match exactly gives a warning and
+#    publishes nothing.
+# 2. Publish a GitHub release by hand whose tag is v + rota.__version__. The workflow
+#    runs the tests, builds the distributions and uploads them to PyPI.
+#
+# Any other push to main stops at the first job. A release that this workflow creates
+# with its own GITHUB_TOKEN does not start the workflow again (GitHub starts no
+# workflow for events caused by GITHUB_TOKEN), and files already on PyPI are skipped
+# rather than uploaded twice, so a run can be re-run safely. There is no concurrency
+# group: it would let a later push cancel a release run waiting in the queue.
 
 on:
+  push:
+    branches: [main]
   release:
     types: [published]
 
+permissions: {}
+
 jobs:
-  build:
+  check:
+    if: github.event_name == 'release' || startsWith(github.event.head_commit.message, 'Release ')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      release: ${{ steps.decide.outputs.release }}
+      version: ${{ steps.decide.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - id: decide
+        name: Decide whether to release
+        env:
+          EVENT: ${{ github.event_name }}
+          MESSAGE: ${{ github.event.head_commit.message }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          version=$(python3 -c "import re; print(re.search(r'__version__ = \"([^\"]+)\"', open('src/rota/__init__.py').read()).group(1))")
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          if [ "$EVENT" = "release" ]; then
+            test "v${version}" = "${REF_NAME}" || { echo "tag ${REF_NAME} != v${version}"; exit 1; }
+          else
+            first_line=$(printf '%s\n' "$MESSAGE" | head -n 1)
+            if [ "$first_line" != "Release ${version}" ]; then
+              if printf '%s\n' "$first_line" | grep -Eq '^Release [0-9]+\.[0-9]+\.[0-9]+$'; then
+                echo "'${first_line}' does not match rota.__version__ = ${version}"
+                exit 1
+              fi
+              if printf '%s\n' "$first_line" | grep -Eiq '^release +v?[0-9]'; then
+                echo "::warning::First line '${first_line}' is not exactly 'Release ${version}'; nothing is published."
+              fi
+              echo "'${first_line}' is not a release commit; nothing to do."
+              echo "release=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            if git ls-remote --exit-code --tags origin "refs/tags/v${version}" > /dev/null; then
+              echo "Tag v${version} exists already; nothing to do."
+              echo "release=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          grep -q "^## \[${version}\] - " CHANGELOG.md || { echo "CHANGELOG.md has no section '## [${version}] - date'"; exit 1; }
+          echo "Releasing ${version}."
+          echo "release=true" >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: check
+    if: needs.check.outputs.release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Check that the release tag matches the package version
+      - name: Install
         run: |
-          version=$(python -c "import re; print(re.search(r'__version__ = \"([^\"]+)\"', open('src/rota/__init__.py').read()).group(1))")
-          test "v${version}" = "${GITHUB_REF_NAME}" || { echo "tag ${GITHUB_REF_NAME} != v${version}"; exit 1; }
+          python -m pip install --upgrade pip
+          pip install -e ".[test]"
+      - name: Test
+        run: python -m pytest -q
+
+  build:
+    needs: [check, test]
+    if: needs.check.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - name: Build
         run: |
           python -m pip install --upgrade pip build twine
@@ -35,7 +124,8 @@ jobs:
           path: dist/
 
   publish:
-    needs: build
+    needs: [check, build]
+    if: needs.check.outputs.release == 'true'
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -46,3 +136,27 @@ jobs:
           name: dist
           path: dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
+
+  github-release:
+    needs: [check, publish]
+    if: needs.check.outputs.release == 'true' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Release notes from CHANGELOG.md
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: python3 .github/scripts/release_notes.py "${VERSION}" > "${RUNNER_TEMP}/notes.md"
+      - name: Tag and GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          gh release create "v${VERSION}" --target "${GITHUB_SHA}" \
+            --title "ROTA v${VERSION}" --notes-file "${RUNNER_TEMP}/notes.md"

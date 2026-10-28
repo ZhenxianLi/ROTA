@@ -46,3 +46,13 @@ Allowed:
 ## Before a release or any push of history
 
 Search the full git history (for example with `git log -p`) for sensitive terms: names of commercial software, partner organisations, vehicle models, personal names, and absolute local paths. The term list is kept by the maintainer and is not stored in the repository. Remove or rewrite any hit before publishing.
+
+## Releasing
+
+Releases are made by the maintainer and published by continuous integration (`.github/workflows/publish.yml`):
+
+1. Set `__version__` in `src/rota/__init__.py` to `X.Y.Z` and `version` and `date-released` in `CITATION.cff`.
+2. Add the section `## [X.Y.Z] - YYYY-MM-DD` to `CHANGELOG.md`, with its compare link at the end of the file. This section becomes the release notes.
+3. Push to `main` a commit whose message starts with the line `Release X.Y.Z`, exactly, as the last commit of the push. Do not push the tag yourself.
+
+The workflow then runs the tests, builds the distributions, uploads them to PyPI (trusted publishing, no stored token), tags the commit `vX.Y.Z` and creates the GitHub release. It does nothing for other commits (a first line that looks like a release but does not match exactly only gives a warning), and stops if the version or the changelog section do not match; if the tag exists already, nothing is published. A failed run can be re-run: files already on PyPI are skipped. Do not start any other commit message with `Release X.Y.Z`. Publishing a GitHub release by hand with the tag `vX.Y.Z` also uploads to PyPI.
